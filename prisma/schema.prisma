@@ -1,0 +1,296 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Channel {
+  EMAIL
+  SMS
+  PUSH
+}
+
+enum LeadStatus {
+  NEW
+  ENGAGED
+  SOLD
+  APPROVED
+  FUNDED
+  DECLINED
+}
+
+enum SubscriptionStatus {
+  PENDING
+  ACTIVE
+  UNSUBSCRIBED
+}
+
+enum RunStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+}
+
+enum Objective {
+  SUBSCRIPTIONS
+  SOLD
+  APPROVED
+  FUNDED
+  REVENUE
+}
+
+enum EnrollmentStatus {
+  ACTIVE
+  COMPLETED
+  STOPPED
+}
+
+enum DeliveryStatus {
+  PENDING
+  SENDING
+  SENT
+  FAILED
+  UNCERTAIN
+  CANCELLED
+}
+
+model Experiment {
+  id        String    @id @default(cuid())
+  name      String
+  slug      String    @unique
+  status    RunStatus @default(DRAFT)
+  objective Objective @default(SUBSCRIPTIONS)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  variants  Variant[]
+  visits    Visit[]
+}
+
+model Variant {
+  id           String     @id @default(cuid())
+  experimentId String
+  experiment   Experiment @relation(fields: [experimentId], references: [id])
+  name         String
+  weight       Int        @default(50)
+  config       Json
+  visits       Visit[]
+}
+
+model TrafficSource {
+  id         String         @id @default(cuid())
+  campaignId String
+  zoneId     String
+  state      String         @default("MONITORING")
+  reason     String?
+  blockedAt  DateTime?
+  visits     Visit[]
+  actions    SourceAction[]
+
+  @@unique([campaignId, zoneId])
+}
+
+model Visit {
+  configSnapshot  Json               @default("{}")
+  id              String             @id @default(uuid())
+  experimentId    String
+  experiment      Experiment         @relation(fields: [experimentId], references: [id])
+  variantId       String
+  variant         Variant            @relation(fields: [variantId], references: [id])
+  sourceId        String?
+  source          TrafficSource?     @relation(fields: [sourceId], references: [id])
+  externalClickId String?
+  ipHash          String
+  userAgent       String
+  verified        Boolean            @default(false)
+  challenged      Boolean            @default(false)
+  botScore        Int                @default(0)
+  evidence        String[]
+  cost            Decimal            @default(0) @db.Decimal(12, 6)
+  createdAt       DateTime           @default(now())
+  leads           Lead[]
+  applications    ApplicationClick[]
+
+  @@index([sourceId, createdAt])
+  @@index([ipHash, createdAt])
+  @@index([experimentId, createdAt])
+}
+
+model AppConfiguration {
+  id               String   @id
+  values           Json
+  encryptedSecrets String
+  revision         Int      @default(1)
+  updatedAt        DateTime @updatedAt
+}
+
+model Lead {
+  id            String             @id @default(uuid())
+  visitId       String
+  visit         Visit              @relation(fields: [visitId], references: [id])
+  name          String
+  status        LeadStatus         @default(NEW)
+  timezone      String             @default("America/Chicago")
+  timezoneSource String            @default("UNKNOWN")
+  answers       Json
+  notes         String             @default("")
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  lastClickedAt DateTime?
+  subscriptions Subscription[]
+  applications  ApplicationClick[]
+  events        LeadEvent[]
+}
+
+model Subscription {
+  id                    String             @id @default(uuid())
+  leadId                String
+  lead                  Lead               @relation(fields: [leadId], references: [id])
+  channel               Channel
+  address               String
+  status                SubscriptionStatus @default(PENDING)
+  consentText           String
+  consentVersion        String
+  consentAt             DateTime           @default(now())
+  consentIpHash         String
+  confirmedAt           DateTime?
+  stoppedAt             DateTime?
+  providerListId        Int?
+  verificationHash      String?
+  verificationExpiresAt DateTime?
+  verificationAttempts  Int                @default(0)
+  lastSentAt            DateTime?
+  enrollments           Enrollment[]
+  deliveries            Delivery[]
+
+  @@unique([channel, address])
+  @@index([leadId])
+}
+
+model Chain {
+  id          String       @id @default(cuid())
+  name        String
+  channel     Channel
+  status      RunStatus    @default(DRAFT)
+  trigger     String       @default("SUBSCRIBED")
+  maxDays     Int          @default(30)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  steps       ChainStep[]
+  enrollments Enrollment[]
+}
+
+model ChainStep {
+  id         String @id @default(cuid())
+  chainId    String
+  chain      Chain  @relation(fields: [chainId], references: [id])
+  position   Int
+  delayHours Int    @default(24)
+  subject    String
+  body       String
+
+  @@unique([chainId, position])
+}
+
+model Enrollment {
+  id             String           @id @default(cuid())
+  subscriptionId String
+  subscription   Subscription     @relation(fields: [subscriptionId], references: [id])
+  chainId        String
+  chain          Chain            @relation(fields: [chainId], references: [id])
+  status         EnrollmentStatus @default(ACTIVE)
+  step           Int              @default(0)
+  startedAt      DateTime         @default(now())
+  nextAt         DateTime         @default(now())
+  deferredUntil  DateTime?
+  deliveries     Delivery[]
+
+  @@unique([subscriptionId, chainId])
+  @@index([status, nextAt])
+}
+
+model Delivery {
+  id             String         @id @default(uuid())
+  subscriptionId String
+  subscription   Subscription   @relation(fields: [subscriptionId], references: [id])
+  enrollmentId   String
+  enrollment     Enrollment     @relation(fields: [enrollmentId], references: [id])
+  step           Int
+  status         DeliveryStatus @default(PENDING)
+  subject        String
+  body           String
+  providerId     String?
+  error          String?
+  createdAt      DateTime       @default(now())
+  sentAt         DateTime?
+  clickedAt      DateTime?
+  clickCount     Int            @default(0)
+
+  @@unique([enrollmentId, step])
+  @@index([status, createdAt])
+}
+
+model ApplicationClick {
+  id         String     @id @default(uuid())
+  leadId     String?
+  lead       Lead?      @relation(fields: [leadId], references: [id])
+  visitId    String
+  visit      Visit      @relation(fields: [visitId], references: [id])
+  deliveryId String?
+  createdAt  DateTime   @default(now())
+  postbacks  Postback[]
+}
+
+model Postback {
+  id            String           @id @default(cuid())
+  eventId       String           @unique
+  applicationId String
+  application   ApplicationClick @relation(fields: [applicationId], references: [id])
+  event         String
+  revenue       Decimal          @default(0) @db.Decimal(12, 4)
+  createdAt     DateTime         @default(now())
+
+  @@index([applicationId])
+}
+
+model LeadEvent {
+  id        String   @id @default(cuid())
+  leadId    String
+  lead      Lead     @relation(fields: [leadId], references: [id])
+  type      String
+  detail    String
+  createdAt DateTime @default(now())
+}
+
+model SourceAction {
+  id        String        @id @default(cuid())
+  sourceId  String
+  source    TrafficSource @relation(fields: [sourceId], references: [id])
+  action    String
+  status    String
+  evidence  Json
+  error     String?
+  createdAt DateTime      @default(now())
+}
+
+model Setting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  actor     String
+  action    String
+  entityId  String?
+  details   Json?
+  createdAt DateTime @default(now())
+}
+
+model AdminSession {
+  id        String   @id
+  expiresAt DateTime
+}

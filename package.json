@@ -1,0 +1,58 @@
+{
+  "name": "sparecash",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "dev": "tsx watch server/index.ts",
+    "worker": "tsx server/worker.ts",
+    "build": "tsc --noEmit && NODE_ENV=production vite build && tsup",
+    "start": "NODE_ENV=production node dist/server/index.js",
+    "start:worker": "NODE_ENV=production node dist/server/worker.js",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate deploy",
+    "db:seed": "tsx prisma/seed.ts",
+    "test": "node scripts/test.mjs",
+    "typecheck": "tsc --noEmit",
+    "local:setup": "bash scripts/local-setup.sh",
+    "format": "prettier --write client server tests prisma/seed.ts *.ts *.json docs README.md",
+    "roundsky:setup": "tsx scripts/roundsky-setup.ts",
+    "config:migrate": "tsx scripts/migrate-settings.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "@prisma/client": "6.19.3",
+    "bcryptjs": "^3.0.2",
+    "cookie-parser": "^1.4.7",
+    "dotenv": "^17.2.3",
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.2.1",
+    "helmet": "^8.1.0",
+    "lucide-react": "^0.468.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/cookie-parser": "^1.4.9",
+    "@types/express": "^5.0.5",
+    "@types/node": "^22.19.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^5.1.0",
+    "prettier": "^3.9.9",
+    "prisma": "6.19.3",
+    "tsup": "^8.5.1",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.7",
+    "vitest": "^5.0.3"
+  },
+  "overrides": {
+    "deepmerge-ts": "8.0.2",
+    "esbuild": "0.28.2"
+  }
+}

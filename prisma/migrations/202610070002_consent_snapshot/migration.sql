@@ -1,0 +1,1 @@
+ALTER TABLE "Visit" ADD COLUMN "configSnapshot" JSONB NOT NULL DEFAULT '{}';

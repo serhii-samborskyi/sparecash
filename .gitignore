@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+.local/
+coverage/
+*.log
+
+.playwright-mcp/
+
+data/

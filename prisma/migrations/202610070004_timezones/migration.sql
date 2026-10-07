@@ -1,0 +1,2 @@
+ALTER TABLE "Lead" ADD COLUMN "timezoneSource" TEXT NOT NULL DEFAULT 'UNKNOWN';
+ALTER TABLE "Enrollment" ADD COLUMN "deferredUntil" TIMESTAMP(3);

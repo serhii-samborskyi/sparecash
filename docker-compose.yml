@@ -1,0 +1,26 @@
+# Connect to a PostgreSQL service managed by Coolify using DATABASE_URL.
+services:
+  web:
+    build: .
+    image: sparecash:local
+    restart: unless-stopped
+    environment: &app_environment
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL}
+    volumes:
+      - app_data:/app/data
+    expose:
+      - "3000"
+  worker:
+    image: sparecash:local
+    restart: unless-stopped
+    environment: *app_environment
+    volumes:
+      - app_data:/app/data
+    command: ["node", "dist/server/worker.js"]
+    healthcheck:
+      disable: true
+    depends_on:
+      web:
+        condition: service_healthy
+volumes:
+  app_data:
