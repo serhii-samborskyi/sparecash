@@ -1,4 +1,9 @@
 import { roundSkyPixelSetup } from "../services/roundsky.js";
+import {
+  blueBubblesReplySetup,
+  testProviderConnection,
+  testProviderSchema,
+} from "../services/integration-tests.js";
 import { updateLeadTimezone, leadTiming } from "../services/timezones.js";
 import { timezoneSchema } from "../timezones.js";
 import {
@@ -56,6 +61,17 @@ adminRouter.post("/configuration/password", async (req, res) => {
 });
 adminRouter.get("/integrations/roundsky/pixel", async (_req, res) => {
   res.set("Cache-Control", "no-store").json(roundSkyPixelSetup());
+});
+adminRouter.get("/integrations/bluebubbles/webhook", async (_req, res) => {
+  res.set("Cache-Control", "no-store").json(blueBubblesReplySetup());
+});
+adminRouter.post("/integrations/:provider/test", async (req, res) => {
+  const provider = testProviderSchema.parse(req.params.provider);
+  const result = await testProviderConnection(provider);
+  await audit("owner", "integration.tested", provider, {
+    status: result.status,
+  });
+  res.set("Cache-Control", "no-store").json(result);
 });
 adminRouter.get("/dashboard", async (_req, res) => {
   res.json(await dashboard());

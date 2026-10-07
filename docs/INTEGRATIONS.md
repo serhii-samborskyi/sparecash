@@ -2,6 +2,17 @@
 
 All provider values and credentials below are configured in the owner **Settings** screen. Their uppercase names are internal field identifiers, not environment variables. Only `DATABASE_URL` belongs in the app environment. Secrets are masked by default and changes apply to new requests and worker cycles.
 
+## Connection tests
+
+Save connection settings, then use **Test connection** under OneSignal, Brevo, BlueBubbles, or PropellerAds. Tests work with live delivery and source exclusions disabled. Each result distinguishes credential access from incomplete setup; edits invalidate results and require saving before another test. Provider response bodies, credentials, and account data are not returned or included in the audit entry.
+
+- **OneSignal:** reads one message listing using the app API key. This checks app access, not browser subscription or push delivery. [API reference](https://documentation.onesignal.com/reference/view-messages).
+- **Brevo:** checks account access, the saved sender's active status, the contact-list folder, and the app's business mailing address. Folder ID `0` is unconfigured. No campaign or email is created. [Senders](https://developers.brevo.com/reference/get-senders), [folders](https://developers.brevo.com/reference/get-folder).
+- **BlueBubbles:** reads server information and registered webhooks, checking that the current reply URL is registered for `new-message`. It does not verify SMS forwarding or actual incoming delivery; test those with your own phone. [Server API](https://docs.bluebubbles.app/server/developer-guides/rest-api-and-webhooks).
+- **PropellerAds:** reads the advertiser balance endpoint to verify API access, discarding the balance. This does not test exclusion write permissions or change campaigns. [API reference](https://ssp-api.propellerads.com/v5/docs/).
+
+Tests use authenticated owner-only `POST /api/admin/integrations/{provider}/test` endpoints (`onesignal`, `brevo`, `bluebubbles`, `propellerads`). Only saved settings are used. Requests time out after 12 seconds each and do not follow redirects.
+
 ## RoundSky
 
 The account's supplied self-optimizing offer is preconfigured:
@@ -122,13 +133,15 @@ Reference: https://developers.brevo.com/reference/create-email-campaign
 
 Set the HTTPS `BLUEBUBBLES_URL` and `BLUEBUBBLES_PASSWORD`. Sending uses `/api/v1/message/text`, `method: apple-script`, and `chatGuid: SMS;-;+1...`, targeting regular US text numbers. Your Mac/iPhone/forwarding setup must support SMS, including new recipients. That hardware path has not been live-tested here; some versions require creating the chat first, which would require adapting the connector to your server version.
 
-The first requested message contains a short-lived confirmation code. Only confirmed phones receive marketing. OTP attempts are limited. Configure the BlueBubbles `new-message` webhook to:
+The first requested message contains a short-lived confirmation code. Only confirmed phones receive marketing. OTP attempts are limited. In **Settings → Provider connections → BlueBubbles**, click **Copy reply URL**. Paste it into BlueBubbles **API & Webhooks** and enable **new-message**. The displayed URL includes the saved general webhook token:
 
 ```text
 https://sparecash.leadtechx.com/api/webhooks/bluebubbles?token=WEBHOOK_TOKEN
 ```
 
-The handler expects `data.isFromMe=false`, `data.text`, and `data.handle.address`. Exact STOP, UNSUBSCRIBE, CANCEL, END, QUIT, REVOKE, and OPT OUT messages are recognized case-insensitively. Do not include query-string passwords in logs. BlueBubbles does not provide a dependable provider-wide send-idempotency guarantee; uncertain attempts are held for manual resolution.
+The owner-only `GET /api/admin/integrations/bluebubbles/webhook` endpoint generates this URL. Save changes to the Application URL or general webhook token before copying it again.
+
+The handler expects `data.isFromMe=false`, `data.text`, and `data.handle.address`. Incoming text from an existing SMS contact is saved in their CRM journey timeline when `data.guid` is present; the provider GUID deduplicates repeated and concurrent callbacks. Outgoing messages and unknown senders are ignored. Replies do not automatically enroll, resubscribe, or change a lead's loan status. Exact STOP, UNSUBSCRIBE, CANCEL, END, QUIT, REVOKE, and OPT OUT messages are recognized case-insensitively and cancel pending follow-ups, including on older payloads without a GUID. Do not include query-string passwords in logs. BlueBubbles does not provide a dependable provider-wide send-idempotency guarantee; uncertain attempts are held for manual resolution.
 
 Reference: https://docs.bluebubbles.app/server/developer-guides/rest-api-and-webhooks
 

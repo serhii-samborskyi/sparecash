@@ -1420,6 +1420,211 @@ it("fails closed on corrupted encrypted credentials", async () => {
   }
 });
 
+it("protects connection tests and reply URLs with owner authentication and origin checks", async () => {
+  const before = providerCalls.length;
+  expect(
+    (await request("/api/admin/integrations/onesignal/test", "POST")).status,
+  ).toBe(401);
+  expect(
+    (await request("/api/admin/integrations/bluebubbles/webhook")).status,
+  ).toBe(401);
+  expect(
+    (
+      await request(
+        "/api/admin/integrations/onesignal/test",
+        "POST",
+        {},
+        true,
+        { Origin: "https://attacker.example" },
+      )
+    ).status,
+  ).toBe(403);
+  expect(
+    (await request("/api/admin/integrations/unknown/test", "POST", {}, true))
+      .status,
+  ).toBe(400);
+  expect(providerCalls.length).toBe(before);
+  vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+    Response.json({ notifications: [] }),
+  );
+  const tested = await request(
+    "/api/admin/integrations/onesignal/test",
+    "POST",
+    {},
+    true,
+  );
+  expect(tested.status).toBe(200);
+  expect(tested.data.status).toBe("success");
+  expect(tested.headers.get("cache-control")).toBe("no-store");
+  expect(JSON.stringify(tested.data)).not.toContain(env.ONESIGNAL_API_KEY);
+  const audit = await db.auditLog.findFirstOrThrow({
+    where: { action: "integration.tested", entityId: "onesignal" },
+    orderBy: { createdAt: "desc" },
+  });
+  expect(audit.details).toEqual({ status: "success" });
+});
+
+it("builds the BlueBubbles reply URL from the saved domain and current general webhook token", async () => {
+  const original = await readRuntimeConfiguration();
+  try {
+    const newToken = "rotated-general-webhook-token-test-32-characters";
+    await saveRuntimeSettings(
+      {
+        values: { APP_URL: "https://replies.example.test" },
+        secrets: { WEBHOOK_TOKEN: newToken },
+      },
+      "test",
+    );
+    const response = await request(
+      "/api/admin/integrations/bluebubbles/webhook",
+      "GET",
+      undefined,
+      true,
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    const url = new URL(response.data.webhookUrl);
+    expect(url.origin).toBe("https://replies.example.test");
+    expect(url.pathname).toBe("/api/webhooks/bluebubbles");
+    expect(url.searchParams.get("token")).toBe(newToken);
+    expect(response.data.event).toBe("new-message");
+  } finally {
+    await saveRuntimeSettings(
+      {
+        values: { APP_URL: original.APP_URL },
+        secrets: { WEBHOOK_TOKEN: original.WEBHOOK_TOKEN },
+      },
+      "test",
+    );
+  }
+});
+
+it("records incoming text replies once and keeps STOP cancellation working", async () => {
+  const sub = await db.subscription.create({
+    data: {
+      leadId,
+      channel: "SMS",
+      address: "+12025550999",
+      status: "ACTIVE",
+      consentText: "Test opt-in",
+      consentVersion: "test",
+      consentIpHash: "test",
+    },
+  });
+  const chain = await db.chain.create({
+    data: { name: "Reply test", channel: "SMS", status: "ACTIVE" },
+  });
+  const enrollment = await db.enrollment.create({
+    data: { subscriptionId: sub.id, chainId: chain.id },
+  });
+  const delivery = await db.delivery.create({
+    data: {
+      subscriptionId: sub.id,
+      enrollmentId: enrollment.id,
+      step: 0,
+      subject: "",
+      body: "Pending test message",
+    },
+  });
+  const payload = {
+    type: "new-message",
+    data: {
+      guid: "test-reply-guid",
+      text: "Can I apply tomorrow?",
+      isFromMe: false,
+      handle: { address: "(202) 555-0999" },
+    },
+  };
+  const headers = { "x-webhook-token": env.WEBHOOK_TOKEN };
+  expect(
+    (await request("/api/webhooks/bluebubbles", "POST", payload)).status,
+  ).toBe(401);
+  await request(
+    "/api/webhooks/bluebubbles",
+    "POST",
+    { ...payload, data: { ...payload.data, isFromMe: true } },
+    false,
+    headers,
+  );
+  expect(
+    (
+      await request(
+        "/api/webhooks/bluebubbles",
+        "POST",
+        {
+          ...payload,
+          data: { ...payload.data, isFromMe: true, handle: null },
+        },
+        false,
+        headers,
+      )
+    ).status,
+  ).toBe(200);
+  await request(
+    "/api/webhooks/bluebubbles",
+    "POST",
+    {
+      ...payload,
+      data: { ...payload.data, handle: { address: "+12025550888" } },
+    },
+    false,
+    headers,
+  );
+  expect(
+    await db.leadEvent.count({
+      where: { id: `bluebubbles:${hash(payload.data.guid)}` },
+    }),
+  ).toBe(0);
+  const responses = await Promise.all(
+    Array.from({ length: 3 }, () =>
+      request("/api/webhooks/bluebubbles", "POST", payload, false, headers),
+    ),
+  );
+  expect(responses.every((r) => r.status === 200)).toBe(true);
+  const events = await db.leadEvent.findMany({
+    where: { id: `bluebubbles:${hash(payload.data.guid)}` },
+  });
+  expect(events).toHaveLength(1);
+  expect(events[0]).toMatchObject({
+    leadId,
+    type: "SMS_REPLY",
+    detail: "Text reply: Can I apply tomorrow?",
+  });
+  expect(
+    (await db.delivery.findUniqueOrThrow({ where: { id: delivery.id } }))
+      .status,
+  ).toBe("PENDING");
+  const stop = {
+    ...payload,
+    data: { ...payload.data, guid: "test-stop-guid", text: "STOP" },
+  };
+  expect(
+    (await request("/api/webhooks/bluebubbles", "POST", stop, false, headers))
+      .status,
+  ).toBe(200);
+  expect(
+    (await db.subscription.findUniqueOrThrow({ where: { id: sub.id } })).status,
+  ).toBe("UNSUBSCRIBED");
+  expect(
+    (await db.delivery.findUniqueOrThrow({ where: { id: delivery.id } }))
+      .status,
+  ).toBe("CANCELLED");
+  expect(
+    (await db.enrollment.findUniqueOrThrow({ where: { id: enrollment.id } }))
+      .status,
+  ).toBe("STOPPED");
+  await request(
+    "/api/webhooks/bluebubbles",
+    "POST",
+    { ...payload, data: { ...payload.data, guid: "reply-after-stop" } },
+    false,
+    headers,
+  );
+  expect(
+    (await db.subscription.findUniqueOrThrow({ where: { id: sub.id } })).status,
+  ).toBe("UNSUBSCRIBED");
+});
+
 it("changes the owner password with verification and revokes existing sessions", async () => {
   expect(
     (

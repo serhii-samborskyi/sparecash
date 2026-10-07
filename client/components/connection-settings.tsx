@@ -2,6 +2,10 @@ import { useEffect, useState } from "react";
 import { Save, KeyRound, Plug, Globe, Eye, Copy } from "lucide-react";
 import { api } from "../api";
 import { Field, Spinner } from "./ui";
+import {
+  BlueBubblesReplyUrl,
+  ProviderTestButton,
+} from "./integration-controls";
 type Configuration = {
   values: Record<string, string | number>;
   secrets: Record<string, boolean>;
@@ -62,6 +66,21 @@ export function ConnectionSettings({
       active = false;
     };
   }, [configuration, pixelNeedsSave]);
+  const changed = (...keys: string[]) =>
+    keys.some(
+      (key) =>
+        key in secrets ||
+        (key in values && values[key] !== configuration?.values[key]),
+    );
+  const testButton = (provider: string, name: string, keys: string[]) => (
+    <ProviderTestButton
+      provider={provider}
+      name={name}
+      saved={configuration!}
+      needsSave={changed(...keys)}
+      disabled={busy}
+    />
+  );
   const field = (key: string, label: string, type = "text", hint?: string) => (
     <Field label={label} hint={hint}>
       <input
@@ -363,6 +382,10 @@ export function ConnectionSettings({
             {field("ONESIGNAL_APP_ID", "OneSignal app ID")}
             {secret("ONESIGNAL_API_KEY", "OneSignal API key")}
           </div>
+          {testButton("onesignal", "OneSignal", [
+            "ONESIGNAL_APP_ID",
+            "ONESIGNAL_API_KEY",
+          ])}
           <h3>Brevo</h3>
           <div className="form-grid">
             {secret("BREVO_API_KEY", "Brevo API key")}
@@ -370,16 +393,38 @@ export function ConnectionSettings({
             {field("BREVO_SENDER_NAME", "Sender name")}
             {field("BREVO_FOLDER_ID", "Campaign folder ID", "number")}
           </div>
+          {testButton("brevo", "Brevo", [
+            "BREVO_API_KEY",
+            "BREVO_SENDER_EMAIL",
+            "BREVO_SENDER_NAME",
+            "BREVO_FOLDER_ID",
+          ])}
           <h3>BlueBubbles</h3>
           <div className="form-grid">
             {field("BLUEBUBBLES_URL", "BlueBubbles server URL", "url")}
             {secret("BLUEBUBBLES_PASSWORD", "BlueBubbles password")}
           </div>
+          {testButton("bluebubbles", "BlueBubbles", [
+            "BLUEBUBBLES_URL",
+            "BLUEBUBBLES_PASSWORD",
+            "APP_URL",
+            "WEBHOOK_TOKEN",
+          ])}
+          <BlueBubblesReplyUrl
+            saved={configuration}
+            needsSave={changed("APP_URL", "WEBHOOK_TOKEN")}
+            disabled={busy}
+            notify={notify}
+          />
           <h3>PropellerAds</h3>
           <div className="form-grid">
             {secret("PROPELLER_API_TOKEN", "PropellerAds API token")}
             {field("PROPELLER_API_URL", "PropellerAds API URL", "url")}
           </div>
+          {testButton("propellerads", "PropellerAds", [
+            "PROPELLER_API_TOKEN",
+            "PROPELLER_API_URL",
+          ])}
         </section>
         <section className="panel">
           <div className="panel-heading">

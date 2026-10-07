@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { db } from "../db.js";
-import { requireWebhook } from "../security.js";
+import { requireWebhook, hash } from "../security.js";
 import { normalizePhone } from "../domain.js";
 import { unsubscribe } from "../services/journeys.js";
 import { normalizeRoundSkySale } from "../roundsky-contract.js";
@@ -97,9 +97,10 @@ webhookRouter.post("/bluebubbles", async (req, res) => {
       type: z.string(),
       data: z
         .object({
+          guid: z.string().min(1).max(250).nullish(),
           text: z.string().nullish(),
           isFromMe: z.boolean().optional(),
-          handle: z.object({ address: z.string() }).optional(),
+          handle: z.object({ address: z.string() }).nullish(),
         })
         .passthrough(),
     })
@@ -110,16 +111,33 @@ webhookRouter.post("/bluebubbles", async (req, res) => {
     input.data.handle
   ) {
     const phone = normalizePhone(input.data.handle.address);
-    if (
-      phone &&
-      /^(stop|unsubscribe|cancel|end|quit|revoke|opt out)[.!\s]*$/i.test(
-        input.data.text?.trim() ?? "",
-      )
-    ) {
+    const text = input.data.text?.trim();
+    if (phone && text) {
       const sub = await db.subscription.findUnique({
         where: { channel_address: { channel: "SMS", address: phone } },
       });
-      if (sub) await unsubscribe(sub.id, "Text opt-out received");
+      if (sub) {
+        // The provider GUID makes repeated or concurrent webhook deliveries idempotent.
+        if (input.data.guid)
+          await db.leadEvent.createMany({
+            data: [
+              {
+                id: `bluebubbles:${hash(input.data.guid)}`,
+                leadId: sub.leadId,
+                type: "SMS_REPLY",
+                detail: `Text reply: ${text.slice(0, 10000)}`,
+              },
+            ],
+            skipDuplicates: true,
+          });
+        if (
+          sub.status !== "UNSUBSCRIBED" &&
+          /^(stop|unsubscribe|cancel|end|quit|revoke|opt out)[.!\s]*$/i.test(
+            text,
+          )
+        )
+          await unsubscribe(sub.id, "Text opt-out received");
+      }
     }
   }
   res.json({ ok: true });
