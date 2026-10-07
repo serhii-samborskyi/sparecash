@@ -16,7 +16,7 @@ Optional prefill is enabled by default and can be turned off in Settings. It use
 
 ### Native sold-lead pixel
 
-Set the Application URL and RoundSky webhook secret in Settings. Settings → RoundSky connection → Show pixel URL generates the ready-to-paste URL. `npm run roundsky:setup` also exports it to `.local/roundsky-pixel-url.txt` without changing environment variables.
+Set the Application URL and RoundSky webhook secret in Settings, then save connection settings. **Settings → Provider connections → RoundSky** displays the ready-to-paste URL directly below the secret, with a **Copy pixel URL** button. Unsaved URL or secret changes disable copying until saved. `npm run roundsky:setup` also exports it to `.local/roundsky-pixel-url.txt` without changing environment variables.
 
 In RoundSky choose seller **LeadTechX**, pixel type **Server 2 Server Requst Pixel**, and paste the generated URL. The template is:
 

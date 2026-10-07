@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Save, ShieldCheck, Clock, Link2, FileText, Copy } from "lucide-react";
+import { useState } from "react";
+import { Save, ShieldCheck, Clock, Link2, FileText } from "lucide-react";
 import { Field, Spinner } from "./ui";
 import { api } from "../api";
 import { TimezoneSelect } from "./timezone-select";
@@ -17,23 +17,6 @@ export function SettingsView({
   const [form, setForm] = useState({ ...value }),
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
-  const [pixel, setPixel] = useState<{
-    pixelUrl: string;
-    origin: string;
-  } | null>(null);
-  const [pixelBusy, setPixelBusy] = useState(false);
-  useEffect(() => setPixel(null), [value]);
-  async function showPixel() {
-    setPixelBusy(true);
-    try {
-      const setup = await api("/admin/integrations/roundsky/pixel");
-      setPixel(setup);
-    } catch (error) {
-      setError((error as Error).message);
-    } finally {
-      setPixelBusy(false);
-    }
-  }
   const set = (key: string, value: any) => setForm({ ...form, [key]: value });
   const num = (key: string, label: string, min: number, max: number) => (
     <Field label={label}>
@@ -217,46 +200,6 @@ export function SettingsView({
             onChange={(e) => set("roundskyPrepopulate", e.target.checked)}
           />
         </label>
-        <h3>RoundSky pixel setup</h3>
-        <p className="help">
-          In RoundSky, choose seller LeadTechX and pixel type “Server 2 Server
-          Requst Pixel”. Paste the complete URL below, including the bracketed
-          variables. It records a purchased lead and its commission.
-        </p>
-        {pixel ? (
-          <>
-            <Field
-              label="Pixel URL"
-              hint={`Target: ${pixel.origin}. Uses the RoundSky webhook secret saved in Settings.`}
-            >
-              <textarea readOnly rows={4} value={pixel.pixelUrl} />
-            </Field>
-            <button
-              type="button"
-              className="button secondary"
-              onClick={async () => {
-                try {
-                  await navigator.clipboard.writeText(pixel.pixelUrl);
-                  notify("RoundSky pixel URL copied");
-                } catch {
-                  setError("Copy the pixel URL from the field above.");
-                }
-              }}
-            >
-              <Copy size={16} />
-              Copy pixel URL
-            </button>
-          </>
-        ) : (
-          <button
-            type="button"
-            className="button secondary"
-            onClick={() => void showPixel()}
-            disabled={pixelBusy}
-          >
-            {pixelBusy && <Spinner />}Show pixel URL
-          </button>
-        )}
       </section>
       <section className="panel">
         <div className="panel-heading">

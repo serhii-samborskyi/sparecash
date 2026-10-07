@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Save, KeyRound, Plug, Globe, Eye } from "lucide-react";
+import { Save, KeyRound, Plug, Globe, Eye, Copy } from "lucide-react";
 import { api } from "../api";
 import { Field, Spinner } from "./ui";
 type Configuration = {
@@ -19,6 +19,11 @@ export function ConnectionSettings({
   const [values, setValues] = useState<Record<string, string | number>>({});
   const [secrets, setSecrets] = useState<Record<string, string>>({});
   const [revealed, setRevealed] = useState<Record<string, string>>({});
+  const [pixel, setPixel] = useState<{ pixelUrl: string } | null>(null);
+  const [pixelError, setPixelError] = useState("");
+  const pixelNeedsSave =
+    values.APP_URL !== configuration?.values.APP_URL ||
+    "ROUNDSKY_WEBHOOK_TOKEN" in secrets;
   const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
   const [currentPassword, setCurrentPassword] = useState(""),
@@ -41,6 +46,22 @@ export function ConnectionSettings({
       active = false;
     };
   }, []);
+  useEffect(() => {
+    let active = true;
+    setPixel(null);
+    setPixelError("");
+    if (!configuration || pixelNeedsSave) return;
+    api("/admin/integrations/roundsky/pixel")
+      .then((data) => {
+        if (active) setPixel(data);
+      })
+      .catch((error) => {
+        if (active) setPixelError(error.message);
+      });
+    return () => {
+      active = false;
+    };
+  }, [configuration, pixelNeedsSave]);
   const field = (key: string, label: string, type = "text", hint?: string) => (
     <Field label={label} hint={hint}>
       <input
@@ -196,6 +217,7 @@ export function ConnectionSettings({
             setValues(result.values);
             setSecrets({});
             setRevealed({});
+            setPixel(null);
             notify("Connection settings saved");
             onSaved();
           } catch (error) {
@@ -273,7 +295,58 @@ export function ConnectionSettings({
           {secret(
             "ROUNDSKY_WEBHOOK_TOKEN",
             "RoundSky webhook secret",
-            "Must match the token in your RoundSky pixel URL. After changing it, copy the new pixel below.",
+            "After changing this secret, save connection settings to update the pixel URL below.",
+          )}
+          <Field
+            label="RoundSky pixel URL"
+            hint="In RoundSky, select seller LeadTechX and pixel type “Server 2 Server Requst Pixel”. Paste this complete URL with the bracketed variables unchanged."
+          >
+            <textarea
+              readOnly
+              rows={4}
+              spellCheck={false}
+              value={pixelNeedsSave ? "" : (pixel?.pixelUrl ?? "")}
+              placeholder={
+                pixelNeedsSave
+                  ? "Save connection settings to generate the updated pixel URL."
+                  : pixelError
+                    ? "Unable to load the pixel URL. Reload Settings to try again."
+                    : "Loading pixel URL…"
+              }
+              onFocus={(event) => event.currentTarget.select()}
+            />
+          </Field>
+          <div className="row-actions">
+            <button
+              type="button"
+              className="button secondary"
+              disabled={!pixel || pixelNeedsSave || busy}
+              onClick={async () => {
+                if (!pixel || pixelNeedsSave) return;
+                setPixelError("");
+                try {
+                  await navigator.clipboard.writeText(pixel.pixelUrl);
+                  notify("RoundSky pixel URL copied");
+                } catch {
+                  setPixelError(
+                    "Select the pixel URL above and copy it manually.",
+                  );
+                }
+              }}
+            >
+              <Copy size={16} />
+              Copy pixel URL
+            </button>
+          </div>
+          {pixelNeedsSave && (
+            <p className="help" role="status">
+              Save connection settings before copying the updated pixel URL.
+            </p>
+          )}
+          {pixelError && (
+            <p className="error" role="alert">
+              {pixelError}
+            </p>
           )}
           <h3>Cloudflare</h3>
           <div className="form-grid">
