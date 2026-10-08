@@ -108,11 +108,18 @@ export async function sendVerification(sub: Subscription, code: string) {
 export async function verifyPush(subscriptionId: string, externalId: string) {
   if (!env.ONESIGNAL_APP_ID || !env.ONESIGNAL_API_KEY)
     throw new Error("OneSignal is not configured");
-  const result = await one(
-    `/apps/${env.ONESIGNAL_APP_ID}/users/by/external_id/${encodeURIComponent(externalId)}`,
-    undefined,
-    "GET",
-  );
+  let result;
+  try {
+    result = await one(
+      `/apps/${env.ONESIGNAL_APP_ID}/users/by/external_id/${encodeURIComponent(externalId)}`,
+      undefined,
+      "GET",
+    );
+  } catch (error) {
+    // The SDK may still be syncing login() and the new subscription.
+    if (error instanceof ProviderError && error.status === 404) return false;
+    throw error;
+  }
   return (
     Array.isArray(result.subscriptions) &&
     result.subscriptions.some(

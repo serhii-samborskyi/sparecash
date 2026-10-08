@@ -362,8 +362,13 @@ publicRouter.post("/push", async (req, res) => {
     include: { visit: { include: { variant: true } } },
   });
   if (!(await verifyPush(input.subscriptionId, leadId))) {
-    res.status(400).json({
-      error: "The push subscription could not be verified yet. Please retry.",
+    // Keep this non-2xx so an already-open page running the old client cannot
+    // mistake a pending verification for a confirmed CRM subscription.
+    res.set("Cache-Control", "no-store").status(409).json({
+      ok: false,
+      code: "PUSH_CONFIRMATION_PENDING",
+      error:
+        "Your notification subscription is still being confirmed. Please try again shortly.",
     });
     return;
   }
@@ -390,6 +395,13 @@ publicRouter.post("/push", async (req, res) => {
     res.status(409).json({
       error:
         "This browser already has a subscription. Manage it using your preference link.",
+    });
+    return;
+  }
+  if (sub.status === "UNSUBSCRIBED") {
+    res.status(409).json({
+      error:
+        "Updates for this browser are turned off. Use your preference link to manage them.",
     });
     return;
   }

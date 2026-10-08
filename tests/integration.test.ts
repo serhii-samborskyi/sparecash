@@ -1761,3 +1761,107 @@ it("keeps owner password management in the hosting environment", async () => {
     ).status,
   ).toBe(200);
 });
+
+it("waits for OneSignal synchronization before activating push and deduplicates confirmation retries", async () => {
+  const lead = await db.lead.create({
+    data: { visitId, name: "Push synchronization test", answers: {} },
+  });
+  const subscriptionId = "f4418d3a-991d-41e7-92e8-b4d04bf185fa";
+  const chain = await saveChain(
+    {
+      name: "Push synchronization follow-up",
+      channel: "PUSH",
+      status: "ACTIVE",
+      steps: [
+        {
+          delayHours: 24,
+          subject: "Follow-up",
+          body: "Explore your options: {{link}}",
+        },
+      ],
+    },
+    "test",
+  );
+  const input = {
+    leadToken: token("lead", lead.id),
+    subscriptionId,
+    consent: true,
+  };
+  const headers = { "X-Forwarded-For": "192.0.2.71" };
+  const confirm = () =>
+    request("/api/public/push", "POST", input, false, headers);
+  const providerFetch = vi.mocked(globalThis.fetch).getMockImplementation()!;
+  let response = () => Response.json({}, { status: 404 });
+  vi.mocked(globalThis.fetch).mockImplementation(async (url, init) => {
+    if (String(url).includes("/users/by/external_id/")) {
+      expect(String(url)).toBe(
+        `https://api.onesignal.com/apps/test-app/users/by/external_id/${lead.id}`,
+      );
+      expect(init?.method).toBe("GET");
+      return response();
+    }
+    return providerFetch(url, init);
+  });
+  const record = () =>
+    db.subscription.findUnique({
+      where: {
+        channel_address: { channel: "PUSH", address: subscriptionId },
+      },
+    });
+  try {
+    // Missing alias, unlinked subscription, and incomplete opt-in are all pending.
+    for (const next of [
+      () => Response.json({}, { status: 404 }),
+      () =>
+        Response.json({
+          subscriptions: [{ id: "different-id", enabled: true }],
+        }),
+      () =>
+        Response.json({
+          subscriptions: [{ id: subscriptionId, enabled: false }],
+        }),
+    ]) {
+      response = next;
+      const pending = await confirm();
+      expect(pending.status).toBe(409);
+      expect(pending.data).toMatchObject({
+        ok: false,
+        code: "PUSH_CONFIRMATION_PENDING",
+      });
+      expect(await record()).toBeNull();
+      expect(await db.enrollment.count({ where: { chainId: chain.id } })).toBe(
+        0,
+      );
+    }
+    // Bad credentials are a real error, not an instruction to retry synchronization.
+    response = () => Response.json({}, { status: 401 });
+    expect((await confirm()).status).toBe(400);
+    expect(await record()).toBeNull();
+    response = () =>
+      Response.json({ subscriptions: [{ id: subscriptionId, enabled: true }] });
+    expect((await confirm()).data).toEqual({ ok: true });
+    const active = await record();
+    expect(active?.status).toBe("ACTIVE");
+    expect(active?.confirmedAt).not.toBeNull();
+    expect(active?.leadId).toBe(lead.id);
+    expect((await confirm()).data).toEqual({ ok: true });
+    expect(
+      await db.enrollment.count({ where: { subscriptionId: active!.id } }),
+    ).toBe(1);
+    expect(
+      await db.leadEvent.count({
+        where: { leadId: lead.id, type: "SUBSCRIBED" },
+      }),
+    ).toBe(1);
+    // A local opt-out must not produce a false confirmation on a stale retry.
+    await unsubscribe(active!.id);
+    expect((await confirm()).status).toBe(409);
+    expect((await record())?.status).toBe("UNSUBSCRIBED");
+  } finally {
+    vi.mocked(globalThis.fetch).mockImplementation(providerFetch);
+    await db.chain.update({
+      where: { id: chain.id },
+      data: { status: "PAUSED" },
+    });
+  }
+});

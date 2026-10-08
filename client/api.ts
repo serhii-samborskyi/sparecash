@@ -11,8 +11,10 @@ export async function api<T = any>(
   if (!response.ok) {
     const error = new Error(data.error ?? "Request failed") as Error & {
       status: number;
+      code?: string;
     };
     error.status = response.status;
+    if (typeof data.code === "string") error.code = data.code;
     throw error;
   }
   return data;

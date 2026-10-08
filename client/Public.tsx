@@ -14,6 +14,11 @@ import {
 } from "lucide-react";
 import { api, post } from "./api";
 import { Field, Spinner } from "./components/ui";
+import {
+  waitForPushSubscription,
+  confirmPushSubscription,
+  PushConfirmationPending,
+} from "./push-subscription";
 declare global {
   interface Window {
     turnstile: any;
@@ -104,6 +109,8 @@ function Landing({ preview }: { preview: boolean }) {
     [code, setCode] = useState(""),
     [smsConfirmed, setSmsConfirmed] = useState(false),
     [pushStatus, setPushStatus] = useState("");
+  const pushAttempt = useRef<AbortController | null>(null);
+  useEffect(() => () => pushAttempt.current?.abort(), []);
   useEffect(() => {
     let current = true;
     async function init() {
@@ -180,8 +187,12 @@ function Landing({ preview }: { preview: boolean }) {
     }
   }
   async function push() {
+    if (pushAttempt.current) return;
+    const attempt = new AbortController();
+    pushAttempt.current = attempt;
     setBusy(true);
     setError("");
+    setPushStatus("starting");
     try {
       if (!session.oneSignalAppId)
         throw new Error(
@@ -213,30 +224,32 @@ function Landing({ preview }: { preview: boolean }) {
         (window as any).__scOneSignalReady = true;
       }
       await one.login(result.leadId);
-      await one.Notifications.requestPermission();
+      attempt.signal.throwIfAborted();
+      if (!one.Notifications.permission)
+        await one.Notifications.requestPermission();
       if (!one.Notifications.permission)
         throw new Error(
           "Notifications were not enabled. You can change this in your browser settings.",
         );
-      let id = one.User.PushSubscription.id;
-      for (let i = 0; i < 10 && !id; i++) {
-        await new Promise((r) => setTimeout(r, 300));
-        id = one.User.PushSubscription.id;
-      }
-      if (!id)
-        throw new Error(
-          "Your browser has not finished subscribing. Please retry.",
-        );
-      await post("/public/push", {
-        leadToken: result.leadToken,
-        subscriptionId: id,
-        consent: true,
-      });
+      attempt.signal.throwIfAborted();
+      setPushStatus("confirming");
+      if (!one.User.PushSubscription.optedIn)
+        await one.User.PushSubscription.optIn();
+      const id = await waitForPushSubscription(
+        one.User.PushSubscription,
+        attempt.signal,
+      );
+      await confirmPushSubscription(result.leadToken, id, attempt.signal);
       setPushStatus("confirmed");
     } catch (e) {
-      setError((e as Error).message);
+      if (!attempt.signal.aborted) {
+        setPushStatus(e instanceof PushConfirmationPending ? "pending" : "");
+        if (!(e instanceof PushConfirmationPending))
+          setError((e as Error).message);
+      }
     } finally {
-      setBusy(false);
+      pushAttempt.current = null;
+      if (!attempt.signal.aborted) setBusy(false);
     }
   }
   async function continueOffer() {
@@ -340,7 +353,11 @@ function Landing({ preview }: { preview: boolean }) {
                 <Check size={25} />
               </span>
               <h2>Your preferences are saved.</h2>
-              <p>Finish confirming your channels to receive updates.</p>
+              <p>
+                {pushStatus === "confirmed" && result.results.length === 0
+                  ? "You’re subscribed to browser notifications."
+                  : "Finish confirming your channels to receive updates."}
+              </p>
               {result.results.map((r: any) => (
                 <div className="confirmation-channel" key={r.channel}>
                   <b>
@@ -400,17 +417,31 @@ function Landing({ preview }: { preview: boolean }) {
                     <p>Notifications are enabled.</p>
                   ) : (
                     <>
-                      <p>
-                        Allow notifications in your browser to finish
-                        subscribing.
+                      <p role="status">
+                        {pushStatus === "confirming"
+                          ? "Notifications are allowed. We’re confirming your subscription…"
+                          : pushStatus === "pending"
+                            ? "Notifications are allowed. Tap Finish subscribing to complete confirmation."
+                            : "Allow notifications in your browser to finish subscribing."}
                       </p>
                       <button
                         className="button secondary"
                         onClick={() => void push()}
                         disabled={busy}
                       >
-                        <Bell size={16} />
-                        Enable notifications
+                        {pushStatus === "starting" ||
+                        pushStatus === "confirming" ? (
+                          <Spinner />
+                        ) : (
+                          <Bell size={16} />
+                        )}
+                        {pushStatus === "confirming"
+                          ? "Confirming subscription…"
+                          : pushStatus === "starting"
+                            ? "Enabling notifications…"
+                            : pushStatus === "pending"
+                              ? "Finish subscribing"
+                              : "Enable notifications"}
                       </button>
                     </>
                   )}
