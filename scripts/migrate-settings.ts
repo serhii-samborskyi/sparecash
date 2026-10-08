@@ -26,7 +26,7 @@ await writeFile(".local/legacy-env.backup", contents, {
 });
 await writeFile(
   ".env",
-  `DATABASE_URL=${JSON.stringify(legacy.DATABASE_URL)}\n`,
+  `DATABASE_URL=${JSON.stringify(legacy.DATABASE_URL)}\nOWNER_PASSWORD=${JSON.stringify(process.env.OWNER_PASSWORD)}\n`,
   { mode: 0o600 },
 );
 await chmod(".env", 0o600);
@@ -39,7 +39,7 @@ await unlink(".local/coolify-roundsky.env").catch((error) => {
   if (error.code !== "ENOENT") throw error;
 });
 console.log(
-  "Configuration migrated to Settings. .env now contains only DATABASE_URL.",
+  "Configuration migrated to Settings. .env now contains DATABASE_URL and OWNER_PASSWORD.",
 );
 console.log("Private migration backup: .local/legacy-env.backup");
 console.log("RoundSky pixel URL: .local/roundsky-pixel-url.txt");

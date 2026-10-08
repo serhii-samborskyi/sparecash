@@ -7,6 +7,7 @@ database.searchParams.set("schema", "sparecash_test");
 const env = {
   DATABASE_URL: database.toString(),
   NODE_ENV: "test",
+  OWNER_PASSWORD: "test-owner-password",
   PATH: process.env.PATH,
   HOME: process.env.HOME,
 };

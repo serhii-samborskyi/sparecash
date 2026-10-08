@@ -10,7 +10,6 @@ import {
   runtimeSettingsView,
   saveRuntimeSettings,
   revealRuntimeSecret,
-  changeOwnerPassword,
 } from "../runtime-config.js";
 import { Router } from "express";
 import { z } from "zod";
@@ -48,16 +47,10 @@ adminRouter.post("/configuration/reveal", async (req, res) => {
     .set("Cache-Control", "no-store")
     .json({ value: await revealRuntimeSecret(name) });
 });
-adminRouter.post("/configuration/password", async (req, res) => {
-  const input = z
-    .object({
-      currentPassword: z.string().max(200),
-      newPassword: z.string().min(12).max(72),
-    })
-    .parse(req.body);
-  await changeOwnerPassword(input.currentPassword, input.newPassword);
-  res.clearCookie("sc_session");
-  res.set("Cache-Control", "no-store").json({ ok: true });
+adminRouter.post("/configuration/password", (_req, res) => {
+  res.status(409).set("Cache-Control", "no-store").json({
+    error: "Change OWNER_PASSWORD in your hosting environment and redeploy.",
+  });
 });
 adminRouter.get("/integrations/roundsky/pixel", async (_req, res) => {
   res.set("Cache-Control", "no-store").json(roundSkyPixelSetup());

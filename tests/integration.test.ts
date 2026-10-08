@@ -6,7 +6,6 @@ import {
 } from "../server/runtime-config";
 import { beforeAll, afterAll, it, expect, vi } from "vitest";
 import type { Server } from "node:http";
-import bcrypt from "bcryptjs";
 import { Prisma } from "@prisma/client";
 import { app } from "../server/index";
 import { db } from "../server/db";
@@ -30,6 +29,26 @@ let server: Server,
   emailId: string;
 const originalFetch = globalThis.fetch,
   providerCalls: any[] = [];
+function daytimeTimezone() {
+  const zones = [
+    "America/Chicago",
+    "America/Los_Angeles",
+    "Europe/London",
+    "Asia/Tokyo",
+    "Australia/Sydney",
+    "Pacific/Honolulu",
+  ];
+  return zones.find((z) => {
+    const h = Number(
+      new Intl.DateTimeFormat("en-US", {
+        timeZone: z,
+        hour: "numeric",
+        hourCycle: "h23",
+      }).format(new Date()),
+    );
+    return h >= 9 && h < 20;
+  })!;
+}
 async function request(
   path: string,
   method = "GET",
@@ -78,7 +97,6 @@ beforeAll(async () => {
   });
   await initializeRuntimeConfiguration({
     APP_URL: "https://sparecash.leadtechx.com",
-    ADMIN_PASSWORD_HASH: await bcrypt.hash("test-owner-password", 4),
     TURNSTILE_SITE_KEY: "1x00000000000000000000AA",
     TURNSTILE_SECRET_KEY: "1x0000000000000000000000000000000AA",
     LIVE_DELIVERY: "true",
@@ -141,6 +159,19 @@ it("requires owner authentication and same-origin writes", async () => {
   cookie = r.headers.get("set-cookie")!.split(";")[0];
   expect(
     (await request("/api/admin/dashboard", "GET", undefined, true)).status,
+  ).toBe(200);
+});
+it("preserves credentials and owner sessions during simultaneous process startup", async () => {
+  const original = await readRuntimeConfiguration();
+  const configurations = await Promise.all([
+    initializeRuntimeConfiguration(),
+    initializeRuntimeConfiguration(),
+    initializeRuntimeConfiguration(),
+  ]);
+  for (const configuration of configurations)
+    expect(configuration).toEqual(original);
+  expect(
+    (await request("/api/admin/configuration", "GET", undefined, true)).status,
   ).toBe(200);
 });
 it("publishes a weighted experiment and keeps visitor assignment stable", async () => {
@@ -265,24 +296,7 @@ it("records the rendered consent snapshot and waits for email confirmation", asy
   expect(applicationId).toBeTruthy();
 });
 it("sends a due email once and enforces the next-day cap", async () => {
-  const zones = [
-    "America/Chicago",
-    "America/Los_Angeles",
-    "Europe/London",
-    "Asia/Tokyo",
-    "Australia/Sydney",
-    "Pacific/Honolulu",
-  ];
-  const timezone = zones.find((z) => {
-    const h = Number(
-      new Intl.DateTimeFormat("en-US", {
-        timeZone: z,
-        hour: "numeric",
-        hourCycle: "h23",
-      }).format(new Date()),
-    );
-    return h >= 9 && h < 20;
-  })!;
+  const timezone = daytimeTimezone();
   await db.lead.update({ where: { id: leadId }, data: { timezone } });
   const chain = await saveChain(
     {
@@ -569,12 +583,11 @@ it("evaluates source evidence in bulk and records a dry-run without advertiser w
   ).toBe("RECOMMENDED");
 });
 it("holds uncertain provider outcomes without a blind retry", async () => {
-  const existing = await db.lead.findUniqueOrThrow({ where: { id: leadId } });
   const lead = await db.lead.create({
     data: {
       name: "Ambiguous send",
       visitId,
-      timezone: existing.timezone,
+      timezone: daytimeTimezone(),
       answers: {},
     },
   });
@@ -1238,13 +1251,14 @@ it("keeps connection credentials private and applies masked settings patches", a
   const stored = await db.appConfiguration.findUniqueOrThrow({
     where: { id: "main" },
   });
-  for (const secret of [
-    original.MCP_TOKEN,
-    original.ROUNDSKY_WEBHOOK_TOKEN,
-    original.BREVO_API_KEY,
-  ])
-    expect(JSON.stringify(stored)).not.toContain(secret);
-  expect(stored.encryptedSecrets).toMatch(/^v1\./);
+  expect(stored.secrets).toMatchObject({
+    MCP_TOKEN: original.MCP_TOKEN,
+    ROUNDSKY_WEBHOOK_TOKEN: original.ROUNDSKY_WEBHOOK_TOKEN,
+    BREVO_API_KEY: original.BREVO_API_KEY,
+  });
+  expect(stored.encryptedSecrets).toBeNull();
+  expect(JSON.stringify(stored)).not.toContain(env.OWNER_PASSWORD);
+  expect(serialized).not.toContain(env.OWNER_PASSWORD);
   expect(
     (
       await request(
@@ -1398,7 +1412,7 @@ it("keeps in-flight snapshots stable while a new worker cycle reads saved settin
   );
 });
 
-it("fails closed on corrupted encrypted credentials", async () => {
+it("rejects malformed database credentials without resetting them", async () => {
   const original = await db.appConfiguration.findUniqueOrThrow({
     where: { id: "main" },
   });
@@ -1406,16 +1420,19 @@ it("fails closed on corrupted encrypted credentials", async () => {
     await db.appConfiguration.update({
       where: { id: "main" },
       data: {
-        encryptedSecrets: original.encryptedSecrets.slice(0, 10) + "corrupted",
+        secrets: { invalid: true },
       },
     });
-    await expect(readRuntimeConfiguration()).rejects.toThrow(
-      "Unable to decrypt",
-    );
+    await expect(readRuntimeConfiguration()).rejects.toThrow();
+    await expect(initializeRuntimeConfiguration()).rejects.toThrow();
+    expect(
+      (await db.appConfiguration.findUniqueOrThrow({ where: { id: "main" } }))
+        .secrets,
+    ).toEqual({ invalid: true });
   } finally {
     await db.appConfiguration.update({
       where: { id: "main" },
-      data: { encryptedSecrets: original.encryptedSecrets },
+      data: { secrets: original.secrets! },
     });
   }
 });
@@ -1625,44 +1642,44 @@ it("records incoming text replies once and keeps STOP cancellation working", asy
   ).toBe("UNSUBSCRIBED");
 });
 
-it("changes the owner password with verification and revokes existing sessions", async () => {
+it("keeps owner password management in the hosting environment", async () => {
+  const response = await request(
+    "/api/admin/configuration/password",
+    "POST",
+    {
+      currentPassword: "test-owner-password",
+      newPassword: "new-test-password-123",
+    },
+    true,
+  );
+  expect(response.status).toBe(409);
+  expect(response.data.error).toContain("OWNER_PASSWORD");
   expect(
     (
       await request(
-        "/api/admin/configuration/password",
-        "POST",
-        { currentPassword: "wrong", newPassword: "new-test-password-123" },
+        "/api/admin/configuration",
+        "PATCH",
+        {
+          secrets: { ADMIN_PASSWORD_HASH: "new-password-hash-is-not-editable" },
+        },
         true,
       )
     ).status,
   ).toBe(400);
   expect(
-    (
-      await request(
-        "/api/admin/configuration/password",
-        "POST",
-        {
-          currentPassword: "test-owner-password",
-          newPassword: "new-test-password-123",
-        },
-        true,
-      )
-    ).status,
-  ).toBe(200);
-  expect(
     (await request("/api/admin/configuration", "GET", undefined, true)).status,
-  ).toBe(401);
+  ).toBe(200);
   expect(
     (
       await request("/api/auth/login", "POST", {
-        password: "test-owner-password",
+        password: "new-test-password-123",
       })
     ).status,
   ).toBe(401);
   expect(
     (
       await request("/api/auth/login", "POST", {
-        password: "new-test-password-123",
+        password: "test-owner-password",
       })
     ).status,
   ).toBe(200);

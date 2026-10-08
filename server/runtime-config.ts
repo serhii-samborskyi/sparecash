@@ -1,10 +1,5 @@
-import {
-  randomBytes,
-  createCipheriv,
-  createDecipheriv,
-  createHmac,
-} from "node:crypto";
-import { mkdir, readFile, writeFile, link, unlink } from "node:fs/promises";
+import { randomBytes, createDecipheriv, createHmac } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import bcrypt from "bcryptjs";
 import { db } from "./db.js";
@@ -25,62 +20,23 @@ export const runtimeDirectory = resolve(
       : ".local/runtime",
 );
 const keyPath = resolve(runtimeDirectory, "master.key");
-export const ownerPasswordPath = resolve(
-  runtimeDirectory,
-  "owner-password.txt",
-);
-let keyPromise: Promise<Buffer> | undefined;
-async function atomicCreate(path: string, content: string | Buffer) {
-  const temporary = `${path}.${randomBytes(12).toString("hex")}.tmp`;
-  await writeFile(temporary, content, { mode: 0o600, flag: "wx" });
+// Read an old key only during the one-time upgrade. New installations never create one.
+async function readLegacySecrets(
+  value: string,
+): Promise<RuntimeSecrets | null> {
+  let key: Buffer;
   try {
-    await link(temporary, path);
+    key = await readFile(keyPath);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-  } finally {
-    await unlink(temporary);
+    if (
+      ["ENOENT", "EACCES"].includes((error as NodeJS.ErrnoException).code ?? "")
+    )
+      return null;
+    throw error;
   }
-}
-async function masterKey() {
-  if (!keyPromise)
-    keyPromise = (async () => {
-      await mkdir(runtimeDirectory, { recursive: true, mode: 0o700 });
-      try {
-        return await readFile(keyPath);
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-        if (await db.appConfiguration.count())
-          throw new Error(
-            "Missing settings encryption key. Restore data/master.key from backup.",
-          );
-        await atomicCreate(keyPath, randomBytes(32));
-        return readFile(keyPath);
-      }
-    })();
-  const key = await keyPromise;
-  if (key.length !== 32) throw new Error("Invalid settings encryption key");
-  return key;
-}
-async function encrypt(secrets: RuntimeSecrets) {
-  const iv = randomBytes(12);
-  const cipher = createCipheriv("aes-256-gcm", await masterKey(), iv);
-  cipher.setAAD(Buffer.from("sparecash:configuration:v1"));
-  const ciphertext = Buffer.concat([
-    cipher.update(JSON.stringify(secrets), "utf8"),
-    cipher.final(),
-  ]);
-  return [
-    "v1",
-    iv.toString("base64"),
-    cipher.getAuthTag().toString("base64"),
-    ciphertext.toString("base64"),
-  ].join(".");
-}
-async function decrypt(value: string) {
-  const key = await masterKey();
   try {
     const [version, iv, tag, text, extra] = value.split(".");
-    if (version !== "v1" || extra || !text) throw new Error();
+    if (version !== "v1" || extra || !text) return null;
     const decipher = createDecipheriv(
       "aes-256-gcm",
       key,
@@ -97,10 +53,28 @@ async function decrypt(value: string) {
       ),
     );
   } catch {
-    throw new Error(
-      "Unable to decrypt application settings. Restore the matching master.key and database backup.",
-    );
+    return null;
   }
+}
+function newSecrets(
+  ownerHash: string,
+  legacy: Record<string, unknown>,
+): RuntimeSecrets {
+  const randomSecret = () => randomBytes(32).toString("hex");
+  return secretRuntimeSchema.parse({
+    TOKEN_SECRET: randomSecret(),
+    MCP_TOKEN: randomSecret(),
+    WEBHOOK_TOKEN: randomSecret(),
+    ROUNDSKY_WEBHOOK_TOKEN:
+      typeof legacy.WEBHOOK_TOKEN === "string" && legacy.WEBHOOK_TOKEN
+        ? createHmac("sha256", legacy.WEBHOOK_TOKEN)
+            .update("sparecash:roundsky:sold")
+            .digest("hex")
+        : randomSecret(),
+    ...pick(secretRuntimeSchema.shape, legacy),
+    // The hosting password always wins over legacy environment/database hashes.
+    ADMIN_PASSWORD_HASH: ownerHash,
+  });
 }
 function validate(value: RuntimeConfiguration) {
   const url = new URL(value.APP_URL);
@@ -137,45 +111,82 @@ function pick(shape: Record<string, unknown>, input: Record<string, unknown>) {
 export async function initializeRuntimeConfiguration(
   legacy: Record<string, unknown> = process.env,
 ) {
-  let stored = await db.appConfiguration.findUnique({ where: { id: "main" } });
-  if (!stored) {
-    await masterKey();
-    let password: string | undefined;
-    if (!legacy.ADMIN_PASSWORD_HASH) {
-      await atomicCreate(
-        ownerPasswordPath,
-        randomBytes(18).toString("base64url") + "\n",
+  await db.$transaction(
+    async (tx) => {
+      // Also serializes first boot when web and worker start together.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(1629071201)`;
+      await tx.$queryRaw`SELECT id FROM "AppConfiguration" WHERE id='main' FOR UPDATE`;
+      const stored = await tx.appConfiguration.findUnique({
+        where: { id: "main" },
+      });
+      let secrets =
+        stored?.secrets != null
+          ? secretRuntimeSchema.parse(stored.secrets)
+          : stored?.encryptedSecrets
+            ? await readLegacySecrets(stored.encryptedSecrets)
+            : null;
+      const needsRecovery = Boolean(stored && !secrets);
+      const passwordChanged =
+        !secrets ||
+        !(await bcrypt.compare(
+          env.OWNER_PASSWORD,
+          secrets.ADMIN_PASSWORD_HASH,
+        ));
+      const ownerHash = passwordChanged
+        ? await bcrypt.hash(env.OWNER_PASSWORD, 12)
+        : secrets!.ADMIN_PASSWORD_HASH;
+      secrets = secrets
+        ? { ...secrets, ADMIN_PASSWORD_HASH: ownerHash }
+        : newSecrets(ownerHash, legacy);
+      const values = publicRuntimeSchema.parse(
+        stored?.values ?? {
+          ...defaultRuntimeValues,
+          ...pick(publicRuntimeSchema.shape, legacy),
+        },
       );
-      password = (await readFile(ownerPasswordPath, "utf8")).trim();
-    }
-    const randomSecret = () => randomBytes(32).toString("hex");
-    const values = publicRuntimeSchema.parse({
-      ...defaultRuntimeValues,
-      ...pick(publicRuntimeSchema.shape, legacy),
-    });
-    const secrets = secretRuntimeSchema.parse({
-      ADMIN_PASSWORD_HASH:
-        legacy.ADMIN_PASSWORD_HASH ?? (await bcrypt.hash(password!, 12)),
-      TOKEN_SECRET: randomSecret(),
-      MCP_TOKEN: randomSecret(),
-      WEBHOOK_TOKEN: randomSecret(),
-      ROUNDSKY_WEBHOOK_TOKEN:
-        typeof legacy.WEBHOOK_TOKEN === "string" && legacy.WEBHOOK_TOKEN
-          ? createHmac("sha256", legacy.WEBHOOK_TOKEN)
-              .update("sparecash:roundsky:sold")
-              .digest("hex")
-          : randomSecret(),
-      ...pick(secretRuntimeSchema.shape, legacy),
-    });
-    validate({ ...values, ...secrets });
-    stored = await db.appConfiguration.upsert({
-      where: { id: "main" },
-      create: { id: "main", values, encryptedSecrets: await encrypt(secrets) },
-      update: {},
-    });
-    if (password)
-      console.log(`Initial owner password saved to ${ownerPasswordPath}`);
-  }
+      if (needsRecovery) {
+        values.LIVE_DELIVERY = "false";
+        values.LIVE_SOURCE_BLOCKING = "false";
+      }
+      validate({ ...values, ...secrets });
+      if (!stored) {
+        await tx.appConfiguration.create({
+          data: { id: "main", values, secrets },
+        });
+      } else if (stored.secrets == null || passwordChanged) {
+        await tx.appConfiguration.update({
+          where: { id: "main" },
+          data: {
+            values,
+            secrets,
+            credentialsNeedReview:
+              stored.credentialsNeedReview || needsRecovery,
+            revision: { increment: 1 },
+          },
+        });
+        if (passwordChanged) await tx.adminSession.deleteMany();
+        await tx.auditLog.create({
+          data: {
+            actor: "system",
+            action: needsRecovery
+              ? "configuration.credentials_reset"
+              : stored.secrets == null
+                ? "configuration.storage_migrated"
+                : "owner.password_changed",
+            details: { passwordSource: "environment" },
+          },
+        });
+      }
+    },
+    { maxWait: 30000, timeout: 30000 },
+  );
+  const stored = await db.appConfiguration.findUniqueOrThrow({
+    where: { id: "main" },
+  });
+  if (stored.credentialsNeedReview)
+    console.warn(
+      "Previous credentials could not be read. Sign in with OWNER_PASSWORD, reconnect providers in Settings, and copy updated webhook/MCP URLs. Live sending and source exclusions were disabled during recovery. CRM data is preserved.",
+    );
   return refreshRuntimeConfiguration();
 }
 export async function readRuntimeConfiguration() {
@@ -184,7 +195,7 @@ export async function readRuntimeConfiguration() {
   });
   return validate({
     ...publicRuntimeSchema.parse(stored.values),
-    ...(await decrypt(stored.encryptedSecrets)),
+    ...secretRuntimeSchema.parse(stored.secrets),
   });
 }
 export async function refreshRuntimeConfiguration() {
@@ -203,7 +214,11 @@ export async function runtimeSettingsView() {
       config[key as keyof RuntimeConfiguration],
     ]),
   );
+  const stored = await db.appConfiguration.findUniqueOrThrow({
+    where: { id: "main" },
+  });
   return {
+    credentialsNeedReview: stored.credentialsNeedReview,
     values: publicRuntimeSchema.parse(values),
     secrets: Object.fromEntries(
       Object.keys(secretRuntimeSchema.shape)
@@ -227,7 +242,7 @@ export async function saveRuntimeSettings(input: unknown, actor: string) {
       ...patch.values,
     });
     const secrets = secretRuntimeSchema.parse({
-      ...(await decrypt(stored.encryptedSecrets)),
+      ...secretRuntimeSchema.parse(stored.secrets),
       ...patch.secrets,
     });
     validate({ ...values, ...secrets });
@@ -235,7 +250,8 @@ export async function saveRuntimeSettings(input: unknown, actor: string) {
       where: { id: "main" },
       data: {
         values,
-        encryptedSecrets: await encrypt(secrets),
+        secrets,
+        ...(patch.credentialsReviewed ? { credentialsNeedReview: false } : {}),
         revision: { increment: 1 },
       },
     });
@@ -244,7 +260,11 @@ export async function saveRuntimeSettings(input: unknown, actor: string) {
         actor,
         action: "configuration.updated",
         details: {
-          fields: [...Object.keys(patch.values), ...Object.keys(patch.secrets)],
+          fields: [
+            ...Object.keys(patch.values),
+            ...Object.keys(patch.secrets),
+            ...(patch.credentialsReviewed ? ["credentialsReviewed"] : []),
+          ],
         },
       },
     });
@@ -267,37 +287,4 @@ export async function revealRuntimeSecret(name: string) {
     },
   });
   return config[name as keyof RuntimeSecrets];
-}
-export async function changeOwnerPassword(
-  currentPassword: string,
-  newPassword: string,
-) {
-  const hashed = await bcrypt.hash(newPassword, 12);
-  await db.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT id FROM "AppConfiguration" WHERE id='main' FOR UPDATE`;
-    const stored = await tx.appConfiguration.findUniqueOrThrow({
-      where: { id: "main" },
-    });
-    const secrets = await decrypt(stored.encryptedSecrets);
-    if (!(await bcrypt.compare(currentPassword, secrets.ADMIN_PASSWORD_HASH)))
-      throw new Error("Current password is incorrect");
-    await tx.appConfiguration.update({
-      where: { id: "main" },
-      data: {
-        encryptedSecrets: await encrypt({
-          ...secrets,
-          ADMIN_PASSWORD_HASH: hashed,
-        }),
-        revision: { increment: 1 },
-      },
-    });
-    await tx.adminSession.deleteMany();
-    await tx.auditLog.create({
-      data: { actor: "owner", action: "owner.password_changed" },
-    });
-  });
-  await unlink(ownerPasswordPath).catch((error) => {
-    if (error.code !== "ENOENT") throw error;
-  });
-  await refreshRuntimeConfiguration();
 }

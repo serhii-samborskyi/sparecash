@@ -49,6 +49,7 @@ export const runtimePatchSchema = z
   .object({
     values: publicRuntimeSchema.partial().default({}),
     secrets: editableSecretsSchema.default({}),
+    credentialsReviewed: z.literal(true).optional(),
   })
   .strict();
 export type RuntimeValues = z.infer<typeof publicRuntimeSchema>;

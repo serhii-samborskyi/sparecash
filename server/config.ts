@@ -5,10 +5,18 @@ import {
   defaultRuntimeValues,
   type RuntimeConfiguration,
 } from "./runtime-schema.js";
-// Only DATABASE_URL is supplied by the operator. Mode and port are internal defaults.
+// Hosting supplies the database URL and owner password. Other settings live in PostgreSQL.
 const infrastructure = z
   .object({
     DATABASE_URL: z.string().min(1),
+    OWNER_PASSWORD: z
+      .string({
+        required_error: "Set OWNER_PASSWORD in your hosting environment",
+      })
+      .min(1, "Set OWNER_PASSWORD in your hosting environment")
+      .refine((value) => Buffer.byteLength(value, "utf8") <= 72, {
+        message: "OWNER_PASSWORD must be at most 72 UTF-8 bytes",
+      }),
     NODE_ENV: z
       .enum(["development", "test", "production"])
       .default("development"),

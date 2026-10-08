@@ -121,7 +121,10 @@ model Visit {
 model AppConfiguration {
   id               String   @id
   values           Json
-  encryptedSecrets String
+  secrets          Json?
+  // Retained only as a backup of credentials from installations before database storage.
+  encryptedSecrets String?
+  credentialsNeedReview Boolean @default(false)
   revision         Int      @default(1)
   updatedAt        DateTime @updatedAt
 }

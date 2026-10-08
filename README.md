@@ -12,7 +12,7 @@ npm run local:setup
 npm run dev
 ```
 
-`local:setup` uses locally installed PostgreSQL binaries (`PG_BIN`, default `/usr/lib/postgresql/18/bin`), starts an isolated loopback server on port 55432, applies migrations, and creates draft starter content. It writes only `DATABASE_URL` to `.env`. Application settings and encrypted credentials live in PostgreSQL. A fresh installation writes the generated owner password to `.local/runtime/owner-password.txt` and its encryption key to `.local/runtime/master.key`, all excluded from Git. Existing settings are preserved.
+`local:setup` uses locally installed PostgreSQL binaries (`PG_BIN`, default `/usr/lib/postgresql/18/bin`), starts an isolated loopback server on port 55432, applies migrations, and creates draft starter content. It writes `DATABASE_URL` and `OWNER_PASSWORD` to the ignored `.env` file. Read `OWNER_PASSWORD` there to sign in. Application settings and provider credentials live directly in PostgreSQL; no encryption key file or application storage volume is required. Existing settings are preserved when readable.
 
 Open **http://localhost:3000/admin**. The starter experiment includes a direct prelander and a two-question quiz; three draft chains cover email, SMS, and push. Preview variants from Experiments. There are no fabricated contacts or conversion statistics.
 
@@ -20,18 +20,19 @@ Run the independent worker with `npm run worker`. Development sends and source e
 
 ## Coolify deployment
 
-1. Create a PostgreSQL service in Coolify, then create a Docker Compose application using `docker-compose.yml`.
-2. Set the app's only required environment variable, **`DATABASE_URL`**, to that database's connection string. The web and worker services both use it. Runtime mode and port are set by the image.
-3. Configure **https://sparecash.leadtechx.com** on the **web** service, port **3000**. Keep PostgreSQL and the worker private.
-4. Keep the shared **app_data** volume mounted at `/app/data` on both web and worker. The app generates `/app/data/master.key` to encrypt credentials in PostgreSQL. Back up this key with the database; restoring encrypted settings requires both. Multiple replicas need the same key.
-5. Deploy. The web container applies migrations, creates missing starter records, and initializes configuration. On a fresh installation, read `/app/data/owner-password.txt` in the web container's Coolify terminal and sign in at `/admin`. Change the owner password in Settings; this removes the bootstrap password file and signs out other sessions.
-6. In **Settings**, set the Application URL, provider keys, RoundSky webhook secret, MCP token, business details, and disclosures. Domain and RoundSky offer defaults are preconfigured. All live switches start disabled. Credentials remain masked unless explicitly revealed.
-7. In **Settings → Provider connections → RoundSky**, click **Copy pixel URL** below the webhook secret. Save any changes to the Application URL or secret first. In RoundSky select **LeadTechX → Server 2 Server Requst Pixel** and paste the URL with bracketed variables intact.
-8. Use **Test connection** under OneSignal, Brevo, BlueBubbles, and PropellerAds to check saved credentials and setup without sending messages. Copy the BlueBubbles reply URL into its `new-message` webhook; known contacts' replies appear in their CRM timeline. Test actual channel delivery and a real RoundSky callback separately. Publish an experiment and activate chains, then enable **Live message delivery** in Settings. Enable source evaluation and **Live source exclusions** when ready to apply PropellerAds exclusions.
+1. Create a PostgreSQL service in Coolify. Deploy this repository using its Dockerfile, or use `docker-compose.yml` to run both web and worker.
+2. In **Environment Variables**, set **`DATABASE_URL`** and **`OWNER_PASSWORD`** (your chosen login password). Set both as runtime variables, with the same values on web and worker. No password hashing command is needed. The image sets runtime mode and port.
+3. Configure **https://sparecash.leadtechx.com** on the web application, port **3000**. Keep PostgreSQL and the worker private. With Dockerfile deployments, run a second service from the same image with command `node dist/server/worker.js`.
+4. Deploy and sign in at `/admin` with your `OWNER_PASSWORD`. To change it, update the environment variable and redeploy web and worker; existing owner sessions are signed out. No `/app/data` volume is needed for normal operation.
+5. In **Settings**, set the Application URL, provider keys, RoundSky webhook secret, MCP token, business details, and disclosures. Domain and RoundSky offer defaults are preconfigured. All live switches start disabled. Credentials remain masked unless explicitly revealed.
+6. Under **Provider connections → RoundSky**, click **Copy pixel URL**. In RoundSky select **LeadTechX → Server 2 Server Requst Pixel** and paste the URL with bracketed variables intact.
+7. Use **Test connection** under OneSignal, Brevo, BlueBubbles, and PropellerAds. Copy the BlueBubbles reply URL into its `new-message` webhook. Test actual delivery and a RoundSky callback separately, then enable live delivery and source exclusions when ready.
 
-Saved connection settings apply to subsequent requests and worker cycles without a restart. To retain the current local setup on another server, transfer its database and matching `.local/runtime/master.key` into that server's persistent `/app/data/master.key`. Otherwise, a fresh database gets new credentials; enter your existing RoundSky secret through Settings if you want to keep its pixel URL.
+Saved connection settings apply to subsequent requests and worker cycles without a restart. PostgreSQL backups include provider credentials; protect access to those backups. Keep `OWNER_PASSWORD` in your hosting configuration. Moving to another container or restoring the database requires no key file.
 
-For an existing installation with credentials in `.env`, run `npm run config:migrate`. It imports them once into the encrypted configuration, keeps a private `.local/legacy-env.backup`, and leaves only `DATABASE_URL` in `.env`. An optional `-- --app-url=https://sparecash.leadtechx.com` sets the intended public origin. Your existing owner password, MCP token, signing key, and webhook secrets are preserved. After the first import, stale environment values cannot override database settings.
+**Upgrading from encrypted settings:** add `OWNER_PASSWORD` before redeploying. If the old `/app/data/master.key` is accessible, credentials migrate automatically without changing provider tokens or links. Keep an existing key mount for this first deployment if it contains the original key. If the key is missing, unreadable, or does not match, the app starts with your environment password and preserves CRM records, campaigns, and public settings. Provider credentials reset, access/tracking tokens regenerate, and live delivery/source exclusions are disabled. Settings shows a notice to reconnect providers, update webhook URLs and MCP credentials, and replace old confirmation/preference/tracking links. The old encrypted bundle is retained in the database as a backup, but is no longer used. Once upgraded, remove the app storage mount if desired.
+
+For an older installation with provider credentials in `.env`, set `OWNER_PASSWORD` and run `npm run config:migrate`. It imports connection values on first initialization, keeps a private `.local/legacy-env.backup`, and leaves `DATABASE_URL` and `OWNER_PASSWORD` in `.env`. An optional `-- --app-url=https://sparecash.leadtechx.com` sets the public origin. Subsequent starts use saved provider settings; the owner password always comes from the environment.
 
 `npm run roundsky:setup` exports the pixel URL from the saved configuration to `.local/roundsky-pixel-url.txt`; it does not create environment variables. The same URL is available in the owner Settings screen.
 
@@ -64,7 +65,7 @@ npm audit
 
 Tests apply migrations in the isolated `sparecash_test` schema and truncate only that schema. `TEST_DATABASE_URL` can point at another PostgreSQL database. Integration tests use a real database and mocked provider responses; **no emails, texts, push notifications, or advertiser changes are sent by the test suite**.
 
-After building, `check-bootstrap.mjs` verifies a fresh production startup with only the database URL, generated owner login, encrypted settings, and restart persistence. It uses a temporary schema and private data directory and removes both afterward.
+After building, `check-bootstrap.mjs` verifies a fresh production startup with the database URL and environment password, credential persistence after deleting all container data, password rotation, and upgrades with and without the legacy key. It uses a temporary schema and private data directory and removes both afterward.
 
 See [integration contracts](docs/INTEGRATIONS.md), [MCP usage](docs/MCP.md), and [architecture and operating limits](docs/ARCHITECTURE.md).
 
@@ -72,4 +73,4 @@ See [integration contracts](docs/INTEGRATIONS.md), [MCP usage](docs/MCP.md), and
 
 The production domain and RoundSky's supplied hosted-link/sold-lead pixel contract are configured. Deployment, provider credentials, and a real account-side callback test remain before live traffic. The supplied pixel does not report approval, funding, or rejection; those outcomes need separately verified events. An embedded form or direct-application API would require an additional adapter.
 
-Credit-repair offers are intentionally absent. Branches can be configured later, but a missing conversion is never represented as an explicit rejection. Backend credentials are encrypted in PostgreSQL and managed in owner Settings; the dashboard reports configuration presence, not a successful live connectivity test. The MCP endpoint supports clients with configurable bearer headers; OAuth-only clients require an OAuth gateway.
+Credit-repair offers are intentionally absent. Branches can be configured later, but a missing conversion is never represented as an explicit rejection. Backend credentials are stored directly in PostgreSQL and managed in owner Settings; the dashboard reports configuration presence, not a successful live connectivity test. The MCP endpoint supports clients with configurable bearer headers; OAuth-only clients require an OAuth gateway.

@@ -16,13 +16,23 @@ if ! "$PG_BIN/pg_ctl" -D "$PWD/.local/postgres" status >/dev/null 2>&1; then
 fi
 node --input-type=module <<'JS'
 import fs from 'node:fs';
+import { randomBytes } from 'node:crypto';
+import { parse } from 'dotenv';
 if(!fs.existsSync('.env')){
  const url=`postgresql://sparecash:${fs.readFileSync('.local/db-password','utf8')}@127.0.0.1:55432/sparecash`;
  fs.writeFileSync('.env',`DATABASE_URL=${url}\n`,{mode:0o600});
 }
+const contents = fs.readFileSync('.env', 'utf8');
+if (!parse(contents).OWNER_PASSWORD) {
+  const previousPath = ['.local/runtime/owner-password.txt', '.local/owner-password.txt'].find(path => fs.existsSync(path));
+  const password = process.env.OWNER_PASSWORD || (previousPath ? fs.readFileSync(previousPath, 'utf8').trim() : randomBytes(18).toString('base64url'));
+  fs.appendFileSync('.env', `\nOWNER_PASSWORD=${JSON.stringify(password)}\n`, { mode: 0o600 });
+  fs.chmodSync('.env', 0o600);
+}
 JS
 PGPASSWORD="$(cat .local/db-password)" "$PG_BIN/psql" -h 127.0.0.1 -p 55432 -U sparecash -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname='sparecash'" | rg -q 1 || PGPASSWORD="$(cat .local/db-password)" "$PG_BIN/createdb" -h 127.0.0.1 -p 55432 -U sparecash sparecash
+npm run db:generate
 npm run db:migrate
 npx tsx scripts/local-settings.ts
 npm run db:seed
-printf 'Local PostgreSQL and environment are ready. Initial owner password: .local/runtime/owner-password.txt\n'
+printf 'Local PostgreSQL and environment are ready. Owner password: OWNER_PASSWORD in .env\n'

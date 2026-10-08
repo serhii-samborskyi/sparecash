@@ -45,6 +45,7 @@ export function verifyToken(value: string, kind: string): string | null {
   }
 }
 export async function login(password: string, res: Response) {
+  if (Buffer.byteLength(password, "utf8") > 72) return false;
   if (!(await bcrypt.compare(password, env.ADMIN_PASSWORD_HASH))) return false;
   const key = randomToken();
   await db.adminSession.create({

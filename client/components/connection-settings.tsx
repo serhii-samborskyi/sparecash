@@ -9,6 +9,7 @@ import {
 type Configuration = {
   values: Record<string, string | number>;
   secrets: Record<string, boolean>;
+  credentialsNeedReview: boolean;
 };
 export function ConnectionSettings({
   notify,
@@ -30,10 +31,7 @@ export function ConnectionSettings({
     "ROUNDSKY_WEBHOOK_TOKEN" in secrets;
   const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
-  const [currentPassword, setCurrentPassword] = useState(""),
-    [newPassword, setNewPassword] = useState(""),
-    [repeatPassword, setRepeatPassword] = useState("");
-  const [changingPassword, setChangingPassword] = useState(false);
+  const [credentialsReviewed, setCredentialsReviewed] = useState(false);
   useEffect(() => {
     let active = true;
     api("/admin/configuration")
@@ -230,9 +228,14 @@ export function ConnectionSettings({
           try {
             const result = await api("/admin/configuration", {
               method: "PATCH",
-              body: JSON.stringify({ values, secrets }),
+              body: JSON.stringify({
+                values,
+                secrets,
+                ...(credentialsReviewed ? { credentialsReviewed: true } : {}),
+              }),
             });
             setConfiguration(result);
+            setCredentialsReviewed(false);
             setValues(result.values);
             setSecrets({});
             setRevealed({});
@@ -246,6 +249,35 @@ export function ConnectionSettings({
           }
         }}
       >
+        {configuration.credentialsNeedReview && (
+          <section className="panel" role="status">
+            <h3>Reconnect your providers</h3>
+            <p>
+              The previous credentials could not be recovered. Your CRM data and
+              campaigns are saved. Live sending and source exclusions were
+              switched off.
+            </p>
+            <p>
+              Re-enter provider keys, copy the updated RoundSky and BlueBubbles
+              webhook URLs, and update your MCP token. Previous confirmation,
+              preference, and tracking links will need to be replaced. Enable
+              live delivery when setup is complete.
+            </p>
+            <label className="switch-row">
+              <span>I have reviewed and reconnected my integrations</span>
+              <input
+                type="checkbox"
+                checked={credentialsReviewed}
+                onChange={(event) =>
+                  setCredentialsReviewed(event.target.checked)
+                }
+              />
+            </label>
+            <p className="help">
+              Save connection settings to dismiss this notice.
+            </p>
+          </section>
+        )}
         <section className="panel">
           <div className="panel-heading">
             <Globe size={20} />
@@ -305,8 +337,8 @@ export function ConnectionSettings({
             <div>
               <h3>Provider connections</h3>
               <p>
-                Credentials are encrypted in your database. Blank fields keep
-                saved credentials.
+                Credentials are stored in your database. Blank fields keep saved
+                credentials.
               </p>
             </div>
           </div>
@@ -458,72 +490,15 @@ export function ConnectionSettings({
           </button>
         </div>
       </form>
-      <form
-        className="settings-form"
-        onSubmit={async (event) => {
-          event.preventDefault();
-          setError("");
-          if (newPassword !== repeatPassword) {
-            setError("The new passwords do not match.");
-            return;
-          }
-          setChangingPassword(true);
-          try {
-            await api("/admin/configuration/password", {
-              method: "POST",
-              body: JSON.stringify({ currentPassword, newPassword }),
-            });
-            location.assign("/admin");
-          } catch (error) {
-            setError((error as Error).message);
-          } finally {
-            setChangingPassword(false);
-          }
-        }}
-      >
-        <section className="panel">
-          <h3>Owner password</h3>
-          <p className="help">
-            Changing your password signs out all owner sessions.
-          </p>
-          <div className="form-grid">
-            <Field label="Current password">
-              <input
-                required
-                type="password"
-                autoComplete="current-password"
-                value={currentPassword}
-                onChange={(event) => setCurrentPassword(event.target.value)}
-              />
-            </Field>
-            <Field label="New password">
-              <input
-                required
-                type="password"
-                autoComplete="new-password"
-                minLength={12}
-                maxLength={72}
-                value={newPassword}
-                onChange={(event) => setNewPassword(event.target.value)}
-              />
-            </Field>
-            <Field label="Repeat new password">
-              <input
-                required
-                type="password"
-                autoComplete="new-password"
-                minLength={12}
-                maxLength={72}
-                value={repeatPassword}
-                onChange={(event) => setRepeatPassword(event.target.value)}
-              />
-            </Field>
-          </div>
-          <button className="button secondary" disabled={changingPassword}>
-            {changingPassword && <Spinner />}Change owner password
-          </button>
-        </section>
-      </form>
+      <section className="panel">
+        <h3>Owner password</h3>
+        <p className="help">
+          Set <code>OWNER_PASSWORD</code> in Coolify → Environment Variables.
+          Save and redeploy to change your login password. This signs out
+          existing owner sessions. Use the same value for the web app and
+          worker.
+        </p>
+      </section>
     </>
   );
 }
