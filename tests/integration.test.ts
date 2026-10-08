@@ -13,7 +13,18 @@ import { env } from "../server/config";
 import { token, hash } from "../server/security";
 import { landingSchema, settingsSchema } from "../server/domain";
 import { activateSubscription, unsubscribe } from "../server/services/journeys";
-import { saveChain, saveSettings, settings } from "../server/services/control";
+import {
+  saveChain,
+  saveSettings,
+  settings,
+  saveExperiment,
+} from "../server/services/control";
+import {
+  trafficReport,
+  followupReport,
+  quizAnswerReport,
+  recordVisitCosts,
+} from "../server/services/marketing";
 import { sources, blockSource } from "../server/services/traffic";
 import { tick } from "../server/services/engine";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -1863,5 +1874,452 @@ it("waits for OneSignal synchronization before activating push and deduplicates 
       where: { id: chain.id },
       data: { status: "PAUSED" },
     });
+  }
+});
+
+it("attributes source/landing and follow-up results without multiplying sales or hiding missing costs", async () => {
+  const old = new Date(Date.now() - 72 * 3600000);
+  const exp = await saveExperiment(
+    {
+      name: "Marketing measurement",
+      slug: "marketing-measurement",
+      variants: [
+        {
+          name: "Guide",
+          weight: 50,
+          config: {
+            title: "Explore your options",
+            description: "A useful introduction to optional updates.",
+            layout: "centered",
+          },
+        },
+        {
+          name: "Story",
+          weight: 50,
+          config: {
+            title: "Your next step",
+            description: "Compare options before deciding what fits.",
+            layout: "editorial",
+            typography: "serif",
+          },
+        },
+      ],
+    },
+    "test",
+  );
+  const source = await db.trafficSource.create({
+    data: { campaignId: "811", zoneId: "901" },
+  });
+  const badSource = await db.trafficSource.create({
+    data: { campaignId: "811", zoneId: "902" },
+  });
+  const visit = (sourceId: string, variantId: string, extra: object = {}) =>
+    db.visit.create({
+      data: {
+        experimentId: exp.id,
+        variantId,
+        sourceId,
+        ipHash: "marketing-test",
+        userAgent: "test",
+        evidence: [],
+        createdAt: old,
+        ...extra,
+      },
+    });
+  const first = await visit(source.id, exp.variants[0].id, {
+    verified: true,
+    cost: 2,
+    costRecorded: true,
+  });
+  const second = await visit(source.id, exp.variants[0].id);
+  await visit(badSource.id, exp.variants[1].id, {
+    botScore: 100,
+    cost: 3,
+    costRecorded: true,
+  });
+  await visit(badSource.id, exp.variants[1].id, { createdAt: new Date() });
+  const person = await db.lead.create({
+    data: {
+      visitId: first.id,
+      name: "Measurement fixture",
+      answers: { amount: "1000" },
+    },
+  });
+  const email = await db.subscription.create({
+    data: {
+      leadId: person.id,
+      channel: "EMAIL",
+      address: "marketing-fixture@example.test",
+      status: "ACTIVE",
+      confirmedAt: new Date(),
+      consentText: "Test subscription",
+      consentVersion: "v1",
+      consentIpHash: "test",
+    },
+  });
+  await db.subscription.create({
+    data: {
+      leadId: person.id,
+      channel: "PUSH",
+      address: "335cf694-1c47-4a13-bbe6-1b8de499e210",
+      status: "UNSUBSCRIBED",
+      confirmedAt: new Date(),
+      stoppedAt: new Date(),
+      consentText: "Test subscription",
+      consentVersion: "v1",
+      consentIpHash: "test",
+    },
+  });
+  const chain = await saveChain(
+    {
+      name: "Measurement sequence",
+      channel: "EMAIL",
+      steps: [
+        {
+          subject: "Your first step",
+          body: "Explore options: {{link}}",
+          delayHours: 24,
+        },
+        {
+          subject: "Your next step",
+          body: "Compare options: {{link}}",
+          delayHours: 24,
+        },
+      ],
+    },
+    "test",
+  );
+  const enrollment = await db.enrollment.create({
+    data: { subscriptionId: email.id, chainId: chain.id },
+  });
+  const delivery = await db.delivery.create({
+    data: {
+      subscriptionId: email.id,
+      enrollmentId: enrollment.id,
+      step: 0,
+      status: "SENT",
+      subject: "First",
+      body: "Test message",
+      createdAt: old,
+      sentAt: old,
+      clickedAt: old,
+      clickCount: 3,
+    },
+  });
+  await db.delivery.create({
+    data: {
+      subscriptionId: email.id,
+      enrollmentId: enrollment.id,
+      step: 1,
+      status: "FAILED",
+      subject: "Next",
+      body: "Test message",
+      createdAt: old,
+    },
+  });
+  await db.applicationClick.create({
+    data: {
+      visitId: first.id,
+      leadId: person.id,
+      createdAt: old,
+      postbacks: {
+        create: { eventId: "marketing-direct", event: "SOLD", revenue: 5 },
+      },
+    },
+  });
+  await db.applicationClick.create({
+    data: {
+      visitId: first.id,
+      leadId: person.id,
+      deliveryId: delivery.id,
+      createdAt: old,
+      postbacks: {
+        create: [
+          { eventId: "marketing-followup-1", event: "SOLD", revenue: 2 },
+          { eventId: "marketing-followup-2", event: "SOLD", revenue: 2 },
+          { eventId: "marketing-approval", event: "APPROVED", revenue: 0 },
+        ],
+      },
+    },
+  });
+  const query = { experimentId: exp.id };
+  const report = await trafficReport({ ...query, groupBy: "source_landing" });
+  expect(report.totalVisits).toBe(3);
+  const good = report.rows.find((row) => row.sourceId === source.id)!;
+  expect(good).toMatchObject({
+    visits: 2,
+    leads: 1,
+    confirmedSubscriptions: 2,
+    activeSubscriptions: 1,
+    optedOutSubscriptions: 1,
+    subscribedVisitors: 1,
+    subscribedPeople: 1,
+    subscriptionRate: 0.5,
+    saleRate: 0.5,
+    sold: 2,
+    approved: 1,
+    funded: 0,
+    revenue: 9,
+    directApplications: 1,
+    followupApplications: 1,
+    costCoverage: 0.5,
+    adContribution: null,
+    returnOnAdSpend: null,
+  });
+  expect(good.channels).toEqual({ EMAIL: 1, SMS: 0, PUSH: 1 });
+  expect(
+    report.rows.find((row) => row.sourceId === badSource.id),
+  ).toMatchObject({
+    visits: 1,
+    suspectedBots: 1,
+    botRate: 1,
+    revenue: 0,
+    adContribution: -3,
+    sufficientVisitSample: false,
+  });
+  expect(
+    (await trafficReport({ ...query, minimumAgeHours: 0 })).totalVisits,
+  ).toBe(4);
+  expect(
+    (
+      await trafficReport({
+        ...query,
+        zoneId: "901",
+        answer: { questionId: "amount", value: "1000" },
+      })
+    ).totalVisits,
+  ).toBe(1);
+  const followup = await followupReport({ ...query, chainId: chain.id });
+  expect(followup.rows.find((row) => row.step === 0)).toMatchObject({
+    sent: 1,
+    clickedMessages: 1,
+    clickCount: 3,
+    clickThroughRate: 1,
+    sold: 1,
+    approved: 1,
+    applications: 1,
+    revenue: 4,
+    convertedMessages: 1,
+  });
+  expect(followup.rows.find((row) => row.step === 1)).toMatchObject({
+    failed: 1,
+    sent: 0,
+    clickThroughRate: null,
+    revenue: 0,
+  });
+  expect((await followupReport({ ...query, channel: "SMS" })).rows).toEqual([]);
+  const answers = await quizAnswerReport({ ...query, questionId: "amount" });
+  expect(answers.rows).toEqual([
+    {
+      answer: "1000",
+      leads: 1,
+      confirmedPeople: 1,
+      activeSubscriptions: 1,
+      applications: 2,
+      sold: 2,
+      approved: 1,
+      funded: 0,
+      revenue: 9,
+    },
+  ]);
+  await recordVisitCosts(
+    [{ visitId: second.id, cost: 1 }],
+    "Verified advertiser test fixture",
+  );
+  await recordVisitCosts(
+    [{ visitId: second.id, cost: 1 }],
+    "Repeated import must replace, not add",
+  );
+  expect(
+    (await trafficReport({ ...query, zoneId: "901" })).rows[0],
+  ).toMatchObject({
+    recordedSpend: 3,
+    costCoverage: 1,
+    adContribution: 6,
+    returnOnAdSpend: 3,
+  });
+  await expect(
+    recordVisitCosts(
+      [
+        { visitId: second.id, cost: 8 },
+        { visitId: "92960b50-810b-4697-91ca-86840c7d0ce4", cost: 2 },
+      ],
+      "Rollback invalid visit",
+    ),
+  ).rejects.toThrow();
+  expect(
+    Number(
+      (await db.visit.findUniqueOrThrow({ where: { id: second.id } })).cost,
+    ),
+  ).toBe(1);
+  await expect(
+    trafficReport({ ...query, from: "2020-01-01T00:00:00Z" }),
+  ).rejects.toThrow("366 days");
+  await expect(
+    saveExperiment(
+      {
+        ...exp,
+        variants: exp.variants.map((v, i) => ({
+          ...v,
+          config: {
+            ...(v.config as object),
+            ...(i === 0 ? { title: "Changed after traffic" } : {}),
+          },
+        })),
+      },
+      "test",
+    ),
+  ).rejects.toThrow("already has traffic");
+});
+
+it("lets an authenticated MCP marketer inspect results, author designs and safely adjust allocation and statuses", async () => {
+  const client = new Client({ name: "marketing-audit", version: "1.0" });
+  await client.connect(
+    new StreamableHTTPClientTransport(new URL(`${base}/mcp`), {
+      requestInit: { headers: { Authorization: `Bearer ${env.MCP_TOKEN}` } },
+    }),
+  );
+  const call = async (name: string, args: Record<string, unknown> = {}) => {
+    const result = await client.callTool({ name, arguments: args });
+    expect(result.isError, JSON.stringify(result)).not.toBe(true);
+    return JSON.parse((result.content as { text: string }[])[0].text);
+  };
+  try {
+    const tools = await client.listTools();
+    for (const name of [
+      "marketing_context",
+      "traffic_report",
+      "followup_report",
+      "quiz_answer_report",
+      "list_traffic_visits",
+      "record_visit_costs",
+      "get_experiment",
+      "set_experiment_allocation",
+      "set_chain_status",
+      "record_marketing_review",
+    ])
+      expect(tools.tools.some((tool) => tool.name === name)).toBe(true);
+    const context = await call("marketing_context");
+    expect(JSON.stringify(context)).not.toContain(env.MCP_TOKEN);
+    expect(context.limits.join(" ")).toContain("external AI client");
+    const exp = await call("save_experiment", {
+      experiment: {
+        name: "MCP custom campaign",
+        slug: "mcp-custom-campaign",
+        variants: [
+          {
+            name: "Editorial qualification",
+            weight: 50,
+            config: {
+              title: "Find your next step",
+              description:
+                "Explore options and choose your update preferences.",
+              layout: "editorial",
+              typography: "serif",
+              accentColor: "#294961",
+              sections: [
+                {
+                  heading: "Prepare before applying",
+                  body: "Consider payments and read the terms.",
+                },
+              ],
+              questions: [
+                {
+                  id: "timing",
+                  label: "When are you looking?",
+                  options: ["Now", "Later"],
+                },
+                {
+                  id: "amount",
+                  label: "How much are you considering?",
+                  options: ["1000", "2500"],
+                  showWhen: { questionId: "timing", equals: "Now" },
+                },
+              ],
+            },
+          },
+          {
+            name: "Centered control",
+            weight: 50,
+            config: {
+              title: "Explore your options",
+              description: "Choose optional updates at your own pace.",
+              layout: "centered",
+            },
+          },
+        ],
+      },
+    });
+    const definition = await call("get_experiment", { id: exp.id });
+    expect(definition.variants[0].previewUrl).toContain("/preview/");
+    expect(definition.variants[0].config.sections).toHaveLength(1);
+    const allocation = {
+      id: exp.id,
+      expectedUpdatedAt: definition.updatedAt,
+      weights: [
+        { variantId: definition.variants[0].id, weight: 70 },
+        { variantId: definition.variants[1].id, weight: 30 },
+      ],
+      reason: "Test audit: adjust allocation without changing content",
+    };
+    await call("set_experiment_allocation", allocation);
+    expect(
+      (
+        await client.callTool({
+          name: "set_experiment_allocation",
+          arguments: allocation,
+        })
+      ).isError,
+    ).toBe(true);
+    await call("set_experiment_status", {
+      id: exp.id,
+      status: "ACTIVE",
+      reason: "Publish verified test campaign",
+    });
+    await call("set_experiment_status", {
+      id: exp.id,
+      status: "PAUSED",
+      reason: "Pause the test campaign after verification",
+    });
+    const chain = await call("save_chain", {
+      chain: {
+        name: "MCP marketing chain",
+        channel: "PUSH",
+        steps: [
+          {
+            subject: "Explore options",
+            body: "Your next step: {{link}}",
+            delayHours: 24,
+          },
+        ],
+      },
+    });
+    expect((await call("get_chain", { id: chain.id })).steps).toHaveLength(1);
+    await call("set_chain_status", {
+      id: chain.id,
+      status: "PAUSED",
+      reason: "Do not dispatch this test campaign",
+    });
+    for (const name of ["traffic_report", "followup_report"])
+      expect((await call(name, { experimentId: exp.id })).rows).toEqual([]);
+    expect(
+      (
+        await call("quiz_answer_report", {
+          experimentId: exp.id,
+          questionId: "timing",
+        })
+      ).rows,
+    ).toEqual([]);
+    await call("record_marketing_review", {
+      summary:
+        "Verified tool controls and created distinct draft designs; no messages were sent.",
+    });
+    expect(
+      await db.auditLog.count({
+        where: { entityId: exp.id, action: "experiment.allocation_updated" },
+      }),
+    ).toBe(1);
+  } finally {
+    await client.close();
   }
 });

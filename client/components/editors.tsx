@@ -19,35 +19,47 @@ export function ExperimentEditor({
   notify: (s: string) => void;
 }) {
   const [form, setForm] = useState<any>(
-    initial ?? {
-      name: "New experiment",
-      slug: `experiment-${Date.now().toString().slice(-6)}`,
-      status: "DRAFT",
-      objective: "SUBSCRIPTIONS",
-      variants: [
-        { name: "Direct introduction", weight: 50, config: defaultLanding() },
-        {
-          name: "Short quiz",
-          weight: 50,
-          config: {
-            ...defaultLanding(),
-            title: "Let’s find your next step.",
-            questions: [
-              {
-                id: "amount",
-                label: "How much are you looking for?",
-                options: [
-                  "Under $1,000",
-                  "$1,000–$2,500",
-                  "$2,500–$5,000",
-                  "Over $5,000",
+    initial
+      ? {
+          ...initial,
+          variants: initial.variants.map((v: any) => ({
+            ...v,
+            config: landingSchema.parse(v.config),
+          })),
+        }
+      : {
+          name: "New experiment",
+          slug: `experiment-${Date.now().toString().slice(-6)}`,
+          status: "DRAFT",
+          objective: "SUBSCRIPTIONS",
+          variants: [
+            {
+              name: "Direct introduction",
+              weight: 50,
+              config: defaultLanding(),
+            },
+            {
+              name: "Short quiz",
+              weight: 50,
+              config: {
+                ...defaultLanding(),
+                title: "Let’s find your next step.",
+                questions: [
+                  {
+                    id: "amount",
+                    label: "How much are you looking for?",
+                    options: [
+                      "Under $1,000",
+                      "$1,000–$2,500",
+                      "$2,500–$5,000",
+                      "Over $5,000",
+                    ],
+                  },
                 ],
               },
-            ],
-          },
+            },
+          ],
         },
-      ],
-    },
   );
   const [selected, setSelected] = useState(0),
     [busy, setBusy] = useState(false),
@@ -168,6 +180,29 @@ export function ExperimentEditor({
             </button>
           ))}
         </div>
+        <p className="help">
+          Once a variant has traffic, duplicate it before changing its design,
+          copy or quiz. This keeps each version’s results separate.
+        </p>
+        <button
+          type="button"
+          className="text-button"
+          disabled={form.variants.length >= 8}
+          onClick={() => {
+            set("variants", [
+              ...form.variants,
+              {
+                name: `${v.name} · new version`,
+                weight: 25,
+                config: structuredClone(v.config),
+              },
+            ]);
+            setSelected(form.variants.length);
+          }}
+        >
+          <Copy size={15} />
+          Duplicate this variant
+        </button>
         <div className="form-grid">
           <Field label="Variant name">
             <input
@@ -224,7 +259,129 @@ export function ExperimentEditor({
               <option value="plum">Plum & lilac</option>
             </select>
           </Field>
+          <Field label="Page layout">
+            <select
+              value={v.config.layout}
+              onChange={(e) => config("layout", e.target.value)}
+            >
+              <option value="split">Split introduction</option>
+              <option value="centered">Centered guide</option>
+              <option value="editorial">Editorial story</option>
+            </select>
+          </Field>
+          <Field label="Typography">
+            <select
+              value={v.config.typography}
+              onChange={(e) => config("typography", e.target.value)}
+            >
+              <option value="sans">Modern</option>
+              <option value="serif">Editorial serif</option>
+            </select>
+          </Field>
+          <Field
+            label="Custom accent color"
+            hint="Optional six-digit hex color, such as #294961."
+          >
+            <input
+              value={v.config.accentColor ?? ""}
+              onChange={(e) =>
+                config("accentColor", e.target.value || undefined)
+              }
+            />
+          </Field>
+          <Field label="Illustration">
+            <select
+              value={String(v.config.showIllustration)}
+              onChange={(e) =>
+                config("showIllustration", e.target.value === "true")
+              }
+            >
+              <option value="true">Show</option>
+              <option value="false">Hide</option>
+            </select>
+          </Field>
+          <Field label="Form heading">
+            <input
+              value={v.config.formTitle}
+              onChange={(e) => config("formTitle", e.target.value)}
+            />
+          </Field>
+          <Field label="Form introduction">
+            <textarea
+              value={v.config.formDescription}
+              onChange={(e) => config("formDescription", e.target.value)}
+            />
+          </Field>
+          <Field label="Benefits (one per line)">
+            <textarea
+              rows={4}
+              value={v.config.benefits.join("\n")}
+              onChange={(e) => config("benefits", e.target.value.split("\n"))}
+            />
+          </Field>
         </div>
+        <div className="editor-divider">
+          <h3>Story sections</h3>
+          <button
+            type="button"
+            className="text-button"
+            disabled={v.config.sections.length >= 5}
+            onClick={() =>
+              config("sections", [
+                ...v.config.sections,
+                {
+                  heading: "A helpful next step",
+                  body: "Compare the terms of any offer before deciding.",
+                },
+              ])
+            }
+          >
+            <Plus size={15} />
+            Add section
+          </button>
+        </div>
+        {v.config.sections.map((section: any, i: number) => (
+          <div className="question-editor" key={i}>
+            <Field label="Section heading">
+              <input
+                value={section.heading}
+                onChange={(e) =>
+                  config(
+                    "sections",
+                    v.config.sections.map((s: any, j: number) =>
+                      j === i ? { ...s, heading: e.target.value } : s,
+                    ),
+                  )
+                }
+              />
+            </Field>
+            <Field label="Section text">
+              <textarea
+                value={section.body}
+                onChange={(e) =>
+                  config(
+                    "sections",
+                    v.config.sections.map((s: any, j: number) =>
+                      j === i ? { ...s, body: e.target.value } : s,
+                    ),
+                  )
+                }
+              />
+            </Field>
+            <button
+              type="button"
+              className="text-button danger"
+              onClick={() =>
+                config(
+                  "sections",
+                  v.config.sections.filter((_: any, j: number) => j !== i),
+                )
+              }
+            >
+              Remove section
+            </button>
+          </div>
+        ))}
         <div className="editor-divider">
           <h3>
             Quiz questions <span className="muted">· optional</span>
@@ -232,11 +389,17 @@ export function ExperimentEditor({
           <button
             type="button"
             className="text-button"
+            disabled={v.config.questions.length >= 8}
             onClick={() =>
               config("questions", [
                 ...v.config.questions,
                 {
-                  id: `question_${v.config.questions.length + 1}`,
+                  id: Array.from(
+                    { length: 9 },
+                    (_, i) => `question_${i + 1}`,
+                  ).find(
+                    (id) => !v.config.questions.some((q: any) => q.id === id),
+                  )!,
                   label: "What matters most to you?",
                   options: ["Lower payments", "A quick decision"],
                 },
@@ -249,6 +412,75 @@ export function ExperimentEditor({
         </div>
         {v.config.questions.map((q: any, i: number) => (
           <div className="question-editor" key={i}>
+            <p className="help">Question ID: {q.id}</p>
+            {i > 0 && (
+              <div className="form-grid">
+                <Field label="Show question when">
+                  <select
+                    value={q.showWhen?.questionId ?? ""}
+                    onChange={(e) => {
+                      const parent = v.config.questions.find(
+                        (x: any) => x.id === e.target.value,
+                      );
+                      config(
+                        "questions",
+                        v.config.questions.map((x: any, j: number) =>
+                          i === j
+                            ? {
+                                ...x,
+                                showWhen: parent
+                                  ? {
+                                      questionId: parent.id,
+                                      equals: parent.options[0],
+                                    }
+                                  : undefined,
+                              }
+                            : x,
+                        ),
+                      );
+                    }}
+                  >
+                    <option value="">Always</option>
+                    {v.config.questions.slice(0, i).map((p: any) => (
+                      <option key={p.id} value={p.id}>
+                        {p.label}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                {q.showWhen && (
+                  <Field label="Answer equals">
+                    <select
+                      value={q.showWhen.equals}
+                      onChange={(e) =>
+                        config(
+                          "questions",
+                          v.config.questions.map((x: any, j: number) =>
+                            i === j
+                              ? {
+                                  ...x,
+                                  showWhen: {
+                                    ...q.showWhen,
+                                    equals: e.target.value,
+                                  },
+                                }
+                              : x,
+                          ),
+                        )
+                      }
+                    >
+                      {(
+                        v.config.questions.find(
+                          (x: any) => x.id === q.showWhen.questionId,
+                        )?.options ?? []
+                      ).map((o: string) => (
+                        <option key={o}>{o}</option>
+                      ))}
+                    </select>
+                  </Field>
+                )}
+              </div>
+            )}
             <div className="form-grid">
               <Field label="Question">
                 <input

@@ -17,37 +17,111 @@ export const questionSchema = z.object({
     .max(40),
   label: z.string().min(3).max(160),
   options: z.array(z.string().min(1).max(100)).min(2).max(8),
+  showWhen: z.object({ questionId: z.string(), equals: z.string() }).optional(),
 });
-export const landingSchema = z.object({
-  eyebrow: z.string().max(80).default("A little breathing room"),
-  title: z.string().min(3).max(120),
-  description: z.string().min(10).max(400),
-  button: z.string().min(2).max(50).default("Explore my options"),
-  theme: z.enum(["forest", "blue", "plum"]).default("forest"),
-  questions: z.array(questionSchema).max(8).default([]),
-  consentVersion: z.string().min(1).max(40).default("v1"),
-  emailConsent: z
-    .string()
-    .min(20)
-    .max(1000)
-    .default(
-      "I agree to receive daily marketing emails about loan options from SpareCash. I can unsubscribe at any time.",
-    ),
-  smsConsent: z
-    .string()
-    .min(20)
-    .max(1000)
-    .default(
-      "I agree to receive recurring automated marketing texts about loan options from SpareCash at the number I provide, up to one per day. Consent is not a condition of purchase. Message and data rates may apply. Reply STOP to opt out.",
-    ),
-  pushConsent: z
-    .string()
-    .min(20)
-    .max(1000)
-    .default(
-      "I agree to receive daily browser notifications about loan options from SpareCash. I can turn them off at any time.",
-    ),
-});
+export const landingSchema = z
+  .object({
+    eyebrow: z.string().max(80).default("A little breathing room"),
+    title: z.string().min(3).max(120),
+    description: z.string().min(10).max(400),
+    button: z.string().min(2).max(50).default("Explore my options"),
+    theme: z.enum(["forest", "blue", "plum"]).default("forest"),
+    layout: z.enum(["split", "centered", "editorial"]).default("split"),
+    typography: z.enum(["sans", "serif"]).default("sans"),
+    accentColor: z
+      .string()
+      .regex(/^#[0-9a-fA-F]{6}$/)
+      .optional(),
+    showIllustration: z.boolean().default(true),
+    benefits: z
+      .array(z.string().min(1).max(160))
+      .max(5)
+      .default([
+        "Choose how you hear from us",
+        "Explore at your own pace",
+        "Unsubscribe whenever you like",
+      ]),
+    sections: z
+      .array(
+        z.object({
+          heading: z.string().min(1).max(100),
+          body: z.string().min(1).max(800),
+        }),
+      )
+      .max(5)
+      .default([]),
+    formTitle: z
+      .string()
+      .min(3)
+      .max(120)
+      .default("How should we keep in touch?"),
+    formDescription: z
+      .string()
+      .max(400)
+      .default(
+        "Choose one or more channels for daily updates about loan options.",
+      ),
+    questions: z.array(questionSchema).max(8).default([]),
+    consentVersion: z.string().min(1).max(40).default("v1"),
+    emailConsent: z
+      .string()
+      .min(20)
+      .max(1000)
+      .default(
+        "I agree to receive daily marketing emails about loan options from SpareCash. I can unsubscribe at any time.",
+      ),
+    smsConsent: z
+      .string()
+      .min(20)
+      .max(1000)
+      .default(
+        "I agree to receive recurring automated marketing texts about loan options from SpareCash at the number I provide, up to one per day. Consent is not a condition of purchase. Message and data rates may apply. Reply STOP to opt out.",
+      ),
+    pushConsent: z
+      .string()
+      .min(20)
+      .max(1000)
+      .default(
+        "I agree to receive daily browser notifications about loan options from SpareCash. I can turn them off at any time.",
+      ),
+  })
+  .superRefine((config, context) => {
+    const prior = new Map<string, z.infer<typeof questionSchema>>();
+    for (const [index, question] of config.questions.entries()) {
+      if (prior.has(question.id))
+        context.addIssue({
+          code: "custom",
+          path: ["questions", index, "id"],
+          message: "Question IDs must be unique",
+        });
+      if (question.showWhen) {
+        const parent = prior.get(question.showWhen.questionId);
+        if (!parent?.options.includes(question.showWhen.equals))
+          context.addIssue({
+            code: "custom",
+            path: ["questions", index, "showWhen"],
+            message:
+              "Conditions must refer to an earlier question and one of its options",
+          });
+      }
+      prior.set(question.id, question);
+    }
+  });
+export function visibleQuestions(
+  questions: z.infer<typeof questionSchema>[],
+  answers: Record<string, string>,
+) {
+  const visible = new Set<string>();
+  return questions.filter((question) => {
+    const rule = question.showWhen;
+    const show =
+      !rule ||
+      (visible.has(rule.questionId) &&
+        answers[rule.questionId] === rule.equals);
+    if (show) visible.add(question.id);
+    return show;
+  });
+}
 export const experimentSchema = z
   .object({
     id: z.string().optional(),

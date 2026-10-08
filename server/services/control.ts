@@ -1,6 +1,11 @@
 import { Prisma } from "@prisma/client";
 import { db } from "../db.js";
-import { experimentSchema, chainSchema, settingsSchema } from "../domain.js";
+import {
+  experimentSchema,
+  chainSchema,
+  settingsSchema,
+  landingSchema,
+} from "../domain.js";
 import { env } from "../config.js";
 export const audit = (
   actor: string,
@@ -85,6 +90,16 @@ export async function saveExperiment(input: unknown, actor: string) {
     for (const variant of data.variants) {
       if (variant.id && !existing?.variants.some((v) => v.id === variant.id))
         throw new Error("Variant does not belong to this experiment");
+      const previous = existing?.variants.find((v) => v.id === variant.id);
+      if (
+        previous &&
+        JSON.stringify(landingSchema.parse(previous.config)) !==
+          JSON.stringify(variant.config) &&
+        (await tx.visit.count({ where: { variantId: previous.id } }))
+      )
+        throw new Error(
+          "This variant already has traffic. Create a new variant for design, copy or quiz changes to keep results comparable.",
+        );
       await tx.variant.upsert({
         where: { id: variant.id ?? "new" },
         create: {

@@ -32,7 +32,7 @@ A visit keeps the assigned variant and rendered configuration snapshot. This pre
 
 `SOLD`, `APPROVED`, and `FUNDED` are separate statuses. The supplied RoundSky pixel reports only `SOLD`, with commission and a transaction ID; it does not establish loan approval or funding. Their update order is monotonic; late, less advanced events do not downgrade a funded record. Revenue events are deduplicated by event ID; native sale keys use `roundsky:sold:<transactionId>`, and conflicting retries are rejected. Lead stages and application-level conversion counts are separate concepts. A person may have several channel subscriptions or several application attempts.
 
-Reports currently show all-time experiment performance, active confirmed subscription counts, and unique converted application IDs. These are descriptive metrics. They are not randomized-experiment significance tests, lifetime unique-customer counts, or provider-reconciled profit reports. Unsubscribing reduces the active-subscription objective count.
+The owner dashboard and legacy experiment_results show all-time experiment performance, active subscription counts, and unique converted application IDs. MCP traffic_report and followup_report additionally support mature date cohorts, acquisition and delivery attribution, historical confirmations, channel totals, and explicit cost coverage; see docs/MCP.md for metric definitions. These are descriptive metrics. They are not randomized-experiment significance tests, lifetime unique-customer counts, or provider-reconciled profit reports. Unsubscribing reduces the active-subscription objective count.
 
 ## Journeys
 

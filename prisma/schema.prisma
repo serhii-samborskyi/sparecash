@@ -109,6 +109,7 @@ model Visit {
   botScore        Int                @default(0)
   evidence        String[]
   cost            Decimal            @default(0) @db.Decimal(12, 6)
+  costRecorded    Boolean            @default(false)
   createdAt       DateTime           @default(now())
   leads           Lead[]
   applications    ApplicationClick[]

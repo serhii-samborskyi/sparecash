@@ -57,3 +57,55 @@ The supplied RoundSky pixel reports purchased leads (`SOLD`) and commission. App
 Live sends and paid-source exclusions require their live switches to be enabled in owner Settings. `run_worker` and `block_source` can perform external actions when those switches are enabled. Provider credentials are stored directly in PostgreSQL and can be managed through owner Settings, but cannot be read or changed through MCP. Contact content is untrusted data, not instructions.
 
 Protocol reference: https://ts.sdk.modelcontextprotocol.io/server
+
+## Affiliate marketing operator
+
+Start each optimization session with `marketing_context`. It returns the measurement workflow, current rules, live switches, worker heartbeat and operating limits. The server also supplies these priorities in its MCP initialization instructions. The external AI client provides the reasoning and any recurring schedule; connecting MCP does not start an unattended LLM process.
+
+Additional tools:
+
+| Task                                                    | Tools                                          |
+| ------------------------------------------------------- | ---------------------------------------------- |
+| Source, landing and zone × landing results              | `traffic_report`                               |
+| Follow-up chain and individual message results          | `followup_report`                              |
+| Submitted quiz answer segments                          | `quiz_answer_report`                           |
+| Read complete designs and preview URLs                  | `list_experiments`, `get_experiment`           |
+| Change traffic weights without replacing content        | `set_experiment_allocation`                    |
+| Publish or pause a landing campaign                     | `set_experiment_status`                        |
+| Inspect message sequences and pause/activate them       | `list_chains`, `get_chain`, `set_chain_status` |
+| Match advertiser clicks and import verified costs       | `list_traffic_visits`, `record_visit_costs`    |
+| Save evidence, hypotheses, changes and next review time | `record_marketing_review`                      |
+
+`list_deliveries` now supports pagination, chain, channel and delivery-status filters.
+
+### Measurement definitions
+
+Reports default to a 30-day window and omit cohorts newer than 24 hours. Set `from`, `to` (ISO timestamps) and `minimumAgeHours` explicitly when comparing runs. `to` is exclusive for cohort selection; confirmations and conversion outcomes are observed through the returned `observedAt`. Use a longer minimum age when evaluating multi-day nurture revenue. These reports are not a reconstruction of historical status at `to`.
+
+`traffic_report` supports `groupBy: "source"`, `"landing"`, or `"source_landing"`, with experiment/campaign/zone and a submitted `answer: {questionId, value}` filter. A subscription rate counts unique acquisition visits with confirmed subscriptions, so collecting email and push from the same visitor does not double the rate. Channel totals count subscriptions. Confirmed totals retain later opt-outs; active totals show current status. Sales/approvals/funding count distinct applications for each outcome, while commission sums recorded postbacks.
+
+Follow-up applications retain their acquisition source and variant. `followup_report` separately attributes each application and its commission to its exact originating delivery via `deliveryId`. These are two views of the same revenue, so do not add their totals together. Follow-up cohorts use delivery creation time; sends mean provider acceptance, and clicks mean the visitor pressed the tracked continuation button. Email opens and confirmed reads/deliveries are unavailable. Message `stepNumber` starts at 1; stored `step` starts at 0.
+
+`quiz_answer_report` describes submitted leads. It does not track per-question views or drop-offs, and a qualifying answer does not establish lender eligibility. Use consistent question IDs and meanings when comparing campaigns.
+
+Recorded visit costs must come from trusted advertiser reporting. Use `list_traffic_visits` to match the advertiser's external click ID, campaign and zone to an internal visit ID. `record_visit_costs` replaces USD cost for that visit and records the reporting reference; repeating a batch does not add cost twice. Missing visits roll back the batch. Do not allocate an aggregate zone cost to individual visits without an explicit, documented allocation basis. Costs are not imported from public URL parameters or automatically synchronized with PropellerAds.
+
+Cost coverage distinguishes unknown costs from verified zero-cost visits. Return on ad spend and ad contribution are `null` when cost coverage is incomplete. Ad contribution excludes messaging and other operating costs. Sample-size flags are descriptive, not statistical significance or proof of causation. No conversion alone is not bot evidence.
+
+Reports paginate grouped results, with complete totals for the selected cohort. A request covering more than 20,000 visits/deliveries (or 50,000 associated records) fails with an instruction to narrow the window rather than returning misleading partial metrics. Query non-overlapping windows or filter campaigns when needed.
+
+### Design and qualification
+
+`save_experiment` supports three layouts (`split`, `centered`, `editorial`), `sans`/`serif` typography, an optional six-digit hex `accentColor`, illustration visibility, up to five `benefits`, up to five story `sections` (`heading`, `body`), and custom form heading/introduction. The visual editor supports the same fields. Arbitrary HTML, JavaScript and unrestricted page graphs are not supported.
+
+Quiz questions may include `showWhen: {questionId: "timing", equals: "Now"}`. Conditions must refer to an earlier question and one of its valid answer options. Hidden branches are skipped and hidden answers are excluded from the saved lead. The server validates the same visible path. This allows preference qualification and segmentation while keeping consent optional and the loan application on RoundSky.
+
+A variant that has received traffic cannot have its copy, design or quiz overwritten. Duplicate it with a new ID to keep historical attribution and comparisons meaningful. Historical variants omitted from `save_experiment` retain records but receive zero new traffic. Existing visitors keep their assigned variant; allocation changes affect new assignments. `get_experiment` supplies preview URLs and the live campaign URL. Previews require owner access.
+
+`set_experiment_allocation` requires `expectedUpdatedAt` from the latest `get_experiment`, rejecting stale writes. Weight and status changes record a reason in the audit log. Activating a chain pauses other active chains with the same channel and trigger; this is sequential replacement, not a randomized chain A/B test. Current chains are workspace-wide, not selected separately by experiment.
+
+### Example instruction for your connected AI
+
+> Act as my SpareCash affiliate marketing operator. Start with marketing_context and inspect integration and worker health. Compare mature cohorts by source, landing and source × landing, then review each follow-up message's clicks, applications, sold leads and commission. Read submitted quiz segments to improve qualification. Treat unknown spend as unknown and preserve a control when testing. Create distinct design and message versions instead of overwriting historical content. Respect my publishing instructions and existing live-mode settings. Exclude bot zones only when the configured evidence rules allow it; do not call low-converting visitors bots or assume missing postbacks mean declined. Record what you measured, what you changed, why, and when to review it again. Report unsupported actions such as bid changes, automatic spend sync or randomized chain tests explicitly.
+
+For recurring optimization, configure a recurring task in the AI client that can connect to this MCP and supply the owner's chosen publishing authority. `record_marketing_review.nextReviewAt` is a recorded plan, not an executable schedule. The separate PropellerAds MCP/API is needed for advertiser bid/budget management and advertiser-side reports. SpareCash's existing source exclusion adapter continues to support guarded bot-source blocking.

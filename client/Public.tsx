@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { visibleQuestions } from "../server/domain";
 import {
   ArrowRight,
   ArrowLeft,
@@ -286,10 +287,17 @@ function Landing({ preview }: { preview: boolean }) {
       </div>
     );
   const config = session.config,
-    questions = config.questions ?? [],
+    questions = visibleQuestions(config.questions ?? [], answers),
     question = questions[step];
   return (
-    <div className={`public-page theme-${config.theme}`}>
+    <div
+      className={`public-page theme-${config.theme} layout-${config.layout ?? "split"} typography-${config.typography ?? "sans"}`}
+      style={
+        config.accentColor
+          ? ({ "--public": config.accentColor } as CSSProperties)
+          : undefined
+      }
+    >
       {preview && (
         <div className="preview-banner">
           Preview · Try the quiz and channel choices. Submissions are disabled.
@@ -305,41 +313,51 @@ function Landing({ preview }: { preview: boolean }) {
           <h1>{config.title}</h1>
           <p className="landing-description">{config.description}</p>
           <div className="promise-list">
-            <div>
-              <Check size={16} />
-              <span>Choose how you hear from us</span>
-            </div>
-            <div>
-              <Check size={16} />
-              <span>Explore at your own pace</span>
-            </div>
-            <div>
-              <Check size={16} />
-              <span>Unsubscribe whenever you like</span>
-            </div>
-          </div>
-          <div className="landing-illustration" aria-hidden="true">
-            <div className="illustration-orbit" />
-            <div className="float-card back">
-              <span className="circle-icon">
-                <Wallet size={22} />
-              </span>
-              <div>
-                <span className="art-line long" />
-                <span className="art-line" />
+            {(
+              config.benefits ?? [
+                "Choose how you hear from us",
+                "Explore at your own pace",
+                "Unsubscribe whenever you like",
+              ]
+            ).map((text: string, index: number) => (
+              <div key={index}>
+                <Check size={16} />
+                <span>{text}</span>
               </div>
-            </div>
-            <div className="float-card front">
-              <span className="circle-icon mint">
-                <Leaf size={21} />
-              </span>
-              <b>A little breathing room.</b>
-              <span className="art-check">
-                <Check size={14} />
-              </span>
-            </div>
-            <span className="art-spark">✦</span>
+            ))}
           </div>
+          {config.showIllustration !== false && (
+            <div className="landing-illustration" aria-hidden="true">
+              <div className="illustration-orbit" />
+              <div className="float-card back">
+                <span className="circle-icon">
+                  <Wallet size={22} />
+                </span>
+                <div>
+                  <span className="art-line long" />
+                  <span className="art-line" />
+                </div>
+              </div>
+              <div className="float-card front">
+                <span className="circle-icon mint">
+                  <Leaf size={21} />
+                </span>
+                <b>A little breathing room.</b>
+                <span className="art-check">
+                  <Check size={14} />
+                </span>
+              </div>
+              <span className="art-spark">✦</span>
+            </div>
+          )}
+          {(config.sections ?? []).map(
+            (section: { heading: string; body: string }, index: number) => (
+              <section className="landing-section" key={index}>
+                <h2>{section.heading}</h2>
+                <p>{section.body}</p>
+              </section>
+            ),
+          )}
           <p className="lender-note">
             SpareCash connects you with third-party loan options. We are not a
             lender. Approval, amounts, rates, and timing depend on the lender
@@ -465,7 +483,9 @@ function Landing({ preview }: { preview: boolean }) {
               <div className="form-progress">
                 <span>LET’S START WITH YOU</span>
                 <span>
-                  {step + 1} / {questions.length}
+                  {config.questions.some((q: any) => q.showWhen)
+                    ? `QUESTION ${step + 1}`
+                    : `${step + 1} / ${questions.length}`}
                 </span>
               </div>
               <div className="progress-track">
@@ -484,7 +504,20 @@ function Landing({ preview }: { preview: boolean }) {
                       answers[question.id] === option ? "selected" : ""
                     }
                     onClick={() => {
-                      setAnswers({ ...answers, [question.id]: option });
+                      const index = config.questions.findIndex(
+                        (q: any) => q.id === question.id,
+                      );
+                      const preceding = new Set(
+                        config.questions.slice(0, index).map((q: any) => q.id),
+                      );
+                      setAnswers({
+                        ...Object.fromEntries(
+                          Object.entries(answers).filter(([id]) =>
+                            preceding.has(id),
+                          ),
+                        ),
+                        [question.id]: option,
+                      });
                       setStep(step + 1);
                     }}
                   >
@@ -513,10 +546,10 @@ function Landing({ preview }: { preview: boolean }) {
                 <span>STAY IN THE LOOP, YOUR WAY</span>
                 <span>{questions.length ? "LAST STEP" : "01"}</span>
               </div>
-              <h2>How should we keep in touch?</h2>
+              <h2>{config.formTitle ?? "How should we keep in touch?"}</h2>
               <p>
-                Choose one or more channels for daily updates about loan
-                options.
+                {config.formDescription ??
+                  "Choose one or more channels for daily updates about loan options."}
               </p>
               <div className="channel-choices">
                 {[

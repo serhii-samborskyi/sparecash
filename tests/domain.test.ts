@@ -8,6 +8,8 @@ import {
   withinSendingHours,
   shouldStop,
   normalizePhone,
+  landingSchema,
+  visibleQuestions,
 } from "../server/domain";
 describe("traffic decisions", () => {
   const rules = settingsSchema.parse({});
@@ -43,6 +45,73 @@ describe("traffic decisions", () => {
     expect(chooseVariant(variants, 0).id).toBe("a");
     expect(chooseVariant(variants, 0.249).id).toBe("a");
     expect(chooseVariant(variants, 0.25).id).toBe("b");
+  });
+});
+describe("conditional landing quizzes", () => {
+  const questions = [
+    { id: "timing", label: "When are you looking?", options: ["Now", "Later"] },
+    {
+      id: "amount",
+      label: "How much are you considering?",
+      options: ["1000", "2500"],
+      showWhen: { questionId: "timing", equals: "Now" },
+    },
+    {
+      id: "budget",
+      label: "Have you reviewed your budget?",
+      options: ["Yes", "No"],
+      showWhen: { questionId: "amount", equals: "2500" },
+    },
+  ];
+  it("only shows questions on the current path, including when stale hidden answers exist", () => {
+    expect(
+      visibleQuestions(questions, { timing: "Later", amount: "2500" }).map(
+        (q) => q.id,
+      ),
+    ).toEqual(["timing"]);
+    expect(
+      visibleQuestions(questions, { timing: "Now", amount: "2500" }).map(
+        (q) => q.id,
+      ),
+    ).toEqual(["timing", "amount", "budget"]);
+  });
+  it("rejects forward references, duplicate IDs and invalid condition answers", () => {
+    const parse = (q: unknown[]) =>
+      landingSchema.safeParse({
+        title: "Explore options",
+        description: "Find your next step with optional updates.",
+        questions: q,
+      });
+    expect(parse(questions).success).toBe(true);
+    expect(parse([questions[1], questions[0]]).success).toBe(false);
+    expect(parse([questions[0], questions[0]]).success).toBe(false);
+    expect(
+      parse([
+        questions[0],
+        {
+          ...questions[1],
+          showWhen: { questionId: "timing", equals: "Unknown" },
+        },
+      ]).success,
+    ).toBe(false);
+  });
+  it("keeps old landing configurations usable and validates customization", () => {
+    const old = {
+      title: "Explore options",
+      description: "Find your next step with optional updates.",
+    };
+    expect(landingSchema.parse(old)).toMatchObject({
+      layout: "split",
+      typography: "sans",
+      sections: [],
+      showIllustration: true,
+    });
+    expect(
+      landingSchema.safeParse({
+        ...old,
+        accentColor: "url(javascript:alert(1))",
+      }).success,
+    ).toBe(false);
   });
 });
 describe("journey rules", () => {

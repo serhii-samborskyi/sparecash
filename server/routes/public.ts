@@ -10,6 +10,7 @@ import {
   landingSchema,
   normalizePhone,
   nextLeadStatus,
+  visibleQuestions,
 } from "../domain.js";
 import { hash, ipHash, token, verifyToken, equal } from "../security.js";
 import { settings } from "../services/control.js";
@@ -262,7 +263,8 @@ publicRouter.post(
         ? visit.configSnapshot
         : visit.variant.config,
     );
-    for (const q of config.questions)
+    const questions = visibleQuestions(config.questions, input.answers);
+    for (const q of questions)
       if (!q.options.includes(input.answers[q.id])) {
         res.status(400).json({ error: `Choose an answer for: ${q.label}` });
         return;
@@ -283,7 +285,9 @@ publicRouter.post(
         visitId: visit.id,
         name: input.name,
         ...detected,
-        answers: input.answers,
+        answers: Object.fromEntries(
+          questions.map((q) => [q.id, input.answers[q.id]]),
+        ),
       },
     });
     await db.visit.update({
