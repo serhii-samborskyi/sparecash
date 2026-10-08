@@ -33,6 +33,8 @@ app.use(
                 "'self'",
                 "https://challenges.cloudflare.com",
                 "https://cdn.onesignal.com",
+                // The Web SDK loads its app configuration through a JSONP script.
+                "https://api.onesignal.com",
               ],
               styleSrc: ["'self'", "'unsafe-inline'"],
               frameSrc: [

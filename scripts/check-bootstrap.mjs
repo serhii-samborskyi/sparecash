@@ -117,6 +117,35 @@ try {
     return response.headers.get("set-cookie").split(";")[0];
   };
   await start();
+  // Development disables CSP, so check OneSignal's JSONP script in production.
+  const health = await fetch(`${base}/health`);
+  const csp = health.headers.get("content-security-policy");
+  assert.ok(csp, "Production responses must include a Content Security Policy");
+  const directives = new Map(
+    csp.split(";").map((directive) => {
+      const [name, ...sources] = directive.trim().split(/\s+/);
+      return [name, sources];
+    }),
+  );
+  const scriptSources =
+    directives.get("script-src-elem") ?? directives.get("script-src");
+  for (const source of [
+    "'self'",
+    "https://challenges.cloudflare.com",
+    "https://cdn.onesignal.com",
+    "https://api.onesignal.com",
+  ]) {
+    assert.ok(
+      scriptSources?.includes(source),
+      `CSP must allow scripts from ${source}`,
+    );
+  }
+  for (const source of ["*", "https:", "'unsafe-inline'", "'unsafe-eval'"]) {
+    assert.ok(
+      !scriptSources.includes(source),
+      `CSP must not allow ${source} scripts`,
+    );
+  }
   let cookie = await session();
   const first = await (await view(cookie)).json();
   assert.equal(first.values.APP_URL, origin);
