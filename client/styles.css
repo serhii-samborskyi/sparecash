@@ -2922,3 +2922,40 @@ summary {
 .settings-form + .settings-form {
   margin-top: 24px;
 }
+
+.autosave-status {
+  position: sticky;
+  top: 12px;
+  z-index: 12;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  border: 1px solid #dce5d4;
+  border-radius: 12px;
+  background: #f7faf3;
+  color: var(--green);
+  font-size: 13px;
+  box-shadow: 0 3px 12px #173d3210;
+}
+.autosave-status > svg {
+  flex-shrink: 0;
+}
+.autosave-status > span {
+  flex: 1;
+}
+.autosave-status.error {
+  color: #a24737;
+  background: #fff5f1;
+  border-color: #eed1c8;
+}
+.delivery-test {
+  margin: 16px 0 28px;
+  padding: 16px;
+  background: #f7faf3;
+  border-radius: 12px;
+}
+.delivery-test .row-actions {
+  align-items: center;
+}

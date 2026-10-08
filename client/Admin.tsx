@@ -1,3 +1,4 @@
+import { flushSettings } from "./autosave";
 import { ConnectionSettings } from "./components/connection-settings";
 import { useEffect, useState, useCallback } from "react";
 import {
@@ -96,7 +97,11 @@ export function Admin() {
     void refresh();
   }, [refresh]);
   useEffect(() => {
-    const listener = () => {
+    const listener = async () => {
+      if (!(await flushSettings())) {
+        history.pushState({}, "", "/admin/settings");
+        return;
+      }
       setPage(location.pathname.split("/")[2] || "overview");
       setExtra(null);
     };
@@ -125,7 +130,8 @@ export function Admin() {
     const timer = setTimeout(() => void loadPage(), 180);
     return () => clearTimeout(timer);
   }, [loadPage]);
-  const go = (next: string) => {
+  const go = async (next: string) => {
+    if (!(await flushSettings())) return;
     setExtra(null);
     setPage(next);
     setListPage(1);
@@ -1241,16 +1247,11 @@ export function Admin() {
           )}
           {page === "settings" && (
             <>
-              <ConnectionSettings
-                notify={notify}
-                onSaved={() => void refresh()}
-              />
+              <ConnectionSettings notify={notify} onSaved={refresh} />
               <SettingsView
-                key={data.appUrl + ":" + data.settings.roundskyUrl}
                 value={data.settings}
                 ipTimezoneConfigured={data.ipTimezoneConfigured}
-                onSaved={() => void refresh()}
-                notify={notify}
+                onSaved={refresh}
               />
             </>
           )}

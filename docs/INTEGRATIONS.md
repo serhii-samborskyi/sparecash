@@ -1,10 +1,10 @@
 # Integration contracts
 
-All provider values and credentials below are configured in the owner **Settings** screen. Their uppercase names are internal field identifiers, not environment variables. Only `DATABASE_URL` belongs in the app environment. Secrets are masked by default and changes apply to new requests and worker cycles.
+All provider values and credentials below are configured in the owner **Settings** screen. Their uppercase names are internal field identifiers, not environment variables. Set `DATABASE_URL` and `OWNER_PASSWORD` in the app environment. Secrets are masked by default and changes apply to new requests and worker cycles.
 
 ## Connection tests
 
-Save connection settings, then use **Test connection** under OneSignal, Brevo, BlueBubbles, or PropellerAds. Tests work with live delivery and source exclusions disabled. Each result distinguishes credential access from incomplete setup; edits invalidate results and require saving before another test. Provider response bodies, credentials, and account data are not returned or included in the audit entry.
+Settings auto-save when you leave a field; switches and selects save immediately. Wait for **All changes saved**, then use **Test connection** under OneSignal, Brevo, BlueBubbles, or PropellerAds. Tests work with live delivery and source exclusions disabled. Each result distinguishes credential access from incomplete setup; edits invalidate results and require saving before another test. Provider response bodies, credentials, and account data are not returned or included in the audit entry.
 
 - **OneSignal:** reads one message listing using the app API key. This checks app access, not browser subscription or push delivery. [API reference](https://documentation.onesignal.com/reference/view-messages).
 - **Brevo:** checks account access, the saved sender's active status, the contact-list folder, and the app's business mailing address. Folder ID `0` is unconfigured. No campaign or email is created. [Senders](https://developers.brevo.com/reference/get-senders), [folders](https://developers.brevo.com/reference/get-folder).
@@ -12,6 +12,18 @@ Save connection settings, then use **Test connection** under OneSignal, Brevo, B
 - **PropellerAds:** reads the advertiser balance endpoint to verify API access, discarding the balance. This does not test exclusion write permissions or change campaigns. [API reference](https://ssp-api.propellerads.com/v5/docs/).
 
 Tests use authenticated owner-only `POST /api/admin/integrations/{provider}/test` endpoints (`onesignal`, `brevo`, `bluebubbles`, `propellerads`). Only saved settings are used. Requests time out after 12 seconds each and do not follow redirects.
+
+## Confirm actual delivery
+
+Each messaging provider has a **Send test** control in Settings. These owner-only sends work with **Live message delivery** disabled, target one entered recipient, and do not enroll contacts or start chains. Only clicking the send button sends a message; auto-saving credentials never sends a test.
+
+- **BlueBubbles:** select SMS or iMessage, enter your own phone number including country code, and click **Send test SMS/iMessage**. iMessage mode also accepts an Apple ID email for a test. Check receipt on the destination device. Existing phone contacts' replies can also verify the reply webhook.
+- **OneSignal:** subscribe on your phone through a published landing page. In OneSignal's Audience → Subscriptions, copy that device's Subscription ID into **Test push subscription ID**, then click **Send test push**. The app ID is not a device subscription ID. [Targeting by subscription](https://documentation.onesignal.com/reference/create-message).
+- **Brevo:** enter your own email address. Test both **Confirmation / transactional email** and **Follow-up campaign email**. Campaign tests create a draft in Brevo and call `sendTest` with exactly one `emailTo` address; they never send to an audience list. The configured campaign folder and business address are also required. Check your inbox and spam folder. [Brevo campaign test API](https://developers.brevo.com/reference/send-test-email).
+
+“Accepted by provider” means the API accepted the request, not that a device or inbox received it. Results show a provider reference when available. If a request times out or returns an ambiguous result, inspect the device/provider logs before starting another test. The app does not automatically retry these sends, and repeated requests with the same test ID are blocked. Rate limits allow five test requests per minute per client IP.
+
+For the complete follow-up flow, enable live delivery after these checks, use a real subscription on your own device, activate the channel's chain, and keep the worker running. Follow-up chains still respect consent, recipient time zone, daily caps, and configured delays. The test button checks delivery directly; it does not exercise the scheduling worker.
 
 ## RoundSky
 
@@ -27,7 +39,7 @@ Optional prefill is enabled by default and can be turned off in Settings. It use
 
 ### Native sold-lead pixel
 
-Set the Application URL and RoundSky webhook secret in Settings, then save connection settings. **Settings → Provider connections → RoundSky** displays the ready-to-paste URL directly below the secret, with a **Copy pixel URL** button. Unsaved URL or secret changes disable copying until saved. `npm run roundsky:setup` also exports it to `.local/roundsky-pixel-url.txt` without changing environment variables.
+Set the Application URL and RoundSky webhook secret in Settings, then leave the field and wait for **All changes saved**. **Settings → Provider connections → RoundSky** displays the ready-to-paste URL directly below the secret, with a **Copy pixel URL** button. Unsaved URL or secret changes disable copying until saved. `npm run roundsky:setup` also exports it to `.local/roundsky-pixel-url.txt` without changing environment variables.
 
 In RoundSky choose seller **LeadTechX**, pixel type **Server 2 Server Requst Pixel**, and paste the generated URL. The template is:
 
@@ -107,7 +119,7 @@ For IP-based detection on `sparecash.leadtechx.com`:
 2. Enable the **Add visitor location headers** Managed Transform. Cloudflare supplies `cf-timezone` using the visitor's IP location. See [Cloudflare's header reference](https://developers.cloudflare.com/rules/transform/managed-transforms/reference/#add-visitor-location-headers).
 3. Enter a separate random secret of at least 32 characters in **Settings → Cloudflare → IP detection secret** (`CLOUDFLARE_GEO_TOKEN`). Keep it out of public browser code.
 4. Add a [Request Header Transform Rule](https://developers.cloudflare.com/rules/transform/request-header-modification/create-dashboard/) for `http.host eq "sparecash.leadtechx.com"`. **Set static** request header `x-sparecash-geo-token` to the same secret, overwriting any incoming value. Do not add it to response headers. Cloudflare's managed `cf-timezone` header is used unchanged.
-5. Save connection settings and test a subscription through the proxied domain. With IP-first selected and the edge rule working, the CRM should report **IP location** as the source. The Settings status checks whether the secret is configured; it does not prove that Cloudflare's rules are active.
+5. Wait for settings to auto-save and test a subscription through the proxied domain. With IP-first selected and the edge rule working, the CRM should report **IP location** as the source. The Settings status checks whether the secret is configured; it does not prove that Cloudflare's rules are active.
 
 The app ignores `cf-timezone` if the matching secret is absent or incorrect. Invalid/missing zones fall back to browser or workspace detection; no external lookup request is sent by the app. Existing raw IP storage behavior is unchanged: only hashes are persisted for abuse evidence. IP detection is implemented locally but requires these account-side rules before it works on live traffic.
 
@@ -131,7 +143,7 @@ Reference: https://developers.brevo.com/reference/create-email-campaign
 
 ## BlueBubbles
 
-Set the HTTPS `BLUEBUBBLES_URL` and `BLUEBUBBLES_PASSWORD`. Sending uses `/api/v1/message/text`, `method: apple-script`, and `chatGuid: SMS;-;+1...`, targeting regular US text numbers. Your Mac/iPhone/forwarding setup must support SMS, including new recipients. That hardware path has not been live-tested here; some versions require creating the chat first, which would require adapting the connector to your server version.
+Set the HTTPS server URL and password in Settings. **Text delivery service** selects `SMS` (default, suitable for Android recipients) or `iMessage`. This choice applies to phone confirmations, follow-ups, and tests. Sending uses `/api/v1/message/text`, `method: apple-script`, and `chatGuid: SMS;-;<phone>` or `iMessage;-;<address>`. iMessage needs an iMessage-capable recipient and a working Messages account on the Mac. SMS needs Mac/iPhone Text Message Forwarding. Verify sending to your test recipient from Messages on the Mac first. Some server/macOS versions may require an existing conversation; test both existing and new recipients before enabling campaigns.
 
 The first requested message contains a short-lived confirmation code. Only confirmed phones receive marketing. OTP attempts are limited. In **Settings → Provider connections → BlueBubbles**, click **Copy reply URL**. Paste it into BlueBubbles **API & Webhooks** and enable **new-message**. The displayed URL includes the saved general webhook token:
 

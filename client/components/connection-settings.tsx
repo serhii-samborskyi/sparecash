@@ -1,10 +1,13 @@
 import { useEffect, useState } from "react";
-import { Save, KeyRound, Plug, Globe, Eye, Copy } from "lucide-react";
+import { KeyRound, Plug, Globe, Eye, Copy } from "lucide-react";
 import { api } from "../api";
+import { useAutosave } from "../hooks/use-autosave";
+import { AutosaveStatus } from "./autosave-status";
 import { Field, Spinner } from "./ui";
 import {
   BlueBubblesReplyUrl,
   ProviderTestButton,
+  ProviderDeliveryTest,
 } from "./integration-controls";
 type Configuration = {
   values: Record<string, string | number>;
@@ -16,7 +19,7 @@ export function ConnectionSettings({
   onSaved,
 }: {
   notify: (message: string) => void;
-  onSaved: () => void;
+  onSaved: () => void | Promise<void>;
 }) {
   const [configuration, setConfiguration] = useState<Configuration | null>(
     null,
@@ -29,9 +32,45 @@ export function ConnectionSettings({
   const pixelNeedsSave =
     values.APP_URL !== configuration?.values.APP_URL ||
     "ROUNDSKY_WEBHOOK_TOKEN" in secrets;
-  const [busy, setBusy] = useState(false),
-    [error, setError] = useState("");
+  const [error, setError] = useState("");
   const [credentialsReviewed, setCredentialsReviewed] = useState(false);
+  const { queue, state } = useAutosave(async (patch) => {
+    const payload: {
+      values: Record<string, unknown>;
+      secrets: Record<string, unknown>;
+      credentialsReviewed?: true;
+    } = { values: {}, secrets: {} };
+    for (const [key, value] of Object.entries(patch)) {
+      const [kind, field] = key.split(".");
+      if (kind === "values" || kind === "secrets") payload[kind][field] = value;
+      else if (key === "credentialsReviewed")
+        payload.credentialsReviewed = true;
+    }
+    const result = await api("/admin/configuration", {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+    setConfiguration(result);
+    const acceptedSecrets = Object.entries(payload.secrets).filter(
+      ([key, value]) => queue.matches(`secrets.${key}`, value),
+    );
+    setSecrets((current) => {
+      const next = { ...current };
+      for (const [key, value] of acceptedSecrets)
+        if (next[key] === value) delete next[key];
+      return next;
+    });
+    setValues((current) => {
+      const next = { ...current };
+      for (const [key, value] of Object.entries(payload.values))
+        if (next[key] === value) next[key] = result.values[key];
+      return next;
+    });
+    setRevealed({});
+    if (payload.credentialsReviewed) setCredentialsReviewed(false);
+    await onSaved();
+  });
+  const busy = state.status === "saving";
   useEffect(() => {
     let active = true;
     api("/admin/configuration")
@@ -85,15 +124,15 @@ export function ConnectionSettings({
         type={type}
         value={values[key] ?? ""}
         min={type === "number" ? 0 : undefined}
-        onChange={(event) =>
-          setValues((previous) => ({
-            ...previous,
-            [key]:
-              type === "number"
-                ? Number(event.target.value)
-                : event.target.value,
-          }))
-        }
+        onBlur={() => {
+          void queue.commit(`values.${key}`);
+        }}
+        onChange={(event) => {
+          const value =
+            type === "number" ? Number(event.target.value) : event.target.value;
+          setValues((previous) => ({ ...previous, [key]: value }));
+          queue.edit(`values.${key}`, value);
+        }}
       />
     </Field>
   );
@@ -121,13 +160,18 @@ export function ConnectionSettings({
             value={secrets[key] ?? revealed[key] ?? ""}
             placeholder={
               secrets[key] === ""
-                ? "Will be cleared on save"
+                ? "Clearing…"
                 : configuration?.secrets[key]
                   ? "•••••••• · saved"
                   : "Enter credential"
             }
+            onBlur={() => {
+              void queue.commit(`secrets.${key}`);
+            }}
             onChange={(event) => {
               const value = event.target.value;
+              if (value) queue.edit(`secrets.${key}`, value);
+              else queue.cancel(`secrets.${key}`);
               setSecrets((previous) => {
                 const next = { ...previous };
                 if (value) next[key] = value;
@@ -179,24 +223,29 @@ export function ConnectionSettings({
             <button
               type="button"
               className="text-button"
-              onClick={() =>
-                setSecrets((previous) => ({ ...previous, [key]: "" }))
-              }
+              disabled={busy}
+              onClick={() => {
+                setSecrets((previous) => ({ ...previous, [key]: "" }));
+                queue.edit(`secrets.${key}`, "");
+                void queue.commit(`secrets.${key}`);
+              }}
             >
-              Clear on save
+              Clear saved value
             </button>
           )}
           {key in secrets && (
             <button
               type="button"
               className="text-button"
-              onClick={() =>
+              disabled={busy}
+              onClick={() => {
+                queue.cancel(`secrets.${key}`);
                 setSecrets((previous) => {
                   const next = { ...previous };
                   delete next[key];
                   return next;
-                })
-              }
+                });
+              }}
             >
               Undo change
             </button>
@@ -221,34 +270,17 @@ export function ConnectionSettings({
     <>
       <form
         className="settings-form"
-        onSubmit={async (event) => {
+        onSubmit={(event) => {
           event.preventDefault();
-          setBusy(true);
-          setError("");
-          try {
-            const result = await api("/admin/configuration", {
-              method: "PATCH",
-              body: JSON.stringify({
-                values,
-                secrets,
-                ...(credentialsReviewed ? { credentialsReviewed: true } : {}),
-              }),
-            });
-            setConfiguration(result);
-            setCredentialsReviewed(false);
-            setValues(result.values);
-            setSecrets({});
-            setRevealed({});
-            setPixel(null);
-            notify("Connection settings saved");
-            onSaved();
-          } catch (error) {
-            setError((error as Error).message);
-          } finally {
-            setBusy(false);
-          }
+          void queue.commit();
         }}
       >
+        <AutosaveStatus
+          state={state}
+          retry={() => {
+            void queue.commit();
+          }}
+        />
         {configuration.credentialsNeedReview && (
           <section className="panel" role="status">
             <h3>Reconnect your providers</h3>
@@ -268,13 +300,17 @@ export function ConnectionSettings({
               <input
                 type="checkbox"
                 checked={credentialsReviewed}
-                onChange={(event) =>
-                  setCredentialsReviewed(event.target.checked)
-                }
+                onChange={(event) => {
+                  setCredentialsReviewed(event.target.checked);
+                  if (event.target.checked) {
+                    queue.edit("credentialsReviewed", true);
+                    void queue.commit("credentialsReviewed");
+                  }
+                }}
               />
             </label>
             <p className="help">
-              Save connection settings to dismiss this notice.
+              Checking this box saves your review automatically.
             </p>
           </section>
         )}
@@ -303,12 +339,15 @@ export function ConnectionSettings({
             <input
               type="checkbox"
               checked={values.LIVE_DELIVERY === "true"}
-              onChange={(event) =>
+              onChange={(event) => {
+                const value = String(event.target.checked);
                 setValues((previous) => ({
                   ...previous,
-                  LIVE_DELIVERY: String(event.target.checked),
-                }))
-              }
+                  LIVE_DELIVERY: value,
+                }));
+                queue.edit("values.LIVE_DELIVERY", value);
+                void queue.commit("values.LIVE_DELIVERY");
+              }}
             />
           </label>
           <label className="switch-row">
@@ -322,12 +361,15 @@ export function ConnectionSettings({
             <input
               type="checkbox"
               checked={values.LIVE_SOURCE_BLOCKING === "true"}
-              onChange={(event) =>
+              onChange={(event) => {
+                const value = String(event.target.checked);
                 setValues((previous) => ({
                   ...previous,
-                  LIVE_SOURCE_BLOCKING: String(event.target.checked),
-                }))
-              }
+                  LIVE_SOURCE_BLOCKING: value,
+                }));
+                queue.edit("values.LIVE_SOURCE_BLOCKING", value);
+                void queue.commit("values.LIVE_SOURCE_BLOCKING");
+              }}
             />
           </label>
         </section>
@@ -346,7 +388,7 @@ export function ConnectionSettings({
           {secret(
             "ROUNDSKY_WEBHOOK_TOKEN",
             "RoundSky webhook secret",
-            "After changing this secret, save connection settings to update the pixel URL below.",
+            "Leave this field to save automatically and update the pixel URL below.",
           )}
           <Field
             label="RoundSky pixel URL"
@@ -359,7 +401,7 @@ export function ConnectionSettings({
               value={pixelNeedsSave ? "" : (pixel?.pixelUrl ?? "")}
               placeholder={
                 pixelNeedsSave
-                  ? "Save connection settings to generate the updated pixel URL."
+                  ? "Leave the field and wait for changes to save."
                   : pixelError
                     ? "Unable to load the pixel URL. Reload Settings to try again."
                     : "Loading pixel URL…"
@@ -391,7 +433,7 @@ export function ConnectionSettings({
           </div>
           {pixelNeedsSave && (
             <p className="help" role="status">
-              Save connection settings before copying the updated pixel URL.
+              Waiting for changes to save before updating the pixel URL.
             </p>
           )}
           {pixelError && (
@@ -418,6 +460,12 @@ export function ConnectionSettings({
             "ONESIGNAL_APP_ID",
             "ONESIGNAL_API_KEY",
           ])}
+          <ProviderDeliveryTest
+            provider="onesignal"
+            saved={configuration}
+            needsSave={changed("ONESIGNAL_APP_ID", "ONESIGNAL_API_KEY")}
+            disabled={busy}
+          />
           <h3>Brevo</h3>
           <div className="form-grid">
             {secret("BREVO_API_KEY", "Brevo API key")}
@@ -431,10 +479,41 @@ export function ConnectionSettings({
             "BREVO_SENDER_NAME",
             "BREVO_FOLDER_ID",
           ])}
+          <ProviderDeliveryTest
+            provider="brevo"
+            saved={configuration}
+            needsSave={changed(
+              "BREVO_API_KEY",
+              "BREVO_SENDER_EMAIL",
+              "BREVO_SENDER_NAME",
+              "BREVO_FOLDER_ID",
+            )}
+            disabled={busy}
+          />
           <h3>BlueBubbles</h3>
           <div className="form-grid">
             {field("BLUEBUBBLES_URL", "BlueBubbles server URL", "url")}
             {secret("BLUEBUBBLES_PASSWORD", "BlueBubbles password")}
+            <Field
+              label="Text delivery service"
+              hint="Used for phone confirmations, follow-ups, and test messages. Keep SMS for Android recipients."
+            >
+              <select
+                value={values.BLUEBUBBLES_SERVICE ?? "SMS"}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setValues((previous) => ({
+                    ...previous,
+                    BLUEBUBBLES_SERVICE: value,
+                  }));
+                  queue.edit("values.BLUEBUBBLES_SERVICE", value);
+                  void queue.commit("values.BLUEBUBBLES_SERVICE");
+                }}
+              >
+                <option value="SMS">SMS</option>
+                <option value="iMessage">iMessage</option>
+              </select>
+            </Field>
           </div>
           {testButton("bluebubbles", "BlueBubbles", [
             "BLUEBUBBLES_URL",
@@ -442,6 +521,17 @@ export function ConnectionSettings({
             "APP_URL",
             "WEBHOOK_TOKEN",
           ])}
+          <ProviderDeliveryTest
+            provider="bluebubbles"
+            service={String(values.BLUEBUBBLES_SERVICE ?? "SMS")}
+            saved={configuration}
+            needsSave={changed(
+              "BLUEBUBBLES_URL",
+              "BLUEBUBBLES_PASSWORD",
+              "BLUEBUBBLES_SERVICE",
+            )}
+            disabled={busy}
+          />
           <BlueBubblesReplyUrl
             saved={configuration}
             needsSave={changed("APP_URL", "WEBHOOK_TOKEN")}
@@ -479,16 +569,11 @@ export function ConnectionSettings({
             )}
           </div>
         </section>
-        <div className="save-bar">
-          {error && (
-            <p className="error" role="alert">
-              {error}
-            </p>
-          )}
-          <button className="button" disabled={busy}>
-            {busy ? <Spinner /> : <Save size={16} />}Save connection settings
-          </button>
-        </div>
+        {error && (
+          <p className="error" role="alert">
+            {error}
+          </p>
+        )}
       </form>
       <section className="panel">
         <h3>Owner password</h3>

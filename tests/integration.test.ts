@@ -1642,6 +1642,83 @@ it("records incoming text replies once and keeps STOP cancellation working", asy
   ).toBe("UNSUBSCRIBED");
 });
 
+it("autosaves settings patches without replacing unrelated settings", async () => {
+  const original = await settings();
+  expect(
+    (await request("/api/admin/settings", "PATCH", { businessName: "Changed" }))
+      .status,
+  ).toBe(401);
+  const result = await request(
+    "/api/admin/settings",
+    "PATCH",
+    { businessName: "Auto-saved business" },
+    true,
+  );
+  expect(result.status).toBe(200);
+  expect(await settings()).toEqual({
+    ...original,
+    businessName: "Auto-saved business",
+  });
+  expect(
+    (await request("/api/admin/settings", "PATCH", { sendHourStart: 20 }, true))
+      .status,
+  ).toBe(400);
+  await saveSettings(original, "test");
+});
+it("requires owner access for real delivery tests and deduplicates a repeated send", async () => {
+  const input = {
+    recipient: "owner@example.com",
+    requestId: "34828a29-dc87-4a5e-8bb2-63fca1276dd5",
+    emailKind: "transactional",
+  };
+  expect(
+    (await request("/api/admin/integrations/brevo/send-test", "POST", input))
+      .status,
+  ).toBe(401);
+  expect(
+    (
+      await request(
+        "/api/admin/integrations/brevo/send-test",
+        "POST",
+        input,
+        true,
+        { Origin: "https://attacker.example" },
+      )
+    ).status,
+  ).toBe(403);
+  expect(
+    (
+      await request(
+        "/api/admin/integrations/onesignal/send-test",
+        "POST",
+        input,
+        true,
+      )
+    ).status,
+  ).toBe(400);
+  const before = providerCalls.length;
+  const result = await request(
+    "/api/admin/integrations/brevo/send-test",
+    "POST",
+    input,
+    true,
+  );
+  expect(result.data.status).toBe("accepted");
+  expect(providerCalls.length).toBe(before + 1);
+  const repeated = await request(
+    "/api/admin/integrations/brevo/send-test",
+    "POST",
+    input,
+    true,
+  );
+  expect(repeated.data.status).toBe("unknown");
+  expect(providerCalls.length).toBe(before + 1);
+  const audit = await db.auditLog.findUniqueOrThrow({
+    where: { id: `delivery-test:${input.requestId}` },
+  });
+  expect(audit.action).toBe("integration.delivery_test_accepted");
+  expect(JSON.stringify(audit)).not.toContain(input.recipient);
+});
 it("keeps owner password management in the hosting environment", async () => {
   const response = await request(
     "/api/admin/configuration/password",

@@ -1,3 +1,5 @@
+import { rateLimit } from "express-rate-limit";
+import { testDelivery } from "../services/delivery-tests.js";
 import { roundSkyPixelSetup } from "../services/roundsky.js";
 import {
   blueBubblesReplySetup,
@@ -66,6 +68,20 @@ adminRouter.post("/integrations/:provider/test", async (req, res) => {
   });
   res.set("Cache-Control", "no-store").json(result);
 });
+adminRouter.post(
+  "/integrations/:provider/send-test",
+  rateLimit({
+    windowMs: 60000,
+    limit: 5,
+    standardHeaders: "draft-8",
+    legacyHeaders: false,
+  }),
+  async (req, res) => {
+    res
+      .set("Cache-Control", "no-store")
+      .json(await testDelivery({ ...req.body, provider: req.params.provider }));
+  },
+);
 adminRouter.get("/dashboard", async (_req, res) => {
   res.json(await dashboard());
 });
@@ -178,6 +194,9 @@ adminRouter.post("/sources/:id/block", async (req, res) => {
 });
 adminRouter.get("/settings", async (_req, res) => {
   res.json(await settings());
+});
+adminRouter.patch("/settings", async (req, res) => {
+  res.json(await saveSettings(req.body, "owner", true));
 });
 adminRouter.put("/settings", async (req, res) => {
   res.json(await saveSettings(req.body, "owner"));

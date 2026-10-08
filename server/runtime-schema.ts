@@ -17,6 +17,7 @@ export const publicRuntimeSchema = z
     BREVO_SENDER_NAME: z.string().max(120).default("SpareCash"),
     BREVO_FOLDER_ID: z.coerce.number().int().min(0).default(0),
     BLUEBUBBLES_URL: optionalUrl.default(""),
+    BLUEBUBBLES_SERVICE: z.enum(["SMS", "iMessage"]).default("SMS"),
     PROPELLER_API_URL: z
       .string()
       .url()

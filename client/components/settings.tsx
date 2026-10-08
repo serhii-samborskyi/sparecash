@@ -1,23 +1,31 @@
 import { useState } from "react";
-import { Save, ShieldCheck, Clock, Link2, FileText } from "lucide-react";
-import { Field, Spinner } from "./ui";
+import { ShieldCheck, Clock, Link2, FileText } from "lucide-react";
+import { Field } from "./ui";
 import { api } from "../api";
+import { useAutosave } from "../hooks/use-autosave";
+import { AutosaveStatus } from "./autosave-status";
 import { TimezoneSelect } from "./timezone-select";
 export function SettingsView({
   value,
   onSaved,
-  notify,
   ipTimezoneConfigured,
 }: {
   value: any;
-  onSaved: () => void;
-  notify: (s: string) => void;
+  onSaved: () => void | Promise<void>;
   ipTimezoneConfigured: boolean;
 }) {
-  const [form, setForm] = useState({ ...value }),
-    [busy, setBusy] = useState(false),
-    [error, setError] = useState("");
-  const set = (key: string, value: any) => setForm({ ...form, [key]: value });
+  const [form, setForm] = useState({ ...value });
+  const { queue, state } = useAutosave(async (patch) => {
+    await api("/admin/settings", {
+      method: "PATCH",
+      body: JSON.stringify(patch),
+    });
+    await onSaved();
+  });
+  const set = (key: string, value: any) => {
+    setForm((previous: any) => ({ ...previous, [key]: value }));
+    queue.edit(key, value);
+  };
   const num = (key: string, label: string, min: number, max: number) => (
     <Field label={label}>
       <input
@@ -30,25 +38,31 @@ export function SettingsView({
       />
     </Field>
   );
-  async function save(e: React.FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    setError("");
-    try {
-      await api("/admin/settings", {
-        method: "PUT",
-        body: JSON.stringify(form),
-      });
-      notify("Settings saved");
-      onSaved();
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
   return (
-    <form className="settings-form" onSubmit={save}>
+    <form
+      className="settings-form"
+      onSubmit={(event) => {
+        event.preventDefault();
+        void queue.commit();
+      }}
+      onBlur={() => {
+        void queue.commit();
+      }}
+      onChange={(event) => {
+        const target = event.target;
+        if (
+          target instanceof HTMLSelectElement ||
+          (target instanceof HTMLInputElement && target.type === "checkbox")
+        )
+          void queue.commit();
+      }}
+    >
+      <AutosaveStatus
+        state={state}
+        retry={() => {
+          void queue.commit();
+        }}
+      />
       <section className="panel">
         <div className="panel-heading">
           <ShieldCheck size={20} />
@@ -247,12 +261,6 @@ export function SettingsView({
           />
         </Field>
       </section>
-      <div className="save-bar">
-        {error && <p className="error">{error}</p>}
-        <button className="button" disabled={busy}>
-          {busy ? <Spinner /> : <Save size={16} />}Save settings
-        </button>
-      </div>
     </form>
   );
 }

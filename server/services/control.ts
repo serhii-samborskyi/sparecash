@@ -21,10 +21,22 @@ export async function settings() {
     (await db.setting.findUnique({ where: { key: "general" } }))?.value ?? {},
   );
 }
-export async function saveSettings(input: unknown, actor: string) {
-  const value = settingsSchema.parse(input);
-  const previous = await settings();
-  await db.$transaction(async (tx) => {
+export async function saveSettings(
+  input: unknown,
+  actor: string,
+  partial = false,
+) {
+  const patch = partial
+    ? settingsSchema.innerType().partial().strict().parse(input)
+    : settingsSchema.parse(input);
+  const value = await db.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(1629071202)`;
+    const previous = settingsSchema.parse(
+      (await tx.setting.findUnique({ where: { key: "general" } }))?.value ?? {},
+    );
+    const value = settingsSchema.parse(
+      partial ? { ...previous, ...patch } : patch,
+    );
     await tx.setting.upsert({
       where: { key: "general" },
       create: { key: "general", value },
@@ -41,6 +53,7 @@ export async function saveSettings(input: unknown, actor: string) {
         data: { deferredUntil: null },
       });
     }
+    return value;
   });
   await audit(actor, "settings.updated");
   return value;

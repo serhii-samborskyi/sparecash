@@ -64,7 +64,7 @@ export function ProviderTestButton({
       </button>
       <p className="help">
         {needsSave
-          ? "Save connection settings before testing these changes."
+          ? "Waiting for these changes to save. Leave the field to finish saving."
           : "Checks saved settings without sending messages or changing campaigns."}
       </p>
       <div aria-live="polite" aria-atomic="true">
@@ -141,7 +141,7 @@ export function BlueBubblesReplyUrl({
           value={needsSave ? "" : url}
           placeholder={
             needsSave
-              ? "Save connection settings to update the reply URL."
+              ? "Leave the field and wait for changes to save."
               : error
                 ? "Unable to load the reply URL. Reload Settings to try again."
                 : "Loading reply URL…"
@@ -170,8 +170,7 @@ export function BlueBubblesReplyUrl({
       </div>
       {needsSave && (
         <p className="help" role="status">
-          Save the Application URL or general webhook token changes before
-          copying.
+          Waiting for the Application URL or webhook token to finish saving.
         </p>
       )}
       {!needsSave && error && (
@@ -180,5 +179,159 @@ export function BlueBubblesReplyUrl({
         </p>
       )}
     </>
+  );
+}
+
+export function ProviderDeliveryTest({
+  provider,
+  saved,
+  needsSave,
+  disabled,
+  service = "SMS",
+}: {
+  provider: "onesignal" | "brevo" | "bluebubbles";
+  saved: object;
+  needsSave: boolean;
+  disabled: boolean;
+  service?: string;
+}) {
+  const [recipient, setRecipient] = useState("");
+  const [emailKind, setEmailKind] = useState("campaign");
+  const [sending, setSending] = useState(false);
+  const inFlight = useRef(false);
+  const [result, setResult] = useState<{
+    status: string;
+    message: string;
+    providerId?: string;
+  } | null>(null);
+  const name =
+    provider === "onesignal"
+      ? "push"
+      : provider === "brevo"
+        ? "email"
+        : service;
+  useEffect(() => {
+    if (!inFlight.current) setResult(null);
+  }, [saved, needsSave]);
+  return (
+    <div className="delivery-test">
+      <h4>Send a test {name}</h4>
+      <p className="help">
+        Sends one real message to the recipient below, even while live
+        follow-ups are paused. Use your own device or inbox.
+      </p>
+      {provider === "brevo" && (
+        <Field label="Email test type">
+          <select
+            value={emailKind}
+            disabled={sending}
+            onChange={(event) => {
+              setEmailKind(event.target.value);
+              setResult(null);
+            }}
+          >
+            <option value="campaign">Follow-up campaign email</option>
+            <option value="transactional">
+              Confirmation / transactional email
+            </option>
+          </select>
+        </Field>
+      )}
+      <Field
+        label={
+          provider === "onesignal"
+            ? "Test push subscription ID"
+            : provider === "brevo"
+              ? "Test email address"
+              : "Test phone number or iMessage address"
+        }
+        hint={
+          provider === "onesignal"
+            ? "Subscribe on your phone using a published landing page, then copy that device's Subscription ID from OneSignal → Audience → Subscriptions. This is different from the app ID."
+            : provider === "brevo"
+              ? "Check both email types to verify confirmations and marketing delivery."
+              : "Use a country code, for example +13125550123. iMessage requires an iMessage-capable recipient; SMS requires Text Message Forwarding on your iPhone and Mac."
+        }
+      >
+        <input
+          type={provider === "brevo" ? "email" : "text"}
+          value={recipient}
+          disabled={sending}
+          autoComplete="off"
+          placeholder={
+            provider === "onesignal"
+              ? "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+              : provider === "brevo"
+                ? "you@example.com"
+                : "+13125550123"
+          }
+          onChange={(event) => {
+            setRecipient(event.target.value);
+            setResult(null);
+          }}
+        />
+      </Field>
+      <button
+        type="button"
+        className="button secondary"
+        disabled={sending || disabled || needsSave || !recipient.trim()}
+        onClick={async () => {
+          if (inFlight.current) return;
+          inFlight.current = true;
+          setSending(true);
+          setResult(null);
+          try {
+            setResult(
+              await api(`/admin/integrations/${provider}/send-test`, {
+                method: "POST",
+                body: JSON.stringify({
+                  recipient: recipient.trim(),
+                  emailKind,
+                  requestId: crypto.randomUUID(),
+                }),
+              }),
+            );
+          } catch (error) {
+            const status = (error as Error & { status?: number }).status;
+            const rejected =
+              status !== undefined && status >= 400 && status < 500;
+            setResult({
+              status: rejected ? "error" : "unknown",
+              message: rejected
+                ? (error as Error).message
+                : "The test could not be confirmed. Check your device and provider logs before trying again.",
+            });
+          } finally {
+            inFlight.current = false;
+            setSending(false);
+          }
+        }}
+      >
+        {sending && <Spinner />}
+        {sending ? "Sending test…" : `Send test ${name}`}
+      </button>
+      {needsSave && (
+        <p className="help">
+          Leave the settings field and wait for changes to save before sending a
+          test.
+        </p>
+      )}
+      {result && (
+        <div
+          className={`connection-result ${result.status === "accepted" ? "success" : result.status === "error" ? "error" : "warning"}`}
+          role="status"
+        >
+          <strong>
+            {result.status === "accepted"
+              ? "Accepted by provider"
+              : result.status === "error"
+                ? "Test needs attention"
+                : "Check before retrying"}
+          </strong>
+          <p>{result.message}</p>
+          {result.providerId && <p>Provider reference: {result.providerId}</p>}
+        </div>
+      )}
+    </div>
   );
 }

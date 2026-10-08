@@ -69,15 +69,21 @@ export async function sendText(phone: string, message: string, id: string) {
     "POST",
     {},
     {
-      chatGuid: `SMS;-;${phone}`,
+      chatGuid: `${env.BLUEBUBBLES_SERVICE};-;${phone}`,
       message,
       tempGuid: id,
       method: "apple-script",
     },
   );
-  if (result.status && result.status !== 200)
-    throw new Error("BlueBubbles did not accept the message");
-  return String(result.data?.guid ?? id);
+  if (
+    result.status !== 200 ||
+    typeof result.data?.guid !== "string" ||
+    !result.data.guid
+  )
+    throw new Error(
+      "BlueBubbles did not confirm a message ID; check Messages on the Mac before retrying",
+    );
+  return result.data.guid as string;
 }
 export async function sendVerification(sub: Subscription, code: string) {
   if (env.LIVE_DELIVERY !== "true") return { paused: true };
@@ -201,4 +207,70 @@ export async function excludeZone(campaignId: string, zoneId: string) {
     { Authorization: `Bearer ${env.PROPELLER_API_TOKEN}` },
     { zone: [zoneId] },
   );
+}
+
+// These owner-initiated tests deliberately work while automated delivery is paused.
+export async function sendDeliveryTest(
+  provider: "onesignal" | "brevo" | "bluebubbles",
+  recipient: string,
+  requestId: string,
+  emailKind: "transactional" | "campaign",
+) {
+  const subject = "SpareCash delivery test";
+  const body =
+    "This is a test message requested by the SpareCash owner. No loan application or subscription was created.";
+  if (provider === "bluebubbles") return sendText(recipient, body, requestId);
+  if (provider === "onesignal") {
+    if (!env.ONESIGNAL_APP_ID || !env.ONESIGNAL_API_KEY)
+      throw new Error("OneSignal is not configured");
+    const result = await one("/notifications", {
+      app_id: env.ONESIGNAL_APP_ID,
+      include_subscription_ids: [recipient],
+      headings: { en: subject },
+      contents: { en: body },
+      url: env.APP_URL,
+      idempotency_key: requestId,
+    });
+    if (typeof result.id !== "string" || !result.id)
+      throw new Error(
+        "OneSignal did not accept a notification. Check that the subscription is active and belongs to this app.",
+      );
+    return result.id;
+  }
+  if (!env.BREVO_API_KEY || !env.BREVO_SENDER_EMAIL)
+    throw new Error("Brevo is not configured");
+  const sender = { name: env.BREVO_SENDER_NAME, email: env.BREVO_SENDER_EMAIL };
+  if (emailKind === "transactional") {
+    const result = await brevo("/smtp/email", {
+      sender,
+      to: [{ email: recipient }],
+      subject,
+      htmlContent: `<p>${body}</p>`,
+    });
+    if (typeof result.messageId !== "string" || !result.messageId)
+      throw new Error(
+        "Brevo did not confirm a message ID; check Brevo logs before retrying",
+      );
+    return result.messageId;
+  }
+  const config = await settings();
+  if (!env.BREVO_FOLDER_ID || !config.businessAddress.trim())
+    throw new Error(
+      "Set your Brevo campaign folder ID and business mailing address before testing campaign email",
+    );
+  const campaign = await brevo("/emailCampaigns", {
+    name: `SpareCash test ${requestId}`,
+    type: "classic",
+    sender,
+    subject,
+    htmlContent: `<p>${body}</p><hr><p>${escapeHtml(config.businessName)} · ${escapeHtml(config.businessAddress)}</p><p><a href="{{ unsubscribe }}">Unsubscribe</a></p>`,
+    tag: "sparecash-test",
+  });
+  if (!Number.isSafeInteger(campaign.id) || campaign.id <= 0)
+    throw new Error("Brevo did not confirm the test campaign ID");
+  // Always provide one explicit address; an empty list would send to the entire test list.
+  await brevo(`/emailCampaigns/${campaign.id}/sendTest`, {
+    emailTo: [recipient],
+  });
+  return String(campaign.id);
 }
