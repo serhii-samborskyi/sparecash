@@ -109,7 +109,8 @@ function Landing({ preview }: { preview: boolean }) {
     [result, setResult] = useState<any>(null),
     [code, setCode] = useState(""),
     [smsConfirmed, setSmsConfirmed] = useState(false),
-    [pushStatus, setPushStatus] = useState("");
+    [pushStatus, setPushStatus] = useState(""),
+    [showUpdates, setShowUpdates] = useState(false);
   const pushAttempt = useRef<AbortController | null>(null);
   useEffect(() => () => pushAttempt.current?.abort(), []);
   useEffect(() => {
@@ -326,29 +327,50 @@ function Landing({ preview }: { preview: boolean }) {
               </div>
             ))}
           </div>
-          {config.showIllustration !== false && (
-            <div className="landing-illustration" aria-hidden="true">
-              <div className="illustration-orbit" />
-              <div className="float-card back">
-                <span className="circle-icon">
-                  <Wallet size={22} />
-                </span>
-                <div>
-                  <span className="art-line long" />
-                  <span className="art-line" />
+          {config.offerFirst && (
+            <a className="landing-jump" href="#application">
+              {config.questions?.length
+                ? "Answer two questions"
+                : "Explore loan options"}
+              <ArrowRight size={16} />
+            </a>
+          )}
+          {config.heroImage ? (
+            <figure className="landing-photo">
+              <img
+                src={config.heroImage.src}
+                alt={config.heroImage.alt}
+                width={1200}
+                height={800}
+                fetchPriority="high"
+                decoding="async"
+              />
+            </figure>
+          ) : (
+            config.showIllustration !== false && (
+              <div className="landing-illustration" aria-hidden="true">
+                <div className="illustration-orbit" />
+                <div className="float-card back">
+                  <span className="circle-icon">
+                    <Wallet size={22} />
+                  </span>
+                  <div>
+                    <span className="art-line long" />
+                    <span className="art-line" />
+                  </div>
                 </div>
+                <div className="float-card front">
+                  <span className="circle-icon mint">
+                    <Leaf size={21} />
+                  </span>
+                  <b>A little breathing room.</b>
+                  <span className="art-check">
+                    <Check size={14} />
+                  </span>
+                </div>
+                <span className="art-spark">✦</span>
               </div>
-              <div className="float-card front">
-                <span className="circle-icon mint">
-                  <Leaf size={21} />
-                </span>
-                <b>A little breathing room.</b>
-                <span className="art-check">
-                  <Check size={14} />
-                </span>
-              </div>
-              <span className="art-spark">✦</span>
-            </div>
+            )
           )}
           {(config.sections ?? []).map(
             (section: { heading: string; body: string }, index: number) => (
@@ -364,7 +386,7 @@ function Landing({ preview }: { preview: boolean }) {
             and your application.
           </p>
         </div>
-        <section className="application-card">
+        <section className="application-card" id="application" tabIndex={-1}>
           {result ? (
             <>
               <span className="success-mark">
@@ -541,164 +563,212 @@ function Landing({ preview }: { preview: boolean }) {
               </p>
             </>
           ) : (
-            <form onSubmit={subscribe}>
-              <div className="form-progress">
-                <span>STAY IN THE LOOP, YOUR WAY</span>
-                <span>{questions.length ? "LAST STEP" : "01"}</span>
-              </div>
-              <h2>{config.formTitle ?? "How should we keep in touch?"}</h2>
-              <p>
-                {config.formDescription ??
-                  "Choose one or more channels for daily updates about loan options."}
-              </p>
-              <div className="channel-choices">
-                {[
-                  ["PUSH", "Push", "In your browser", Bell],
-                  ["SMS", "Text", "On your phone", MessageSquare],
-                  ["EMAIL", "Email", "In your inbox", Mail],
-                ].map(([channel, label, description, Icon]: any) => (
+            <>
+              {config.offerFirst && (
+                <div className="offer-introduction">
+                  <div className="form-progress">
+                    <span>YOUR NEXT STEP</span>
+                  </div>
+                  <h2>Explore personal loan options.</h2>
+                  <p>
+                    Continue to a third-party loan application. The provider
+                    reviews your information and determines which options, if
+                    any, are available.
+                  </p>
+                  <button
+                    className="button full"
+                    disabled={preview || busy}
+                    onClick={() => void continueOffer()}
+                  >
+                    {busy ? <Spinner /> : null} Continue to application{" "}
+                    <ArrowRight size={17} />
+                  </button>
+                  <p className="fine-print">
+                    SpareCash is not a lender. Answering our questions does not
+                    check credit or determine approval.
+                  </p>
+                  <button
+                    className="text-button optional-updates-toggle"
+                    aria-expanded={showUpdates}
+                    aria-controls="optional-updates"
+                    onClick={() => setShowUpdates(!showUpdates)}
+                  >
+                    {showUpdates
+                      ? "Hide optional updates"
+                      : "Want updates? Choose how to hear from us"}
+                  </button>
+                  {questions.length > 0 && (
+                    <button
+                      className="text-button back-link"
+                      onClick={() => setStep(step - 1)}
+                    >
+                      <ArrowLeft size={15} /> Back to questions
+                    </button>
+                  )}
+                </div>
+              )}
+              {(!config.offerFirst || showUpdates) && (
+                <form id="optional-updates" onSubmit={subscribe}>
+                  <div className="form-progress">
+                    <span>STAY IN THE LOOP, YOUR WAY</span>
+                    <span>{questions.length ? "LAST STEP" : "01"}</span>
+                  </div>
+                  <h2>{config.formTitle ?? "How should we keep in touch?"}</h2>
+                  <p>
+                    {config.formDescription ??
+                      "Choose one or more channels for daily updates about loan options."}
+                  </p>
+                  <div className="channel-choices">
+                    {[
+                      ["PUSH", "Push", "In your browser", Bell],
+                      ["SMS", "Text", "On your phone", MessageSquare],
+                      ["EMAIL", "Email", "In your inbox", Mail],
+                    ].map(([channel, label, description, Icon]: any) => (
+                      <button
+                        type="button"
+                        key={channel}
+                        aria-pressed={channels.includes(channel)}
+                        className={channels.includes(channel) ? "selected" : ""}
+                        onClick={() => toggle(channel)}
+                      >
+                        <Icon size={21} />
+                        <b>{label}</b>
+                        <small>{description}</small>
+                        <span className="channel-check">
+                          {channels.includes(channel) && <Check size={11} />}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                  <Field label="First name">
+                    <input
+                      required
+                      autoComplete="given-name"
+                      placeholder="Your first name"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                    />
+                  </Field>
+                  {channels.includes("EMAIL") && (
+                    <Field label="Email address">
+                      <input
+                        required
+                        type="email"
+                        autoComplete="email"
+                        placeholder="you@example.com"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                      />
+                    </Field>
+                  )}
+                  {channels.includes("SMS") && (
+                    <Field label="US mobile number">
+                      <input
+                        required
+                        type="tel"
+                        autoComplete="tel"
+                        placeholder="(555) 000-0000"
+                        value={phone}
+                        onChange={(e) => setPhone(e.target.value)}
+                      />
+                    </Field>
+                  )}
+                  <div className="hp" aria-hidden="true">
+                    <label>
+                      Company
+                      <input
+                        tabIndex={-1}
+                        autoComplete="off"
+                        value={company}
+                        onChange={(e) => setCompany(e.target.value)}
+                      />
+                    </label>
+                  </div>
+                  <label className="consent-check">
+                    <input
+                      required
+                      type="checkbox"
+                      checked={adult}
+                      onChange={(e) => setAdult(e.target.checked)}
+                    />
+                    <span>I am 18 or older and live in the United States.</span>
+                  </label>
+                  {channels.length > 0 && (
+                    <label className="consent-check">
+                      <input
+                        required
+                        type="checkbox"
+                        checked={consent}
+                        onChange={(e) => setConsent(e.target.checked)}
+                      />
+                      <span>
+                        {channels
+                          .map(
+                            (c) =>
+                              config[
+                                c === "EMAIL"
+                                  ? "emailConsent"
+                                  : c === "SMS"
+                                    ? "smsConsent"
+                                    : "pushConsent"
+                              ],
+                          )
+                          .join(" ")}{" "}
+                        I have read the{" "}
+                        <a href="/privacy" target="_blank">
+                          Privacy Policy
+                        </a>{" "}
+                        and{" "}
+                        <a href="/terms" target="_blank">
+                          Terms
+                        </a>
+                        .
+                      </span>
+                    </label>
+                  )}
+                  {!preview && (
+                    <Turnstile
+                      key={captchaKey}
+                      siteKey={session.turnstileSiteKey}
+                      visitId={session.visitId}
+                      onToken={setToken}
+                    />
+                  )}
+                  <button
+                    className="button full"
+                    disabled={
+                      busy || preview || !channels.length || !turnstileToken
+                    }
+                  >
+                    {busy ? <Spinner /> : null}
+                    {config.button}
+                    <ArrowRight size={17} />
+                  </button>
+                  {questions.length > 0 && (
+                    <button
+                      type="button"
+                      className="text-button back-link"
+                      onClick={() => setStep(step - 1)}
+                    >
+                      <ArrowLeft size={15} />
+                      Back
+                    </button>
+                  )}
                   <button
                     type="button"
-                    key={channel}
-                    aria-pressed={channels.includes(channel)}
-                    className={channels.includes(channel) ? "selected" : ""}
-                    onClick={() => toggle(channel)}
+                    className="skip-updates"
+                    disabled={preview || busy}
+                    onClick={() => void continueOffer()}
                   >
-                    <Icon size={21} />
-                    <b>{label}</b>
-                    <small>{description}</small>
-                    <span className="channel-check">
-                      {channels.includes(channel) && <Check size={11} />}
-                    </span>
+                    Continue without updates
                   </button>
-                ))}
-              </div>
-              <Field label="First name">
-                <input
-                  required
-                  autoComplete="given-name"
-                  placeholder="Your first name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                />
-              </Field>
-              {channels.includes("EMAIL") && (
-                <Field label="Email address">
-                  <input
-                    required
-                    type="email"
-                    autoComplete="email"
-                    placeholder="you@example.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                  />
-                </Field>
+                  <p className="fine-print">
+                    Subscribing is optional and does not affect loan
+                    eligibility.
+                  </p>
+                </form>
               )}
-              {channels.includes("SMS") && (
-                <Field label="US mobile number">
-                  <input
-                    required
-                    type="tel"
-                    autoComplete="tel"
-                    placeholder="(555) 000-0000"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                  />
-                </Field>
-              )}
-              <div className="hp" aria-hidden="true">
-                <label>
-                  Company
-                  <input
-                    tabIndex={-1}
-                    autoComplete="off"
-                    value={company}
-                    onChange={(e) => setCompany(e.target.value)}
-                  />
-                </label>
-              </div>
-              <label className="consent-check">
-                <input
-                  required
-                  type="checkbox"
-                  checked={adult}
-                  onChange={(e) => setAdult(e.target.checked)}
-                />
-                <span>I am 18 or older and live in the United States.</span>
-              </label>
-              {channels.length > 0 && (
-                <label className="consent-check">
-                  <input
-                    required
-                    type="checkbox"
-                    checked={consent}
-                    onChange={(e) => setConsent(e.target.checked)}
-                  />
-                  <span>
-                    {channels
-                      .map(
-                        (c) =>
-                          config[
-                            c === "EMAIL"
-                              ? "emailConsent"
-                              : c === "SMS"
-                                ? "smsConsent"
-                                : "pushConsent"
-                          ],
-                      )
-                      .join(" ")}{" "}
-                    I have read the{" "}
-                    <a href="/privacy" target="_blank">
-                      Privacy Policy
-                    </a>{" "}
-                    and{" "}
-                    <a href="/terms" target="_blank">
-                      Terms
-                    </a>
-                    .
-                  </span>
-                </label>
-              )}
-              {!preview && (
-                <Turnstile
-                  key={captchaKey}
-                  siteKey={session.turnstileSiteKey}
-                  visitId={session.visitId}
-                  onToken={setToken}
-                />
-              )}
-              <button
-                className="button full"
-                disabled={
-                  busy || preview || !channels.length || !turnstileToken
-                }
-              >
-                {busy ? <Spinner /> : null}
-                {config.button}
-                <ArrowRight size={17} />
-              </button>
-              {questions.length > 0 && (
-                <button
-                  type="button"
-                  className="text-button back-link"
-                  onClick={() => setStep(step - 1)}
-                >
-                  <ArrowLeft size={15} />
-                  Back
-                </button>
-              )}
-              <button
-                type="button"
-                className="skip-updates"
-                disabled={preview || busy}
-                onClick={() => void continueOffer()}
-              >
-                Continue without updates
-              </button>
-              <p className="fine-print">
-                Subscribing is optional and does not affect loan eligibility.
-              </p>
-            </form>
+            </>
           )}
           {error && (
             <p className="error" role="alert">

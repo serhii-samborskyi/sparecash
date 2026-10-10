@@ -18,6 +18,7 @@ import {
 import { sources, blockSource } from "./services/traffic.js";
 import { tick } from "./services/engine.js";
 import { timezoneSchema } from "./timezones.js";
+import { landingImages } from "./landing-images.js";
 import {
   reportSchema,
   trafficReport,
@@ -350,9 +351,16 @@ function makeServer() {
   );
   register(
     "save_experiment",
-    "Create/edit landing pages and conditional quizzes. Customize layout (split/centered/editorial), typography, accentColor, benefits, sections, form copy and question showWhen rules. Supply complete variants; omitted variants get zero traffic. Once a variant has visits, create a new variant to change content. ACTIVE publishes it.",
+    "Create/edit landing pages and conditional quizzes. Customize layout (split/centered/editorial), typography, accentColor, heroImage (src and alt; use list_landing_images), benefits, sections, form copy and question showWhen rules. offerFirst makes the loan application the primary action with optional updates collapsed. Supply complete variants; omitted variants get zero traffic. Once a variant has visits, create a new variant to change content. ACTIVE publishes it.",
     { experiment: experimentSchema },
     async ({ experiment }) => saveExperiment(experiment, "mcp"),
+  );
+  register(
+    "list_landing_images",
+    "List app-hosted landing images with src and alt text. Set config.heroImage to one of these images. Images display in all layouts, including mobile, instead of the decorative illustration.",
+    {},
+    async () => landingImages,
+    true,
   );
   register(
     "experiment_results",

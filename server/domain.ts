@@ -33,6 +33,18 @@ export const landingSchema = z
       .regex(/^#[0-9a-fA-F]{6}$/)
       .optional(),
     showIllustration: z.boolean().default(true),
+    heroImage: z
+      .object({
+        src: z
+          .string()
+          .regex(
+            /^\/landing-assets\/[a-z0-9][a-z0-9-]*\.(?:jpg|jpeg|png|webp)$/,
+            "Use an image from /landing-assets/ on this app",
+          ),
+        alt: z.string().trim().min(3).max(240),
+      })
+      .optional(),
+    offerFirst: z.boolean().default(false),
     benefits: z
       .array(z.string().min(1).max(160))
       .max(5)

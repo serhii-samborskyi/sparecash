@@ -96,6 +96,10 @@ Reports paginate grouped results, with complete totals for the selected cohort. 
 
 ### Design and qualification
 
+`list_landing_images` returns the bundled photo library. Set `heroImage: {src, alt}` in a variant to show an image in every layout and on mobile. Sources must be app-hosted files in `/landing-assets/` (JPG, PNG or WebP); external URLs, data URLs and HTML are rejected. Images ship with the application and do not require a persistent upload volume. Without `heroImage`, the existing illustration settings still apply.
+
+Set `offerFirst: true` to show the loan application as the primary action after any quiz questions, with channel subscriptions optional and collapsed. The default remains `false` for existing experiments. A direct-versus-quiz experiment can keep all copy and imagery identical and vary only `questions: []` versus two preference questions. Preview submissions remain disabled. Quiz answers are saved only when a visitor submits the optional subscription form; continuation alone does not save answers.
+
 `save_experiment` supports three layouts (`split`, `centered`, `editorial`), `sans`/`serif` typography, an optional six-digit hex `accentColor`, illustration visibility, up to five `benefits`, up to five story `sections` (`heading`, `body`), and custom form heading/introduction. The visual editor supports the same fields. Arbitrary HTML, JavaScript and unrestricted page graphs are not supported.
 
 Quiz questions may include `showWhen: {questionId: "timing", equals: "Now"}`. Conditions must refer to an earlier question and one of its valid answer options. Hidden branches are skipped and hidden answers are excluded from the saved lead. The server validates the same visible path. This allows preference qualification and segmentation while keeping consent optional and the loan application on RoundSky.

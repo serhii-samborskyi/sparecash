@@ -3,6 +3,7 @@ import { Plus, Trash2, Copy, ArrowDown } from "lucide-react";
 import { Field, Spinner } from "./ui";
 import { post } from "../api";
 import { landingSchema } from "../../server/domain";
+import { landingImages } from "../../server/landing-images";
 export const defaultLanding = () =>
   landingSchema.parse({
     title: "A little more room for what matters.",
@@ -289,7 +290,68 @@ export function ExperimentEditor({
               }
             />
           </Field>
-          <Field label="Illustration">
+          <Field
+            label="Landing picture"
+            hint="Visible on desktop and mobile. Replaces the decorative illustration."
+          >
+            <select
+              value={v.config.heroImage?.src ?? ""}
+              onChange={(e) => {
+                const image = landingImages.find(
+                  (item) => item.src === e.target.value,
+                );
+                config(
+                  "heroImage",
+                  image ? { src: image.src, alt: image.alt } : undefined,
+                );
+              }}
+            >
+              <option value="">No custom picture</option>
+              {v.config.heroImage &&
+                !landingImages.some(
+                  (item) => item.src === v.config.heroImage.src,
+                ) && (
+                  <option value={v.config.heroImage.src}>
+                    Current picture
+                  </option>
+                )}
+              {landingImages.map((image) => (
+                <option key={image.src} value={image.src}>
+                  {image.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+          {v.config.heroImage && (
+            <Field
+              label="Picture description"
+              hint="Describe the image for visitors using a screen reader."
+            >
+              <input
+                maxLength={240}
+                value={v.config.heroImage.alt}
+                onChange={(e) =>
+                  config("heroImage", {
+                    ...v.config.heroImage,
+                    alt: e.target.value,
+                  })
+                }
+              />
+            </Field>
+          )}
+          <Field label="Primary action">
+            <select
+              value={String(v.config.offerFirst)}
+              onChange={(e) => config("offerFirst", e.target.value === "true")}
+            >
+              <option value="false">Offer updates first</option>
+              <option value="true">Continue to application first</option>
+            </select>
+          </Field>
+          <Field
+            label="Decorative illustration"
+            hint="Used only when no landing picture is selected."
+          >
             <select
               value={String(v.config.showIllustration)}
               onChange={(e) =>

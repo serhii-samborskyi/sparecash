@@ -2961,6 +2961,71 @@ summary {
 }
 
 /* Configurable prelander layouts share the consent and confirmation flow. */
+.landing-photo {
+  margin: 28px 0 0;
+  overflow: hidden;
+  border-radius: 20px;
+  background: #e9e8e0;
+}
+.landing-photo img {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 3 / 2;
+  object-fit: cover;
+}
+.offer-introduction > p:not(.fine-print) {
+  color: #66795d;
+  font-size: 14px;
+  line-height: 1.7;
+  margin: 16px 0 24px;
+}
+.optional-updates-toggle {
+  margin-top: 22px;
+  text-align: left;
+  line-height: 1.5;
+}
+.offer-introduction + form {
+  border-top: 1px solid var(--line);
+  margin-top: 24px;
+  padding-top: 24px;
+}
+.public-page button:active:not(:disabled) {
+  transform: scale(0.97);
+}
+.public-page button:focus-visible:active:not(:disabled) {
+  transform: none;
+}
+.landing-jump {
+  display: none;
+}
+#application {
+  scroll-margin-top: 24px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .public-page button:active:not(:disabled) {
+    transform: none;
+  }
+}
+@media (max-width: 760px) {
+  .landing-jump {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 18px;
+    color: var(--public);
+    font-size: 14px;
+    font-weight: 600;
+    text-underline-offset: 4px;
+  }
+  .landing-photo {
+    margin-top: 22px;
+    border-radius: 14px;
+  }
+  .landing-photo img {
+    max-height: 250px;
+  }
+}
 .public-page .promise-list > div {
   display: flex;
 }

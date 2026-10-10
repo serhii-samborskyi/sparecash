@@ -2194,6 +2194,7 @@ it("lets an authenticated MCP marketer inspect results, author designs and safel
       "list_traffic_visits",
       "record_visit_costs",
       "get_experiment",
+      "list_landing_images",
       "set_experiment_allocation",
       "set_chain_status",
       "record_marketing_review",
@@ -2202,6 +2203,8 @@ it("lets an authenticated MCP marketer inspect results, author designs and safel
     const context = await call("marketing_context");
     expect(JSON.stringify(context)).not.toContain(env.MCP_TOKEN);
     expect(context.limits.join(" ")).toContain("external AI client");
+    const images = await call("list_landing_images");
+    expect(images).toHaveLength(3);
     const exp = await call("save_experiment", {
       experiment: {
         name: "MCP custom campaign",
@@ -2217,6 +2220,8 @@ it("lets an authenticated MCP marketer inspect results, author designs and safel
               layout: "editorial",
               typography: "serif",
               accentColor: "#294961",
+              heroImage: { src: images[0].src, alt: images[0].alt },
+              offerFirst: true,
               sections: [
                 {
                   heading: "Prepare before applying",
@@ -2253,6 +2258,11 @@ it("lets an authenticated MCP marketer inspect results, author designs and safel
     const definition = await call("get_experiment", { id: exp.id });
     expect(definition.variants[0].previewUrl).toContain("/preview/");
     expect(definition.variants[0].config.sections).toHaveLength(1);
+    expect(definition.variants[0].config.heroImage).toEqual({
+      src: images[0].src,
+      alt: images[0].alt,
+    });
+    expect(definition.variants[0].config.offerFirst).toBe(true);
     const allocation = {
       id: exp.id,
       expectedUpdatedAt: definition.updatedAt,

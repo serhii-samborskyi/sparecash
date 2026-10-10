@@ -1,0 +1,14 @@
+[
+  {
+    "key": "unexpected-bills",
+    "prompt": "Use case: ads-marketing, natural editorial photograph. Create a photographic hero image for a US personal loan information landing page about an unexpected household bill. Landscape 3:2. A close, candid overhead view of an opened ivory envelope and a simple household expense paper on a warm oak kitchen table, one hand gently resting next to the paper, olive green ceramic coffee cup at the upper edge. Morning window light, real paper grain, subtle lived-in imperfections, calm and grounded rather than distressed. Paper contains only very faint out-of-focus gray rules, NO readable writing, numbers, amounts, dates or logos. Envelope and paper are the single focal point, composition works cropped on a phone and at push-banner size, restrained warm cream and forest-green palette. No currency, no bank interface, no phone notifications, no approval stamps, no testimonial, no decorative border, no text overlay. This is an illustrative scene, not evidence of a financial outcome."
+  },
+  {
+    "key": "car-repairs",
+    "prompt": "Use case: ads-marketing, natural editorial photograph. Create a photographic hero image for a US personal loan information landing page about a car repair expense. Landscape 3:2. Close candid photograph of a plain car key fob, a folded mechanic's estimate on a worn clean workshop counter and the edge of an automotive wrench. An out-of-focus car tire and workshop daylight in the distant background. Key fob and paper are the central clear focal point; small vivid cobalt blue key tag gives a visual anchor. Warm neutral paper and charcoal with cobalt accent, natural unpolished smartphone-photo feel but excellent photographic detail, honest soft daylight, no distress or fear. Paper has faint blurred gray lines only, NO readable words, currency amounts, dates, brand marks or logos. No money, no approval, no fake testimonial, no text overlay, no graphic border. Composition must stay understandable on small mobile crops."
+  },
+  {
+    "key": "loan-checklist",
+    "prompt": "Use case: ads-marketing, natural editorial photograph. Create a photographic hero image for a useful US personal-loan checklist landing page. Landscape 3:2. Overhead candid photo of a cream notebook opened on a pale stone desk, three large simple hand-drawn empty square checkboxes down the visible page, a dark plum colored pencil resting beside it and the edge of a small ordinary calculator. A person's hand holds the corner of the notebook. Soft daylight, realistic paper fiber, subtle shadows, editorial and approachable, ivory and warm gray with one plum accent. No readable words, no figures, no rates, no brand marks, no readable calculator screen, no cash, no bank notifications. The three empty checkboxes are the clear visual anchor and remain recognizable at mobile banner size. No text overlay, no border, no exaggerated 3D effects."
+  }
+]

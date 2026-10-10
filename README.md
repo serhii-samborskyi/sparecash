@@ -41,6 +41,7 @@ The worker runs separately and acquires a database advisory lock. In-memory HTTP
 ## What is implemented
 
 - Published, weighted landing/quiz variants with sticky assignments; public pages at `/go/:slug`, owner previews at `/preview/:experimentId`.
+- App-hosted landing photographs with accessible descriptions, visible on desktop and mobile. Choose a picture in the editor or call MCP `list_landing_images` and set `heroImage`. Images are bundled under `public/landing-assets`; no upload volume or database migration is required. Optional `offerFirst` pages make the application the primary action and keep subscriptions collapsed until requested.
 - Configurable goals: confirmed subscriptions, purchased leads, approvals, funded loans, or recorded revenue per visitor. Reports do not claim statistical significance or automatically reallocate traffic.
 - Visitor attribution using `campaign_id`, `zone_id`, and `click_id`; campaign/source passed to RoundSky's `subId`/`subId2` and a distinct server-generated application ID in `subId3`.
 - Turnstile server verification bound to the visit and action; honeypot and request-pattern evidence; per-source sample thresholds, observation periods, and Wilson confidence bounds.
