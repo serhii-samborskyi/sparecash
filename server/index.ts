@@ -13,6 +13,7 @@ import { adminRouter } from "./routes/admin.js";
 import { publicRouter } from "./routes/public.js";
 import { webhookRouter } from "./routes/webhooks.js";
 import { mcpRouter } from "./mcp.js";
+import { mediaRouter } from "./routes/media.js";
 import {
   initializeRuntimeConfiguration,
   refreshRuntimeConfiguration,
@@ -57,8 +58,18 @@ app.use(
     referrerPolicy: { policy: "no-referrer" },
   }),
 );
+const ordinaryJson = express.json({ limit: "256kb" });
 app.use(
-  express.json({ limit: "256kb" }),
+  (req, res, next) => {
+    // Upload parsers run only after their owner/MCP or one-use authentication.
+    if (
+      /^\/(?:mcp\/?|api\/admin\/landing-assets\/?|api\/media\/landing-upload\/[^/]+)$/i.test(
+        req.path,
+      )
+    )
+      next();
+    else ordinaryJson(req, res, next);
+  },
   express.urlencoded({ extended: false, limit: "32kb" }),
   cookieParser(),
 );
@@ -105,6 +116,7 @@ app.post("/api/auth/logout", checkOrigin, async (req, res) => {
   res.clearCookie("sc_session");
   res.json({ ok: true });
 });
+app.use(mediaRouter);
 app.use("/api/admin", adminRouter);
 app.use("/api/public", publicRouter);
 app.use("/api/webhooks", webhookRouter);
@@ -155,6 +167,12 @@ app.use(
     res: express.Response,
     _next: express.NextFunction,
   ) => {
+    if ((error as { type?: string })?.type === "entity.too.large") {
+      res
+        .status(413)
+        .json({ error: "Request too large. Image uploads allow up to 4 MiB." });
+      return;
+    }
     if (error instanceof z.ZodError) {
       res.status(400).json({
         error: error.issues

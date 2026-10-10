@@ -304,9 +304,12 @@ function Landing({ preview }: { preview: boolean }) {
           Preview · Try the quiz and channel choices. Submissions are disabled.
         </div>
       )}
-      <PublicHeader />
+      <PublicHeader logoImage={config.logoImage} />
       <main className="landing-layout">
         <div className="landing-story">
+          {config.heroImage && config.heroPosition === "before_title" && (
+            <LandingPhoto image={config.heroImage} />
+          )}
           <div className="landing-eyebrow">
             <span />
             {config.eyebrow}
@@ -335,46 +338,45 @@ function Landing({ preview }: { preview: boolean }) {
               <ArrowRight size={16} />
             </a>
           )}
-          {config.heroImage ? (
-            <figure className="landing-photo">
-              <img
-                src={config.heroImage.src}
-                alt={config.heroImage.alt}
-                width={1200}
-                height={800}
-                fetchPriority="high"
-                decoding="async"
-              />
-            </figure>
-          ) : (
-            config.showIllustration !== false && (
-              <div className="landing-illustration" aria-hidden="true">
-                <div className="illustration-orbit" />
-                <div className="float-card back">
-                  <span className="circle-icon">
-                    <Wallet size={22} />
-                  </span>
-                  <div>
-                    <span className="art-line long" />
-                    <span className="art-line" />
+          {config.heroImage
+            ? config.heroPosition !== "before_title" && (
+                <LandingPhoto image={config.heroImage} />
+              )
+            : config.showIllustration !== false && (
+                <div className="landing-illustration" aria-hidden="true">
+                  <div className="illustration-orbit" />
+                  <div className="float-card back">
+                    <span className="circle-icon">
+                      <Wallet size={22} />
+                    </span>
+                    <div>
+                      <span className="art-line long" />
+                      <span className="art-line" />
+                    </div>
                   </div>
+                  <div className="float-card front">
+                    <span className="circle-icon mint">
+                      <Leaf size={21} />
+                    </span>
+                    <b>A little breathing room.</b>
+                    <span className="art-check">
+                      <Check size={14} />
+                    </span>
+                  </div>
+                  <span className="art-spark">✦</span>
                 </div>
-                <div className="float-card front">
-                  <span className="circle-icon mint">
-                    <Leaf size={21} />
-                  </span>
-                  <b>A little breathing room.</b>
-                  <span className="art-check">
-                    <Check size={14} />
-                  </span>
-                </div>
-                <span className="art-spark">✦</span>
-              </div>
-            )
-          )}
+              )}
           {(config.sections ?? []).map(
-            (section: { heading: string; body: string }, index: number) => (
+            (
+              section: {
+                heading: string;
+                body: string;
+                image?: { src: string; alt: string };
+              },
+              index: number,
+            ) => (
               <section className="landing-section" key={index}>
+                {section.image && <LandingPhoto image={section.image} lazy />}
                 <h2>{section.heading}</h2>
                 <p>{section.body}</p>
               </section>
@@ -781,11 +783,42 @@ function Landing({ preview }: { preview: boolean }) {
     </div>
   );
 }
-function PublicHeader() {
+function LandingPhoto({
+  image,
+  lazy = false,
+}: {
+  image: { src: string; alt: string };
+  lazy?: boolean;
+}) {
+  return (
+    <figure className="landing-photo">
+      <img
+        src={image.src}
+        alt={image.alt}
+        loading={lazy ? "lazy" : "eager"}
+        fetchPriority={lazy ? "auto" : "high"}
+        decoding="async"
+      />
+    </figure>
+  );
+}
+function PublicHeader({
+  logoImage,
+}: { logoImage?: { src: string; alt: string } } = {}) {
   return (
     <header className="public-header">
       <a className="public-brand" href="/">
-        <span className="brand-logo">S</span>sparecash<span>.</span>
+        {logoImage ? (
+          <img
+            className="landing-logo"
+            src={logoImage.src}
+            alt={logoImage.alt}
+          />
+        ) : (
+          <>
+            <span className="brand-logo">S</span>sparecash<span>.</span>
+          </>
+        )}
       </a>
       <span>
         <LockKeyhole size={13} />

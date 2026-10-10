@@ -26,6 +26,7 @@ Available tools:
 - `dashboard`, `integration_status`, `audit_log`
 - `list_leads`, `get_lead`, `set_lead_timezone`, `update_lead_notes`, `record_decline`, `unsubscribe`
 - `save_experiment`, `experiment_results`
+- `list_landing_images`, `list_landing_assets`, `create_landing_asset_upload`, `upload_landing_asset`
 - `save_chain`, `enroll_existing`, `list_deliveries`
 - `list_sources`, `block_source`
 - `get_settings`, `save_settings`, `run_worker`
@@ -96,11 +97,48 @@ Reports paginate grouped results, with complete totals for the selected cohort. 
 
 ### Design and qualification
 
-`list_landing_images` returns the bundled photo library. Set `heroImage: {src, alt}` in a variant to show an image in every layout and on mobile. Sources must be app-hosted files in `/landing-assets/` (JPG, PNG or WebP); external URLs, data URLs and HTML are rejected. Images ship with the application and do not require a persistent upload volume. Without `heroImage`, the existing illustration settings still apply.
+The connected AI can generate original hero illustrations, photographs, logos and section images using its own image-generation tool. SpareCash provides storage and publishing tools, not an image-generation model or API key.
+
+1. Generate the artwork in the AI client and save the PNG, JPEG or WebP locally. For logos, use a transparent background and include the complete wordmark if desired: `logoImage` replaces the entire default header logo.
+2. Call `create_landing_asset_upload` with `{name, alt, kind}`. Kind is `HERO`, `LOGO` or `SECTION`. Use the returned one-use `uploadUrl` and headers to POST the local file bytes within 20 minutes. The upload response returns `src`, `alt`, dimensions and a public URL. Do not send the full MCP token to that URL; use its limited upload credential.
+3. Alternatively, call `upload_landing_asset` with `{name, alt, kind, base64}` for a client that can send base64 directly. Use canonical base64 with no data-URL prefix or whitespace. For large local files the upload URL avoids passing file contents through the model context.
+4. Call `save_experiment` with the returned `{src, alt}` as `config.heroImage`, `config.logoImage`, or `config.sections[i].image`. Set `heroPosition` to `before_title` for an image above the headline, or `after_copy` (default). Preview before publishing. Duplicate a variant that already has traffic to introduce new artwork.
+
+Example image fields inside a variant config (replace the paths with actual upload responses):
+
+```json
+{
+  "heroImage": {
+    "src": "/media/landing/RETURNED_ID.webp",
+    "alt": "An original illustration of planning household expenses"
+  },
+  "heroPosition": "before_title",
+  "logoImage": {
+    "src": "/media/landing/RETURNED_LOGO_ID.webp",
+    "alt": "SpareCash"
+  },
+  "sections": [
+    {
+      "heading": "Plan your next step",
+      "body": "Compare your options at your own pace.",
+      "image": {
+        "src": "/media/landing/RETURNED_SECTION_ID.webp",
+        "alt": "An illustrated planning notebook"
+      }
+    }
+  ]
+}
+```
+
+`list_landing_assets` searches uploads by name (`q`) or `kind`, returning 50 metadata records per page plus the bundled library. `list_landing_images` remains the three bundled photos for compatibility. The visual landing editor also supports uploading, searching and selecting these images.
+
+Uploads accept non-animated PNG, JPEG and WebP, up to 4 MiB and 25 megapixels. The server validates and re-encodes images to WebP at up to 2048 pixels, strips metadata and preserves transparency (lossless encoding for logos). Files and metadata live in PostgreSQL and survive redeploys; no application storage volume, object-storage account or new environment variable is needed. Include the asset tables in database backups. Images are publicly readable by their URL, so only upload marketing artwork. SVG, HTML, arbitrary external URLs and data URLs cannot be used in a landing.
+
+Assets are immutable and identical uploads of the same kind reuse an existing asset. Reusing an image preserves its original library name and description; the `alt` field on each landing can be customized. There is no delete or replace-in-place tool, so historical variants and visitor snapshots keep their original artwork. Uploading alone does not attach an image or change a live landing. Sources must exist in the uploaded library before a landing can reference them. Without `heroImage` or `logoImage`, existing illustration and brand defaults apply.
 
 Set `offerFirst: true` to show the loan application as the primary action after any quiz questions, with channel subscriptions optional and collapsed. The default remains `false` for existing experiments. A direct-versus-quiz experiment can keep all copy and imagery identical and vary only `questions: []` versus two preference questions. Preview submissions remain disabled. Quiz answers are saved only when a visitor submits the optional subscription form; continuation alone does not save answers.
 
-`save_experiment` supports three layouts (`split`, `centered`, `editorial`), `sans`/`serif` typography, an optional six-digit hex `accentColor`, illustration visibility, up to five `benefits`, up to five story `sections` (`heading`, `body`), and custom form heading/introduction. The visual editor supports the same fields. Arbitrary HTML, JavaScript and unrestricted page graphs are not supported.
+`save_experiment` supports three layouts (`split`, `centered`, `editorial`), `sans`/`serif` typography, an optional six-digit hex `accentColor`, illustration visibility, up to five `benefits`, up to five story `sections` (`heading`, `body`, optional `image`), and custom form heading/introduction. The visual editor supports the same fields. Arbitrary HTML, JavaScript and unrestricted page graphs are not supported.
 
 Quiz questions may include `showWhen: {questionId: "timing", equals: "Now"}`. Conditions must refer to an earlier question and one of its valid answer options. Hidden branches are skipped and hidden answers are excluded from the saved lead. The server validates the same visible path. This allows preference qualification and segmentation while keeping consent optional and the loan application on RoundSky.
 
@@ -110,6 +148,6 @@ A variant that has received traffic cannot have its copy, design or quiz overwri
 
 ### Example instruction for your connected AI
 
-> Act as my SpareCash affiliate marketing operator. Start with marketing_context and inspect integration and worker health. Compare mature cohorts by source, landing and source × landing, then review each follow-up message's clicks, applications, sold leads and commission. Read submitted quiz segments to improve qualification. Treat unknown spend as unknown and preserve a control when testing. Create distinct design and message versions instead of overwriting historical content. Respect my publishing instructions and existing live-mode settings. Exclude bot zones only when the configured evidence rules allow it; do not call low-converting visitors bots or assume missing postbacks mean declined. Record what you measured, what you changed, why, and when to review it again. Report unsupported actions such as bid changes, automatic spend sync or randomized chain tests explicitly.
+> Act as my SpareCash affiliate marketing operator. Start with marketing_context and inspect integration and worker health. Compare mature cohorts by source, landing and source × landing, then review each follow-up message's clicks, applications, sold leads and commission. Read submitted quiz segments to improve qualification. Treat unknown spend as unknown and preserve a control when testing. Create distinct design and message versions instead of overwriting historical content. Generate original artwork with your image tool, upload it through create_landing_asset_upload, and attach it to heroImage, logoImage or section images before previewing. Respect my publishing instructions and existing live-mode settings. Exclude bot zones only when the configured evidence rules allow it; do not call low-converting visitors bots or assume missing postbacks mean declined. Record what you measured, what you changed, why, and when to review it again. Report unsupported actions such as bid changes, automatic spend sync or randomized chain tests explicitly.
 
 For recurring optimization, configure a recurring task in the AI client that can connect to this MCP and supply the owner's chosen publishing authority. `record_marketing_review.nextReviewAt` is a recorded plan, not an executable schedule. The separate PropellerAds MCP/API is needed for advertiser bid/budget management and advertiser-side reports. SpareCash's existing source exclusion adapter continues to support guarded bot-source blocking.

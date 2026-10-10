@@ -29,6 +29,8 @@ import { sources, blockSource } from "../server/services/traffic";
 import { tick } from "../server/services/engine";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import sharp from "sharp";
+import { randomBytes } from "node:crypto";
 let server: Server,
   base: string,
   cookie: string,
@@ -2333,3 +2335,229 @@ it("lets an authenticated MCP marketer inspect results, author designs and safel
     await client.close();
   }
 });
+
+it("uploads and reuses original artwork through authenticated MCP, serves immutable images and protects one-use file uploads", async () => {
+  const client = new Client({ name: "artwork-client", version: "1.0" });
+  await client.connect(
+    new StreamableHTTPClientTransport(new URL(`${base}/mcp`), {
+      requestInit: { headers: { Authorization: `Bearer ${env.MCP_TOKEN}` } },
+    }),
+  );
+  const call = async (name: string, args: Record<string, unknown> = {}) => {
+    const result = await client.callTool({ name, arguments: args });
+    expect(result.isError, JSON.stringify(result)).not.toBe(true);
+    return JSON.parse((result.content as { text: string }[])[0].text);
+  };
+  try {
+    const png = await sharp(randomBytes(360 * 360 * 3), {
+      raw: { width: 360, height: 360, channels: 3 },
+    })
+      .png()
+      .toBuffer();
+    expect(png.length).toBeGreaterThan(256 * 1024);
+    const args = {
+      name: "Original campaign artwork",
+      alt: "Colorful original campaign illustration",
+      kind: "HERO",
+      base64: png.toString("base64"),
+    };
+    const asset = await call("upload_landing_asset", args);
+    expect(asset).toMatchObject({
+      width: 360,
+      height: 360,
+      mimeType: "image/webp",
+    });
+    expect(asset.src).toMatch(/^\/media\/landing\/[a-z0-9]+\.webp$/);
+    expect(asset.data).toBeUndefined();
+    expect(asset.base64).toBeUndefined();
+    expect((await call("upload_landing_asset", args)).id).toBe(asset.id);
+    expect(await db.landingAsset.count({ where: { id: asset.id } })).toBe(1);
+    const served = await originalFetch(base + asset.src);
+    expect(served.status).toBe(200);
+    expect(served.headers.get("content-type")).toContain("image/webp");
+    expect(served.headers.get("cache-control")).toContain("immutable");
+    expect(
+      (await sharp(Buffer.from(await served.arrayBuffer())).metadata()).format,
+    ).toBe("webp");
+    expect(
+      (
+        await originalFetch(base + asset.src, {
+          cache: "force-cache",
+          headers: { "If-None-Match": served.headers.get("etag")! },
+        })
+      ).status,
+    ).toBe(304);
+    expect(
+      (
+        await originalFetch(
+          base + "/media/landing/cmissing00000000000000000.webp",
+        )
+      ).status,
+    ).toBe(404);
+    const library = await call("list_landing_assets", {
+      q: "Original campaign",
+    });
+    expect(library.items.map((a: any) => a.id)).toContain(asset.id);
+    expect(library.items[0].data).toBeUndefined();
+    expect(library.bundled).toHaveLength(3);
+    const denied = await request("/mcp", "POST", { large: args.base64 });
+    expect(denied.status).toBe(401);
+    expect(
+      (await request("/api/admin/landing-assets", "POST", args)).status,
+    ).toBe(401);
+    expect(
+      (
+        await request("/api/admin/landing-assets", "POST", args, true, {
+          Origin: "https://evil.example",
+        })
+      ).status,
+    ).toBe(403);
+    expect(
+      (await request("/api/admin/landing-assets", "POST", args, true)).data.id,
+    ).toBe(asset.id);
+    expect(
+      (
+        await client.callTool({
+          name: "upload_landing_asset",
+          arguments: {
+            ...args,
+            base64: Buffer.from("<svg/>").toString("base64"),
+          },
+        })
+      ).isError,
+    ).toBe(true);
+    expect(
+      (
+        await client.callTool({
+          name: "upload_landing_asset",
+          arguments: { ...args, base64: "a===" },
+        })
+      ).isError,
+    ).toBe(true);
+
+    const ticket = await call("create_landing_asset_upload", {
+      name: "Transparent logo",
+      alt: "Custom SpareCash logo",
+      kind: "LOGO",
+    });
+    const path = new URL(ticket.uploadUrl).pathname;
+    const logo = await sharp({
+      create: {
+        width: 400,
+        height: 100,
+        channels: 4,
+        background: { r: 10, g: 80, b: 70, alpha: 0.4 },
+      },
+    })
+      .png()
+      .toBuffer();
+    const send = (headers: Record<string, string>) =>
+      originalFetch(base + path, {
+        method: "POST",
+        headers,
+        body: new Uint8Array(logo),
+      });
+    expect(
+      (await send({ "Content-Type": "application/octet-stream" })).status,
+    ).toBe(401);
+    const uploaded = await send(ticket.headers);
+    expect(uploaded.status).toBe(201);
+    const logoAsset = await uploaded.json();
+    const publicLogo = await originalFetch(base + logoAsset.src);
+    expect(
+      (await sharp(Buffer.from(await publicLogo.arrayBuffer())).metadata())
+        .hasAlpha,
+    ).toBe(true);
+    expect((await send(ticket.headers)).status).toBe(401);
+    const expired = await call("create_landing_asset_upload", {
+      name: "Expired",
+      alt: "Expired artwork",
+      kind: "HERO",
+    });
+    await db.landingAssetUpload.update({
+      where: { id: new URL(expired.uploadUrl).pathname.split("/").pop()! },
+      data: { expiresAt: new Date(0) },
+    });
+    expect(
+      (
+        await originalFetch(base + new URL(expired.uploadUrl).pathname, {
+          method: "POST",
+          headers: expired.headers,
+          body: new Uint8Array(logo),
+        })
+      ).status,
+    ).toBe(401);
+    const oversize = await call("create_landing_asset_upload", {
+      name: "Too big",
+      alt: "Large artwork",
+    });
+    expect(
+      (
+        await originalFetch(base + new URL(oversize.uploadUrl).pathname, {
+          method: "POST",
+          headers: oversize.headers,
+          body: new Uint8Array(4 * 1024 * 1024 + 1),
+        })
+      ).status,
+    ).toBe(413);
+
+    const definition = {
+      name: "Original imagery",
+      slug: "original-imagery",
+      variants: [
+        {
+          name: "Original art",
+          weight: 100,
+          config: {
+            title: "Your next step",
+            description:
+              "Explore your options with an original illustrated guide.",
+            heroImage: { src: asset.src, alt: asset.alt },
+            logoImage: { src: logoAsset.src, alt: logoAsset.alt },
+            heroPosition: "before_title",
+            sections: [
+              {
+                heading: "A closer look",
+                body: "More details about the available options.",
+                image: { src: asset.src, alt: asset.alt },
+              },
+            ],
+          },
+        },
+      ],
+    };
+    const exp = await call("save_experiment", { experiment: definition });
+    expect(exp.variants[0].config.logoImage.src).toBe(logoAsset.src);
+    const preview = await request(
+      `/api/admin/experiments/${exp.id}`,
+      "GET",
+      undefined,
+      true,
+    );
+    expect(preview.status).toBe(200);
+    expect(preview.data.variants[0].config.heroPosition).toBe("before_title");
+    const broken = structuredClone(definition);
+    broken.slug = "missing-imagery";
+    broken.variants[0].config.heroImage.src =
+      "/media/landing/cmissing00000000000000000.webp";
+    expect(
+      (
+        await client.callTool({
+          name: "save_experiment",
+          arguments: { experiment: broken },
+        })
+      ).isError,
+    ).toBe(true);
+    expect(
+      await db.experiment.count({ where: { slug: "missing-imagery" } }),
+    ).toBe(0);
+    const audit = await db.auditLog.findMany({
+      where: { action: "landing_asset.uploaded" },
+    });
+    expect(audit.length).toBeGreaterThan(0);
+    expect(JSON.stringify(audit)).not.toContain(args.base64);
+    expect(JSON.stringify(audit)).not.toContain(ticket.headers.Authorization);
+  } finally {
+    await client.close();
+  }
+}, 20000);

@@ -66,6 +66,34 @@ export async function saveSettings(
 export async function saveExperiment(input: unknown, actor: string) {
   const data = experimentSchema.parse(input);
   const result = await db.$transaction(async (tx) => {
+    const assetIds = [
+      ...new Set(
+        data.variants.flatMap(({ config }) =>
+          [
+            config.heroImage,
+            config.logoImage,
+            ...config.sections.map((s) => s.image),
+          ].flatMap((image) =>
+            image?.src.startsWith("/media/landing/")
+              ? [
+                  image.src
+                    .split("/")
+                    .pop()!
+                    .replace(/\.webp$/, ""),
+                ]
+              : [],
+          ),
+        ),
+      ),
+    ];
+    if (
+      assetIds.length &&
+      (await tx.landingAsset.count({ where: { id: { in: assetIds } } })) !==
+        assetIds.length
+    )
+      throw new Error(
+        "An image is missing from the media library. Upload it before saving the landing.",
+      );
     const existing = data.id
       ? await tx.experiment.findUniqueOrThrow({
           where: { id: data.id },

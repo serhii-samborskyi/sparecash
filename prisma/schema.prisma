@@ -57,6 +57,35 @@ enum DeliveryStatus {
   CANCELLED
 }
 
+model LandingAsset {
+  id        String   @id @default(cuid())
+  name      String
+  alt       String
+  kind      String
+  sha256    String   @unique
+  mimeType  String   @default("image/webp")
+  width     Int
+  height    Int
+  byteSize  Int
+  data      Bytes
+  createdAt DateTime @default(now())
+
+  @@index([createdAt, id])
+}
+
+model LandingAssetUpload {
+  id        String   @id @default(cuid())
+  tokenHash String
+  name      String
+  alt       String
+  kind      String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([expiresAt])
+}
+
 model Experiment {
   id        String    @id @default(cuid())
   name      String

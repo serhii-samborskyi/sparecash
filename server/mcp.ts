@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, json } from "express";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
@@ -19,6 +19,14 @@ import { sources, blockSource } from "./services/traffic.js";
 import { tick } from "./services/engine.js";
 import { timezoneSchema } from "./timezones.js";
 import { landingImages } from "./landing-images.js";
+import {
+  assetDetailsSchema,
+  uploadAssetSchema,
+  listAssetsSchema,
+  createLandingAssetUpload,
+  uploadLandingAsset,
+  listLandingAssets,
+} from "./services/landing-assets.js";
 import {
   reportSchema,
   trafficReport,
@@ -351,7 +359,7 @@ function makeServer() {
   );
   register(
     "save_experiment",
-    "Create/edit landing pages and conditional quizzes. Customize layout (split/centered/editorial), typography, accentColor, heroImage (src and alt; use list_landing_images), benefits, sections, form copy and question showWhen rules. offerFirst makes the loan application the primary action with optional updates collapsed. Supply complete variants; omitted variants get zero traffic. Once a variant has visits, create a new variant to change content. ACTIVE publishes it.",
+    "Create/edit landing pages and conditional quizzes. Customize layout (split/centered/editorial), typography, accentColor, heroImage, logoImage, heroPosition (before_title/after_copy), benefits, sections (heading/body/optional image), form copy and question showWhen rules. Images use {src, alt} from list_landing_assets or list_landing_images. Generate distinct artwork with your image tool and upload it first. offerFirst makes the application primary. Supply complete variants; omitted variants get zero traffic. Once a variant has visits, create a new variant to change content. ACTIVE publishes it.",
     { experiment: experimentSchema },
     async ({ experiment }) => saveExperiment(experiment, "mcp"),
   );
@@ -361,6 +369,25 @@ function makeServer() {
     {},
     async () => landingImages,
     true,
+  );
+  register(
+    "list_landing_assets",
+    "Search the uploaded image/logo library by name or kind (HERO/LOGO/SECTION), 50 per page. Returns metadata, reusable src/alt, dimensions and bundled images; never returns file bytes. Uploaded assets survive redeploys in PostgreSQL.",
+    listAssetsSchema.shape,
+    listLandingAssets,
+    true,
+  );
+  register(
+    "create_landing_asset_upload",
+    "Preferred upload for AI-generated local artwork: returns a one-use 20-minute URL and headers. POST file bytes from your local file tool (max 4 MiB PNG/JPEG/WebP). Response contains src/alt to attach using save_experiment. Generate the image with your own image tool first; this server does not generate images. Uploaded artwork is publicly accessible by URL; use only public marketing assets.",
+    assetDetailsSchema.shape,
+    createLandingAssetUpload,
+  );
+  register(
+    "upload_landing_asset",
+    "Upload a PNG/JPEG/WebP as canonical base64 (no data URL prefix), max 4 MiB decoded. For local files prefer create_landing_asset_upload to avoid large tool arguments. Validates/optimizes to WebP, preserves logo transparency, stores in PostgreSQL, returns immutable src/alt for heroImage, logoImage or sections[].image. Does not generate artwork or publish a landing.",
+    uploadAssetSchema.shape,
+    async (input) => uploadLandingAsset(input, "mcp"),
   );
   register(
     "experiment_results",
@@ -464,7 +491,7 @@ function makeServer() {
   return server;
 }
 export const mcpRouter = Router();
-mcpRouter.use(requireMcp);
+mcpRouter.use(requireMcp, json({ limit: "6mb" }));
 mcpRouter.post("/", async (req, res) => {
   const server = makeServer();
   const transport = new StreamableHTTPServerTransport({

@@ -13,7 +13,11 @@ import {
   saveRuntimeSettings,
   revealRuntimeSecret,
 } from "../runtime-config.js";
-import { Router } from "express";
+import { Router, json } from "express";
+import {
+  listLandingAssets,
+  uploadLandingAsset,
+} from "../services/landing-assets.js";
 import { z } from "zod";
 import { db } from "../db.js";
 import { requireAdmin, checkOrigin } from "../security.js";
@@ -35,6 +39,19 @@ import {
 } from "../services/journeys.js";
 export const adminRouter = Router();
 adminRouter.use(requireAdmin, checkOrigin);
+adminRouter.get("/landing-assets", async (req, res) => {
+  res.set("Cache-Control", "no-store").json(await listLandingAssets(req.query));
+});
+adminRouter.post(
+  "/landing-assets",
+  json({ limit: "6mb" }),
+  async (req, res) => {
+    res
+      .status(201)
+      .set("Cache-Control", "no-store")
+      .json(await uploadLandingAsset(req.body, "owner"));
+  },
+);
 adminRouter.get("/configuration", async (_req, res) => {
   res.set("Cache-Control", "no-store").json(await runtimeSettingsView());
 });

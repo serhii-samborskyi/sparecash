@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { Plus, Trash2, Copy, ArrowDown } from "lucide-react";
 import { Field, Spinner } from "./ui";
 import { post } from "../api";
 import { landingSchema } from "../../server/domain";
-import { landingImages } from "../../server/landing-images";
+import { LandingAssetPicker } from "./landing-asset-picker";
 export const defaultLanding = () =>
   landingSchema.parse({
     title: "A little more room for what matters.",
@@ -65,6 +65,11 @@ export function ExperimentEditor({
   const [selected, setSelected] = useState(0),
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
+  const [activeUploads, setActiveUploads] = useState(0);
+  const uploadChanged = useCallback(
+    (delta: number) => setActiveUploads((count) => Math.max(0, count + delta)),
+    [],
+  );
   const v = form.variants[selected];
   const set = (key: string, value: any) => setForm({ ...form, [key]: value });
   const variant = (key: string, value: any) =>
@@ -75,9 +80,20 @@ export function ExperimentEditor({
       ),
     );
   const config = (key: string, value: any) =>
-    variant("config", { ...v.config, [key]: value });
+    setForm((current: any) => ({
+      ...current,
+      variants: current.variants.map((item: any, index: number) =>
+        index === selected
+          ? { ...item, config: { ...item.config, [key]: value } }
+          : item,
+      ),
+    }));
   async function save(e: React.FormEvent) {
     e.preventDefault();
+    if (activeUploads) {
+      setError("Wait for the image upload to finish before saving.");
+      return;
+    }
     setBusy(true);
     setError("");
     try {
@@ -290,55 +306,33 @@ export function ExperimentEditor({
               }
             />
           </Field>
-          <Field
-            label="Landing picture"
-            hint="Visible on desktop and mobile. Replaces the decorative illustration."
-          >
+          <div className="asset-picker-row">
+            <LandingAssetPicker
+              key={`hero-${selected}`}
+              label="Landing picture"
+              onUploadChange={uploadChanged}
+              kind="HERO"
+              value={v.config.heroImage}
+              onChange={(image) => config("heroImage", image)}
+            />
+            <LandingAssetPicker
+              key={`logo-${selected}`}
+              label="Logo"
+              onUploadChange={uploadChanged}
+              kind="LOGO"
+              value={v.config.logoImage}
+              onChange={(image) => config("logoImage", image)}
+            />
+          </div>
+          <Field label="Picture placement">
             <select
-              value={v.config.heroImage?.src ?? ""}
-              onChange={(e) => {
-                const image = landingImages.find(
-                  (item) => item.src === e.target.value,
-                );
-                config(
-                  "heroImage",
-                  image ? { src: image.src, alt: image.alt } : undefined,
-                );
-              }}
+              value={v.config.heroPosition}
+              onChange={(e) => config("heroPosition", e.target.value)}
             >
-              <option value="">No custom picture</option>
-              {v.config.heroImage &&
-                !landingImages.some(
-                  (item) => item.src === v.config.heroImage.src,
-                ) && (
-                  <option value={v.config.heroImage.src}>
-                    Current picture
-                  </option>
-                )}
-              {landingImages.map((image) => (
-                <option key={image.src} value={image.src}>
-                  {image.name}
-                </option>
-              ))}
+              <option value="after_copy">After the introduction</option>
+              <option value="before_title">Above the headline</option>
             </select>
           </Field>
-          {v.config.heroImage && (
-            <Field
-              label="Picture description"
-              hint="Describe the image for visitors using a screen reader."
-            >
-              <input
-                maxLength={240}
-                value={v.config.heroImage.alt}
-                onChange={(e) =>
-                  config("heroImage", {
-                    ...v.config.heroImage,
-                    alt: e.target.value,
-                  })
-                }
-              />
-            </Field>
-          )}
           <Field label="Primary action">
             <select
               value={String(v.config.offerFirst)}
@@ -430,6 +424,21 @@ export function ExperimentEditor({
                 }
               />
             </Field>
+            <LandingAssetPicker
+              key={`section-${selected}-${i}`}
+              label="Section image"
+              onUploadChange={uploadChanged}
+              kind="SECTION"
+              value={section.image}
+              onChange={(image) =>
+                config(
+                  "sections",
+                  v.config.sections.map((s: any, j: number) =>
+                    j === i ? { ...s, image } : s,
+                  ),
+                )
+              }
+            />
             <button
               type="button"
               className="text-button danger"
@@ -618,8 +627,12 @@ export function ExperimentEditor({
         )}
       </div>
       <div className="modal-footer">
-        <p>Changes are saved to this experiment.</p>
-        <button className="button" disabled={busy}>
+        <p role="status">
+          {activeUploads
+            ? "Finishing image uploads…"
+            : "Changes are saved to this experiment."}
+        </p>
+        <button className="button" disabled={busy || activeUploads > 0}>
           {busy ? <Spinner /> : null}Save experiment
         </button>
       </div>

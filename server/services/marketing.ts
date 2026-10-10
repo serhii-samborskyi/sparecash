@@ -706,7 +706,7 @@ export async function marketingContext() {
       "Read followup_report by chain and step; inspect content using get_chain. Optimize actual attributed applications, sold leads and commission alongside clicks, failures and uncertain sends.",
       "Use traffic_report answer filters and quiz_answer_report to compare submitted quiz segments. These describe campaign preferences, not lender eligibility or approval.",
       "Use list_traffic_visits and record_visit_costs to import verified USD click costs from advertiser reporting. Unknown costs mean unknown return on spend, not free traffic. Never invent cost data.",
-      "Create fresh variants using save_experiment; customize layout, typography, accentColor, heroImage from list_landing_images, benefits, sections and conditional questions. Set offerFirst for a primary application path with optional updates. Read get_experiment for preview and live URLs. Test the funnel before set_experiment_status ACTIVE.",
+      "Create fresh variants using save_experiment; customize layout, typography, accentColor, heroImage, logoImage, heroPosition, benefits, illustrated sections and conditional questions. Use your image-generation tool for original visuals, then create_landing_asset_upload and POST the local file bytes with the returned headers, or upload_landing_asset for base64. Reuse artwork with list_landing_assets; list_landing_images offers bundled alternatives. Set offerFirst for a primary application path with optional updates. Read get_experiment for preview and live URLs. Test the funnel before set_experiment_status ACTIVE.",
       "Record the hypothesis and reason when changing allocation/status. Preserve a control and exploration traffic unless the owner directs otherwise. Sample thresholds are not significance guarantees; no postback does not mean declined.",
       "Use set_experiment_allocation with the latest updatedAt to adjust weights. Existing visitors keep their assigned variant; new allocation governs new assignments. Create new message chains to change enrolled content; pause failing chains using set_chain_status.",
       "Block bot sources with block_source only when configured evidence rules allow it. Poor conversion alone is not bot evidence. Bid/budget and profitability exclusions require the advertiser's separate API/MCP.",
@@ -717,6 +717,7 @@ export async function marketingContext() {
       "The built-in worker runs approved chains and bot rules; enabling it does not schedule AI analysis.",
       "Native RoundSky callbacks report SOLD and commission. APPROVED/FUNDED require separate verified events.",
       "Layouts and content are configurable; arbitrary HTML/JavaScript and unrestricted funnel graphs are not supported.",
+      "Image generation requires the connected AI client's own image tool. SpareCash hosts public marketing artwork in PostgreSQL without a persistent upload volume: PNG/JPEG/WebP up to 4 MiB and 25 megapixels, optimized to WebP at up to 2048 pixels. Assets are immutable; new artwork needs a new asset. Do not upload private documents.",
       "Chains are workspace-wide per channel and trigger; randomized sequence tests, automatic bid changes and automatic spend sync are not implemented.",
     ],
   };

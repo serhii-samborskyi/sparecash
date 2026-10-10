@@ -19,6 +19,15 @@ export const questionSchema = z.object({
   options: z.array(z.string().min(1).max(100)).min(2).max(8),
   showWhen: z.object({ questionId: z.string(), equals: z.string() }).optional(),
 });
+export const landingImageSchema = z.object({
+  src: z
+    .string()
+    .regex(
+      /^(?:\/landing-assets\/[a-z0-9][a-z0-9-]*\.(?:jpg|jpeg|png|webp)|\/media\/landing\/[a-z0-9]{20,40}\.webp)$/,
+      "Choose a bundled image or upload an image to the media library",
+    ),
+  alt: z.string().trim().min(3).max(240),
+});
 export const landingSchema = z
   .object({
     eyebrow: z.string().max(80).default("A little breathing room"),
@@ -33,17 +42,9 @@ export const landingSchema = z
       .regex(/^#[0-9a-fA-F]{6}$/)
       .optional(),
     showIllustration: z.boolean().default(true),
-    heroImage: z
-      .object({
-        src: z
-          .string()
-          .regex(
-            /^\/landing-assets\/[a-z0-9][a-z0-9-]*\.(?:jpg|jpeg|png|webp)$/,
-            "Use an image from /landing-assets/ on this app",
-          ),
-        alt: z.string().trim().min(3).max(240),
-      })
-      .optional(),
+    heroImage: landingImageSchema.optional(),
+    logoImage: landingImageSchema.optional(),
+    heroPosition: z.enum(["before_title", "after_copy"]).default("after_copy"),
     offerFirst: z.boolean().default(false),
     benefits: z
       .array(z.string().min(1).max(160))
@@ -58,6 +59,7 @@ export const landingSchema = z
         z.object({
           heading: z.string().min(1).max(100),
           body: z.string().min(1).max(800),
+          image: landingImageSchema.optional(),
         }),
       )
       .max(5)
