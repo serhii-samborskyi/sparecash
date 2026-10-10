@@ -1972,6 +1972,8 @@ summary {
 .channel-choices b {
   font-size: 12px;
   font-weight: 600;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 .channel-choices small {
   font-size: 8px;
@@ -2046,14 +2048,34 @@ summary {
   align-items: center;
 }
 .skip-updates {
-  border: 0;
-  background: none;
-  color: #92a07f;
-  font-size: 10px;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-  display: block;
-  margin: 15px auto 0;
+  border: 1px solid var(--public);
+  border-radius: 9px;
+  background: #fff;
+  color: var(--public);
+  font-size: 12px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  width: 100%;
+  min-height: 44px;
+  padding: 12px 16px;
+  margin: 18px 0 0;
+}
+.opt-in-details {
+  border-top: 1px solid #e1e8d9;
+  padding-top: 18px;
+}
+.channel-choices button {
+  color: #52654e;
+  padding-inline: 7px;
+}
+.channel-choices small {
+  color: #63735c;
+}
+.opt-in-details .consent-check {
+  color: #52654e;
 }
 .public-footer {
   max-width: 1180px;

@@ -1,3 +1,4 @@
+import { engagementCounts } from "./engagement.js";
 import { Prisma } from "@prisma/client";
 import { db } from "../db.js";
 import {
@@ -341,7 +342,12 @@ export async function experimentResults(id: string) {
       const [visits, subs, postbacks] = await Promise.all([
         db.visit.findMany({
           where: { variantId: v.id },
-          select: { id: true, verified: true, cost: true },
+          select: {
+            id: true,
+            verified: true,
+            cost: true,
+            engagementEvents: { select: { kind: true } },
+          },
         }),
         db.subscription.count({
           where: { status: "ACTIVE", lead: { visit: { variantId: v.id } } },
@@ -367,6 +373,7 @@ export async function experimentResults(id: string) {
         visits: visits.length,
         verified: visits.filter((v) => v.verified).length,
         subscriptions: subs,
+        engagement: engagementCounts(visits),
         sold: converted("SOLD"),
         approved: converted("APPROVED"),
         funded: converted("FUNDED"),

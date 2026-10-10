@@ -24,6 +24,7 @@ import {
   followupReport,
   quizAnswerReport,
   recordVisitCosts,
+  engagementReport,
 } from "../server/services/marketing";
 import { sources, blockSource } from "../server/services/traffic";
 import { tick } from "../server/services/engine";
@@ -2193,6 +2194,7 @@ it("lets an authenticated MCP marketer inspect results, author designs and safel
       "traffic_report",
       "followup_report",
       "quiz_answer_report",
+      "engagement_report",
       "list_traffic_visits",
       "record_visit_costs",
       "get_experiment",
@@ -2561,3 +2563,212 @@ it("uploads and reuses original artwork through authenticated MCP, serves immuta
     await client.close();
   }
 }, 20000);
+
+it("records anonymous quiz engagement once per visit without subscribing or sending", async () => {
+  const config = landingSchema.parse({
+    title: "Engagement test",
+    description: "A two-question anonymous visitor flow.",
+    questions: [
+      { id: "amount", label: "Choose an amount", options: ["Small", "Large"] },
+      { id: "timing", label: "Choose a time", options: ["Now", "Later"] },
+    ],
+  });
+  const exp = await db.experiment.create({
+    data: {
+      name: "Anonymous engagement",
+      slug: "anonymous-engagement",
+      status: "ACTIVE",
+      variants: { create: { name: "Tracked", weight: 100, config } },
+    },
+    include: { variants: true },
+  });
+  const visit = await db.visit.create({
+    data: {
+      experimentId: exp.id,
+      variantId: exp.variants[0].id,
+      configSnapshot: config,
+      ipHash: "engagement-test",
+      userAgent: "test",
+      externalClickId: "click-engagement",
+    },
+  });
+  const signed = token("visit", visit.id, 300);
+  const before = providerCalls.length;
+  const send = (event: object, visitToken = signed) =>
+    request("/api/public/engagement", "POST", { visitToken, event });
+  expect((await send({ kind: "UPDATES_OPENED" }, "forged")).status).toBe(400);
+  expect(
+    (
+      await request(
+        "/api/public/engagement",
+        "POST",
+        { visitToken: signed, event: { kind: "UPDATES_OPENED" } },
+        false,
+        { Origin: "https://attacker.example" },
+      )
+    ).status,
+  ).toBe(403);
+  expect(
+    (
+      await send({
+        kind: "QUESTION_ANSWERED",
+        questionId: "amount",
+        answers: { amount: "Unknown" },
+      })
+    ).status,
+  ).toBe(400);
+  const first = {
+    kind: "QUESTION_ANSWERED",
+    questionId: "amount",
+    answers: { amount: "Small" },
+  };
+  const concurrentAnswers = await Promise.all(
+    Array.from({ length: 5 }, () => send(first)),
+  );
+  expect(concurrentAnswers.map((response) => response.status)).toEqual([
+    200, 200, 200, 200, 200,
+  ]);
+  expect(await db.visitEvent.count({ where: { visitId: visit.id } })).toBe(1);
+  // Editing the live variant cannot invalidate the configuration this visitor saw.
+  await db.variant.update({
+    where: { id: exp.variants[0].id },
+    data: { config: { ...config, questions: [] } },
+  });
+  expect(
+    (
+      await send({
+        kind: "QUESTION_ANSWERED",
+        questionId: "timing",
+        answers: { amount: "Small", timing: "Later" },
+      })
+    ).status,
+  ).toBe(200);
+  expect((await send({ kind: "UPDATES_OPENED" })).status).toBe(200);
+  expect((await send({ kind: "UPDATES_OPENED" })).status).toBe(200);
+  expect(await db.visitEvent.count({ where: { visitId: visit.id } })).toBe(4);
+  expect(await db.lead.count({ where: { visitId: visit.id } })).toBe(0);
+  expect(
+    (await db.visit.findUniqueOrThrow({ where: { id: visit.id } })).verified,
+  ).toBe(false);
+  expect(providerCalls.length).toBe(before);
+  const direct = await request("/api/public/continue", "POST", {
+    visitToken: signed,
+  });
+  expect(direct.status).toBe(200);
+  expect(
+    await db.visitEvent.count({
+      where: { visitId: visit.id, kind: "CONTINUE_WITHOUT_UPDATES" },
+    }),
+  ).toBe(0);
+  for (let i = 0; i < 2; i++)
+    expect(
+      (
+        await request("/api/public/continue", "POST", {
+          visitToken: signed,
+          entryPoint: "optional_updates",
+        })
+      ).status,
+    ).toBe(200);
+  expect(
+    await db.visitEvent.count({
+      where: { visitId: visit.id, kind: "CONTINUE_WITHOUT_UPDATES" },
+    }),
+  ).toBe(1);
+  const report = await engagementReport({
+    experimentId: exp.id,
+    minimumAgeHours: 0,
+  });
+  expect(report.rows[0]).toMatchObject({
+    visits: 1,
+    quizStartedVisitors: 1,
+    quizCompletedVisitors: 1,
+    updatesOpenedVisitors: 1,
+    continuedWithoutUpdatesVisitors: 1,
+    confirmedOptInVisitors: 0,
+    applicationVisitors: 1,
+  });
+  expect(report.rows[0].questions).toEqual([
+    { questionId: "amount", answeredVisitors: 1 },
+    { questionId: "timing", answeredVisitors: 1 },
+  ]);
+  expect(
+    (await request(`/api/admin/experiments/${exp.id}/engagement`)).status,
+  ).toBe(401);
+  expect(
+    (
+      await request(
+        `/api/admin/experiments/${exp.id}/engagement`,
+        "GET",
+        undefined,
+        true,
+      )
+    ).data.totalVisits,
+  ).toBe(1);
+  const summary = await request(
+    `/api/admin/experiments/${exp.id}`,
+    "GET",
+    undefined,
+    true,
+  );
+  expect(
+    summary.data.variants[0].engagement.continuedWithoutUpdatesVisitors,
+  ).toBe(1);
+});
+
+it("allows an omitted first name but still requires channel consent and adulthood", async () => {
+  const config = landingSchema.parse({
+    title: "Optional name",
+    description: "Subscribe without providing a first name.",
+  });
+  const exp = await db.experiment.create({
+    data: {
+      name: "Optional name",
+      slug: "optional-name",
+      status: "ACTIVE",
+      variants: { create: { name: "Optional", weight: 100, config } },
+    },
+    include: { variants: true },
+  });
+  const visit = await db.visit.create({
+    data: {
+      experimentId: exp.id,
+      variantId: exp.variants[0].id,
+      configSnapshot: config,
+      ipHash: "optional-name",
+      userAgent: "test",
+    },
+  });
+  const payload = {
+    visitToken: token("visit", visit.id, 300),
+    turnstileToken: "test",
+    channels: ["PUSH"],
+    answers: {},
+    adultUS: true,
+    consent: true,
+  };
+  expect(
+    (
+      await request("/api/public/subscribe", "POST", {
+        ...payload,
+        consent: false,
+      })
+    ).status,
+  ).toBe(400);
+  expect(
+    (
+      await request("/api/public/subscribe", "POST", {
+        ...payload,
+        adultUS: false,
+      })
+    ).status,
+  ).toBe(400);
+  const result = await request("/api/public/subscribe", "POST", payload);
+  expect(result.status).toBe(200);
+  expect(
+    (await db.lead.findUniqueOrThrow({ where: { id: result.data.leadId } }))
+      .name,
+  ).toBe("");
+  expect(
+    await db.subscription.count({ where: { leadId: result.data.leadId } }),
+  ).toBe(0);
+});

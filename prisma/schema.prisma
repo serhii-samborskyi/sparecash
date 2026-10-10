@@ -142,10 +142,25 @@ model Visit {
   createdAt       DateTime           @default(now())
   leads           Lead[]
   applications    ApplicationClick[]
+  engagementEvents VisitEvent[]
 
   @@index([sourceId, createdAt])
   @@index([ipHash, createdAt])
   @@index([experimentId, createdAt])
+}
+
+model VisitEvent {
+  id         String   @id @default(cuid())
+  visitId    String
+  visit      Visit    @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  kind       String
+  questionId String   @default("")
+  answer     String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([visitId, kind, questionId])
+  @@index([kind, createdAt])
 }
 
 model AppConfiguration {

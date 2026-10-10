@@ -20,6 +20,7 @@ import {
 } from "../services/landing-assets.js";
 import { z } from "zod";
 import { db } from "../db.js";
+import { engagementReport } from "../services/marketing.js";
 import { requireAdmin, checkOrigin } from "../security.js";
 import {
   dashboard,
@@ -104,6 +105,14 @@ adminRouter.get("/dashboard", async (_req, res) => {
 });
 adminRouter.get("/experiments/:id", async (req, res) => {
   res.json(await experimentResults(String(req.params.id)));
+});
+adminRouter.get("/experiments/:id/engagement", async (req, res) => {
+  res.json(
+    await engagementReport({
+      experimentId: String(req.params.id),
+      minimumAgeHours: 0,
+    }),
+  );
 });
 adminRouter.post("/experiments", async (req, res) => {
   res.json(await saveExperiment(req.body, "owner"));
