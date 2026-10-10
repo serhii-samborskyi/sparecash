@@ -37,6 +37,7 @@ import {
   setStatus,
   recordVisitCosts,
   marketingContext,
+  engagementReport,
 } from "./services/marketing.js";
 import { updateLeadTimezone, leadTiming } from "./services/timezones.js";
 import {
@@ -121,6 +122,13 @@ function makeServer() {
       chainId: z.string().optional(),
     },
     followupReport,
+    true,
+  );
+  register(
+    "engagement_report",
+    "Count unique visit sessions that answered quiz questions, completed a quiz, opened optional updates, or continued without updates, including visitors who never subscribed. Compare with application and confirmed opt-in visitors. Client-reported engagement is not verified identity or a loan conversion; no historical backfill or advertiser audience sync.",
+    reportSchema.omit({ answer: true }).shape,
+    engagementReport,
     true,
   );
   register(
@@ -217,17 +225,28 @@ function makeServer() {
   );
   register(
     "list_traffic_visits",
-    "Read attribution IDs and external click IDs for advertiser cost matching, without contact details. Costs must come from trusted advertiser reporting, not visitor query parameters.",
+    "Read attribution IDs, external click IDs and engagement markers without contact details. Filter engagementKind to inspect anonymous quiz participants or visitors who continued without updates. These are first-party records, not an advertiser audience upload. Costs must come from trusted advertiser reporting, not visitor query parameters.",
     {
       page: z.number().int().min(1).default(1),
       campaignId: z.string().optional(),
       zoneId: z.string().optional(),
+      engagementKind: z
+        .enum([
+          "QUESTION_ANSWERED",
+          "QUIZ_COMPLETED",
+          "UPDATES_OPENED",
+          "CONTINUE_WITHOUT_UPDATES",
+        ])
+        .optional(),
       from: z.string().datetime({ offset: true }).optional(),
       to: z.string().datetime({ offset: true }).optional(),
     },
-    async ({ page, campaignId, zoneId, from, to }) =>
+    async ({ page, campaignId, zoneId, from, to, engagementKind }) =>
       db.visit.findMany({
         where: {
+          ...(engagementKind
+            ? { engagementEvents: { some: { kind: engagementKind } } }
+            : {}),
           createdAt: {
             gte: from ? new Date(from) : undefined,
             lt: to ? new Date(to) : undefined,
@@ -240,6 +259,9 @@ function makeServer() {
         select: {
           id: true,
           externalClickId: true,
+          engagementEvents: {
+            select: { kind: true, questionId: true, createdAt: true },
+          },
           createdAt: true,
           experimentId: true,
           variantId: true,

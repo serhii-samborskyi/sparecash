@@ -68,7 +68,7 @@ export const landingSchema = z
       .string()
       .min(3)
       .max(120)
-      .default("How should we keep in touch?"),
+      .default("Want daily updates about loan options?"),
     formDescription: z
       .string()
       .max(400)
@@ -282,7 +282,9 @@ export function canSend(lastSentAt: Date | null, now = new Date()) {
   return !lastSentAt || now.getTime() - lastSentAt.getTime() >= 24 * 3600000;
 }
 export function renderMessage(template: string, name: string, link: string) {
-  return template.replaceAll("{{name}}", name).replaceAll("{{link}}", link);
+  return template
+    .replaceAll("{{name}}", name.trim() || "there")
+    .replaceAll("{{link}}", link);
 }
 export function escapeHtml(value: string) {
   return value.replace(

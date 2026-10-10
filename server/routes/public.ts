@@ -12,7 +12,19 @@ import {
   nextLeadStatus,
   visibleQuestions,
 } from "../domain.js";
-import { hash, ipHash, token, verifyToken, equal } from "../security.js";
+import {
+  hash,
+  ipHash,
+  token,
+  verifyToken,
+  equal,
+  checkOrigin,
+} from "../security.js";
+import {
+  engagementSchema,
+  recordEngagement,
+  recordContinueWithoutUpdates,
+} from "../services/engagement.js";
 import { settings } from "../services/control.js";
 import { detectTimezone } from "../timezones.js";
 import { trustedIpTimezone } from "../services/timezones.js";
@@ -147,6 +159,23 @@ publicRouter.post("/visit", async (req, res) => {
     deliveryEnabled: env.LIVE_DELIVERY === "true",
   });
 });
+publicRouter.post("/engagement", checkOrigin, async (req, res) => {
+  const input = z
+    .object({
+      visitToken: z.string().max(500),
+      event: engagementSchema,
+    })
+    .strict()
+    .parse(req.body);
+  const visitId = verifyToken(input.visitToken, "visit");
+  if (!visitId) {
+    res.status(400).json({ error: "Session expired" });
+    return;
+  }
+  await recordEngagement(visitId, input.event);
+  res.set("Cache-Control", "no-store").json({ ok: true });
+});
+
 publicRouter.post(
   "/subscribe",
   rateLimit({
@@ -160,7 +189,7 @@ publicRouter.post(
       .object({
         visitToken: z.string(),
         turnstileToken: z.string().max(2048),
-        name: z.string().trim().min(1).max(80),
+        name: z.string().trim().max(80).default(""),
         timezone: z.string().max(80).optional(),
         answers: z.record(z.string().max(200)),
         email: z.string().email().max(254).optional(),
@@ -564,12 +593,22 @@ publicRouter.post("/answer", async (req, res) => {
 });
 
 publicRouter.post("/continue", async (req, res) => {
-  const visitId = verifyToken(String(req.body.visitToken), "visit");
+  const input = z
+    .object({
+      visitToken: z.string().max(500),
+      entryPoint: z
+        .enum(["application", "optional_updates"])
+        .default("application"),
+    })
+    .parse(req.body);
+  const visitId = verifyToken(input.visitToken, "visit");
   if (!visitId) {
     res.status(400).json({ error: "Session expired" });
     return;
   }
   const visit = await db.visit.findUniqueOrThrow({ where: { id: visitId } });
+  if (input.entryPoint === "optional_updates")
+    await recordContinueWithoutUpdates(visit.id);
   const config = await settings();
   if (!config.roundskyUrl) {
     res.status(503).json({ error: "Loan options are not connected yet." });

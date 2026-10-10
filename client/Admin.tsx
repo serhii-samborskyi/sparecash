@@ -717,10 +717,12 @@ export function Admin() {
                                 }}
                               >
                                 <span className="avatar">
-                                  {lead.name.slice(0, 2).toUpperCase()}
+                                  {(lead.name || "Visitor")
+                                    .slice(0, 2)
+                                    .toUpperCase()}
                                 </span>
                                 <span>
-                                  <b>{lead.name}</b>
+                                  <b>{lead.name || "Unnamed visitor"}</b>
                                   <small>
                                     {lead.subscriptions.find(
                                       (s: any) => s.channel === "EMAIL",
@@ -1352,6 +1354,38 @@ export function Admin() {
                       <td>{v.funded}</td>
                       <td>{money(v.revenue)}</td>
                       <td>{v.score.toFixed(3)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <h3>Page engagement</h3>
+            <p className="muted">
+              Unique visit sessions, including visitors who never subscribe.
+              These actions are not loan conversions. Recording starts with this
+              update.
+            </p>
+            <div className="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Variant</th>
+                    <th>Answered a question</th>
+                    <th>Completed quiz</th>
+                    <th>Opened updates</th>
+                    <th>Continued without updates</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {modal.value.variants.map((v: any) => (
+                    <tr key={v.id}>
+                      <td>{v.name}</td>
+                      <td>{v.engagement?.quizStartedVisitors ?? 0}</td>
+                      <td>{v.engagement?.quizCompletedVisitors ?? 0}</td>
+                      <td>{v.engagement?.updatesOpenedVisitors ?? 0}</td>
+                      <td>
+                        {v.engagement?.continuedWithoutUpdatesVisitors ?? 0}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
