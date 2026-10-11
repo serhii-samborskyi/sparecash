@@ -1,0 +1,120 @@
+# Acquisition statistics
+
+Open **Statistics** in the owner workspace (`/admin/statistics`). The initial
+view compares zones over the last seven UTC days, including today. Choose up to
+93 days, sort a metric, search rows, require a minimum visit sample, or export
+all matching rows as CSV. Table search and minimum visits affect rows/export;
+the summary cards retain the full report scope. Row arrows add the segment to
+the report filters: campaign → zones, country → states, state → cities, and
+other segments → landing variants.
+
+Available breakdowns: campaign + zone, campaign, landing variant, country,
+state/region, city, device, browser, operating system, and UTC day. City keys
+include country and state so identically named cities are not combined.
+Filters can combine dates, campaign, zone, landing, country, state, city,
+device, browser and operating system. Unknown dimensions remain visible.
+
+## Metrics
+
+| Metric                           | Definition                                                                                                                                                                                     |
+| -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Visits                           | Recorded visit sessions, not unique people. Each new advertiser click can produce another visit.                                                                                               |
+| Ad CTR                           | PropellerAds clicks divided by impressions. Aggregates recompute the ratio from totals.                                                                                                        |
+| Verified                         | Visit's latest recorded browser verification passed, including legacy verified visits. This is a quality signal, not certain human identity.                                                   |
+| Suspected bots                   | Unverified visits with bot score ≥70 from recorded abuse evidence.                                                                                                                             |
+| Unverified                       | Remaining visits. Pending/failed/expired checks or provider errors alone do not prove bot activity.                                                                                            |
+| Engagement                       | Unique visits with a quiz answer, an application click recorded by the server, or a confirmed subscription, divided by visits. Multiple actions count once. Opening updates alone is excluded. |
+| Verified engagement              | Engaged visits whose verification flag is true, divided by verified visits.                                                                                                                    |
+| Quiz completion                  | Visits with a completed quiz divided by visits that answered a question.                                                                                                                       |
+| Application rate                 | Visits with at least one recorded application click divided by visits. It is not completed lender applications.                                                                                |
+| Subscription rate                | Visits with at least one confirmed subscription divided by visits. Multiple channels count once; later opt-outs remain in the historical rate.                                                 |
+| Email/text/push                  | Unique confirmed visits for each channel. Channel counts overlap.                                                                                                                              |
+| Active subscribers               | Visits with at least one currently active, confirmed subscription.                                                                                                                             |
+| Purchased leads and commission   | Earliest SOLD per application, including follow-ups attributed to their original acquisition visit. Duplicate SOLD callbacks do not multiply revenue. SOLD is not approval or funding.         |
+| Ad spend/CPC                     | Read from PropellerAds; CPC is spend divided by advertiser clicks.                                                                                                                             |
+| Cost/subscriber, cost/sale, ROAS | Calculated only when advertiser reporting scopes match every visit in the row. Missing costs or unmatched visits leave these blank.                                                            |
+| Recorded click costs             | Existing per-visit cost records, displayed separately and never added to advertiser spend.                                                                                                     |
+
+All visit-based rates use the denominator shown in the table. Empty
+denominators and unavailable values are `—`, never fabricated zeros. A small
+sample marker appears below 30 visits; this is a reading aid, not a statistical
+significance test. The three traffic-quality groups are mutually exclusive.
+
+Visits and advertiser activity use the selected UTC window. Confirmations and
+sales for those visits are observed through report time. Recent traffic has
+had less time to convert. This view is descriptive; it never changes bids,
+budgets, campaign status or zone exclusions automatically.
+
+## PropellerAds connection
+
+Use the saved **Integrations → PropellerAds** API token. The app reads
+`GET /adv/statistics` with `group_by[]=campaign_id`, `zone_id`, `country_id`,
+and `date_time`, explicit `tz=+0000`, and inclusive date/time boundaries. It
+loads every page before storing a snapshot. Country names such as
+`United States (US)` are normalized to their country code. Provider-returned
+rows must match the requested dates/campaigns/zone/country. See the
+[official statistics API](https://ssp-api.propellerads.com/v5/docs/).
+
+By default, advertiser requests cover campaigns already attributed to local
+traffic sources. An explicit campaign filter can load a campaign with no
+recorded local visits. Zones that have impressions/clicks but no tracked visits
+still appear. Advertiser clicks and landed visit sessions are independent
+measurements and may differ.
+
+Complete snapshots live in `AdStatisticsSnapshot` and are reused for 15 minutes
+while browsing. **Refresh** requests a new read. Overlapping identical requests
+share one fetch within the web process. A failed refresh can display an older
+complete snapshot, clearly marked with its timestamp. Partial/oversized reports
+are never accepted as complete. Credentials are never included in responses or
+stored snapshot queries; changes to the API token invalidate the cache key.
+
+Ad CTR and spend are joined only for zone, campaign, country and day breakdowns
+without landing/state/city/device/browser/OS filters. This integration joins
+advertiser data at campaign/zone/country/day granularity. Ad metrics for finer
+local slices remain unavailable rather than proportionally allocating spend
+or inventing CTR.
+Current-day data can change during reporting. Imported retargeting spend and
+recorded visit costs are separate sources and are not added to these snapshots.
+
+## Geography and device capture
+
+New visits store country, state/region, city and `geoSource=TRUSTED_EDGE` only
+when incoming location headers carry the configured `x-sparecash-geo-token`.
+The existing **Integrations → Cloudflare → IP detection secret** and trusted
+edge rule are reused. The app reads `cf-ipcountry`, `cf-region` and `cf-ipcity`;
+only a valid country permits storing the region/city. No raw IP, coordinates,
+browser location-permission prompt, or external IP lookup is added.
+
+Cloudflare's **Add visitor location headers** Managed Transform supplies these
+headers; follow the existing [location setup](INTEGRATIONS.md#lead-time-zones)
+and [Cloudflare header reference](https://developers.cloudflare.com/rules/transform/managed-transforms/reference/#add-visitor-location-headers).
+The secret's presence alone does not establish that the edge rule is working.
+Check the location coverage shown above the table. Location is approximate and
+can reflect a VPN. Previously hashed IP addresses cannot recover historic
+cities; those visits stay unknown.
+
+Device, browser and OS are coarse categories derived from the user agent
+already stored on a visit. They work for historical visits as well. These are
+client claims and do not increase a visit's verification or bot score.
+
+## API, deployment and limits
+
+Owner-only `POST /api/admin/statistics/report` and MCP `statistics_report` accept
+the same filters. Date strings are `YYYY-MM-DD`; MCP defaults to 30 days and the
+app supplies its selected dates. Both use the same calculation service. The
+owner endpoint retains authentication, origin checks and a 20 requests/minute
+limit. No contact addresses, names, raw user agents or verification tokens are
+returned.
+
+Deploy migration `202610110003_traffic_statistics` with the web and worker
+release; the standard Docker startup applies it. It adds nullable visit
+location columns, a date index, and the snapshot table. There is no historical
+geo backfill or new required environment variable. Reconnect MCP clients to
+discover `statistics_report`.
+
+Reports reject more than 50,000 matching visits or advertiser rows rather than
+silently truncating totals. Narrow the dates or campaign if this limit is
+reached. Geography/state/device filters can disable advertiser comparison;
+the app explains this next to the table. CSV includes all numeric metrics,
+represents rate values as decimals, leaves missing values blank, and escapes
+spreadsheet formula prefixes in text labels.

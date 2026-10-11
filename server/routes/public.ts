@@ -33,6 +33,7 @@ import {
 import { settings } from "../services/control.js";
 import { detectTimezone } from "../timezones.js";
 import { trustedIpTimezone } from "../services/timezones.js";
+import { trustedVisitLocation } from "../services/visit-context.js";
 import { sendVerification, verifyPush } from "../services/providers.js";
 import {
   activateSubscription,
@@ -160,6 +161,7 @@ publicRouter.post("/visit", async (req, res) => {
         externalClickId: input.clickId,
         ipHash: fingerprint,
         userAgent: ua,
+        ...trustedVisitLocation(req),
         botScore: score,
         evidence,
       },

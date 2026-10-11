@@ -48,6 +48,7 @@ import {
   retargetingReport,
 } from "../server/services/retargeting-report";
 import { recordPostback } from "../server/services/postbacks";
+import { statisticsReport } from "../server/services/statistics";
 import { landingDesignExamples } from "../server/landing-design-guide";
 let server: Server,
   base: string,
@@ -2307,6 +2308,7 @@ it("lets an authenticated MCP marketer inspect results, author designs and safel
     for (const name of [
       "marketing_context",
       "traffic_report",
+      "statistics_report",
       "followup_report",
       "quiz_answer_report",
       "engagement_report",
@@ -2320,6 +2322,9 @@ it("lets an authenticated MCP marketer inspect results, author designs and safel
     ])
       expect(tools.tools.some((tool) => tool.name === name)).toBe(true);
     const context = await call("marketing_context");
+    const statistics = await call("statistics_report", { groupBy: "device" });
+    expect(statistics.summary.visits).toBeGreaterThan(0);
+    expect(statistics.advertiser.status).toBe("unsupported");
     expect(JSON.stringify(context)).not.toContain(env.MCP_TOKEN);
     expect(context.limits.join(" ")).toContain("external AI client");
     const images = await call("list_landing_images");
@@ -3833,4 +3838,262 @@ it("marks engagement verified only with a current proof and preserves newer veri
     (await retargetingStatus()).recentVerificationFailures.length,
   ).toBeGreaterThan(0);
   await saveRetargetingSettings({ enabled: false, audiences: rtAudiences });
+});
+
+it("compares zones and locations with honest traffic quality, weighted CTR and deduplicated outcomes", async () => {
+  const campaignId = "777811";
+  const exp = await db.experiment.create({
+    data: {
+      name: "Statistics fixture",
+      slug: "statistics-fixture",
+      status: "ACTIVE",
+      variants: {
+        create: {
+          name: "Statistics landing",
+          weight: 100,
+          config: landingSchema.parse({
+            title: "Statistics",
+            description: "Test fixture",
+          }),
+        },
+      },
+    },
+    include: { variants: true },
+  });
+  const source = await db.trafficSource.create({
+    data: { campaignId, zoneId: "111" },
+  });
+  const arrived = new Date(Date.now() - 2 * 86400000);
+  const day = arrived.toISOString().slice(0, 10);
+  const create = (data: object = {}) =>
+    db.visit.create({
+      data: {
+        experimentId: exp.id,
+        variantId: exp.variants[0].id,
+        sourceId: source.id,
+        ipHash: "statistics-test",
+        userAgent: "Mozilla/5.0 (Windows NT 10.0) Chrome/130 Safari/537.36",
+        evidence: [],
+        createdAt: arrived,
+        ...data,
+      },
+    });
+  const human = await create({
+    verified: true,
+    verificationState: "VERIFIED",
+    country: "US",
+    region: "Illinois",
+    city: "Springfield",
+    geoSource: "TRUSTED_EDGE",
+    costRecorded: true,
+    cost: 0.5,
+  });
+  await create({
+    botScore: 100,
+    verificationState: "FAILED",
+    country: "US",
+    region: "Massachusetts",
+    city: "Springfield",
+  });
+  await create({ verificationState: "ERROR" });
+  await create({ verificationState: "FAILED" });
+  await db.visitEvent.createMany({
+    data: [
+      { visitId: human.id, kind: "QUESTION_ANSWERED", questionId: "a" },
+      { visitId: human.id, kind: "QUESTION_ANSWERED", questionId: "b" },
+      { visitId: human.id, kind: "QUIZ_COMPLETED" },
+    ],
+  });
+  const lead = await db.lead.create({
+    data: { visitId: human.id, name: "Stats fixture", answers: {} },
+  });
+  await db.subscription.createMany({
+    data: ["EMAIL", "PUSH"].map((channel) => ({
+      leadId: lead.id,
+      channel: channel as "EMAIL" | "PUSH",
+      address: `stats-${channel}`,
+      status: "ACTIVE" as const,
+      consentText: "Test only",
+      consentVersion: "test",
+      consentIpHash: "test",
+      confirmedAt: new Date(),
+    })),
+  });
+  const application = await db.applicationClick.create({
+    data: { visitId: human.id, leadId: lead.id },
+  });
+  await db.postback.createMany({
+    data: [
+      {
+        eventId: "stats-sale",
+        applicationId: application.id,
+        event: "SOLD",
+        revenue: 3,
+        createdAt: new Date(Date.now() - 1000),
+      },
+      {
+        eventId: "stats-sale-repeat",
+        applicationId: application.id,
+        event: "SOLD",
+        revenue: 9,
+      },
+    ],
+  });
+  const saved = await readRuntimeConfiguration();
+  const provider = vi.mocked(globalThis.fetch).getMockImplementation()!;
+  try {
+    await saveRuntimeSettings(
+      { secrets: { PROPELLER_API_TOKEN: "stats-test-token" } },
+      "test",
+    );
+    const providerRows = [
+      {
+        campaign_id: Number(campaignId),
+        zone_id: 111,
+        country: "United States (US)",
+        date_time: day,
+        impressions: 100,
+        clicks: 10,
+        spent: 1,
+      },
+      {
+        campaign_id: Number(campaignId),
+        zone_id: 222,
+        country: "United States (US)",
+        date_time: day,
+        impressions: 900,
+        clicks: 9,
+        spent: 2,
+      },
+    ];
+    vi.mocked(globalThis.fetch).mockImplementation(async (url, init) =>
+      String(url).includes("/adv/statistics")
+        ? Response.json({ items: providerRows, total_pages: 1, total_items: 2 })
+        : provider(url, init),
+    );
+    const input = { campaignId, from: day, to: day };
+    const report = await statisticsReport(input);
+    expect(report.advertiser.status).toBe("ready");
+    expect(report.summary).toMatchObject({
+      visits: 4,
+      verified: 1,
+      suspectedBots: 1,
+      unverified: 2,
+      verificationFailed: 2,
+      verificationErrors: 1,
+      engaged: 1,
+      engagementRate: 0.25,
+      subscribers: 1,
+      subscriptionRate: 0.25,
+      emailSubscribers: 1,
+      pushSubscribers: 1,
+      applicationVisitors: 1,
+      sold: 1,
+      revenue: 3,
+      adSpend: 3,
+      recordedClickCost: 0.5,
+      ctr: 0.019,
+    });
+    expect(report.rows).toHaveLength(2);
+    expect(report.rows.find((r) => r.label === "Zone 222")).toMatchObject({
+      visits: 0,
+      ctr: 0.01,
+      subscriptionRate: null,
+    });
+    expect(report.rows.find((r) => r.label === "Zone 111")).toMatchObject({
+      costPerSubscriber: 1,
+      adContribution: 2,
+      ctr: 0.1,
+    });
+    const cities = await statisticsReport({ ...input, groupBy: "city" });
+    expect(cities.rows).toHaveLength(3);
+    expect(cities.rows.filter((r) => r.label === "Springfield")).toHaveLength(
+      2,
+    );
+    expect(cities.rows.find((r) => r.label === "Unknown city")?.visits).toBe(2);
+    expect(cities.advertiser.status).toBe("unsupported");
+    expect(cities.summary.adSpend).toBeNull();
+    const illinois = await statisticsReport({
+      ...input,
+      groupBy: "zone",
+      region: "Illinois",
+    });
+    expect(illinois.summary).toMatchObject({
+      visits: 1,
+      engagementRate: 1,
+      subscriptionRate: 1,
+      adSpend: null,
+    });
+    expect(
+      (await statisticsReport({ ...input, groupBy: "device" })).rows[0].label,
+    ).toBe("Desktop");
+    const unauthorized = await request(
+      "/api/admin/statistics/report",
+      "POST",
+      input,
+    );
+    expect(unauthorized.status).toBe(401);
+    const authorized = await request(
+      "/api/admin/statistics/report",
+      "POST",
+      input,
+      true,
+    );
+    expect(authorized.status).toBe(200);
+    expect(authorized.data.summary.visits).toBe(4);
+    expect(JSON.stringify(authorized.data)).not.toContain("stats-test-token");
+    expect(
+      (
+        await request(
+          "/api/admin/statistics/report",
+          "POST",
+          { ...input, from: "2026-02-30" },
+          true,
+        )
+      ).status,
+    ).toBe(400);
+  } finally {
+    vi.mocked(globalThis.fetch).mockImplementation(provider);
+    await saveRuntimeSettings(
+      { secrets: { PROPELLER_API_TOKEN: saved.PROPELLER_API_TOKEN } },
+      "test",
+    );
+  }
+});
+
+it("captures trusted arrival geography and does not fabricate locations from browser headers", async () => {
+  const saved = await readRuntimeConfiguration();
+  const secret = "statistics-test-edge-secret-at-least-32-characters";
+  await saveRuntimeSettings(
+    { secrets: { CLOUDFLARE_GEO_TOKEN: secret } },
+    "test",
+  );
+  try {
+    for (const trusted of [false, true]) {
+      const response = await request(
+        "/api/public/visit",
+        "POST",
+        { slug: "statistics-fixture", clickId: `geo-${trusted}` },
+        false,
+        {
+          "X-Forwarded-For": trusted ? "203.0.113.191" : "203.0.113.190",
+          "cf-ipcountry": "US",
+          "cf-region": "Illinois",
+          "cf-ipcity": "Chicago",
+          ...(trusted ? { "x-sparecash-geo-token": secret } : {}),
+        },
+      );
+      expect(response.status).toBe(200);
+      const visit = await db.visit.findUniqueOrThrow({
+        where: { id: response.data.visitId },
+      });
+      expect(visit.country).toBe(trusted ? "US" : null);
+      expect(visit.city).toBe(trusted ? "Chicago" : null);
+    }
+  } finally {
+    await saveRuntimeSettings(
+      { secrets: { CLOUDFLARE_GEO_TOKEN: saved.CLOUDFLARE_GEO_TOKEN } },
+      "test",
+    );
+  }
 });

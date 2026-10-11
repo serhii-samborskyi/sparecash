@@ -34,6 +34,7 @@ import {
   audit,
 } from "../services/control.js";
 import { sources, blockSource } from "../services/traffic.js";
+import { statisticsReport } from "../services/statistics.js";
 import { tick } from "../services/engine.js";
 import {
   unsubscribe,
@@ -46,16 +47,14 @@ adminRouter.get("/retargeting/status", async (_req, res) => {
   res.set("Cache-Control", "no-store").json(await retargetingStatus());
 });
 adminRouter.get("/retargeting/report", async (req, res) => {
-  res
-    .set("Cache-Control", "no-store")
-    .json(
-      await retargetingReport({
-        ...req.query,
-        ...(req.query.observationDays !== undefined
-          ? { observationDays: Number(req.query.observationDays) }
-          : {}),
-      }),
-    );
+  res.set("Cache-Control", "no-store").json(
+    await retargetingReport({
+      ...req.query,
+      ...(req.query.observationDays !== undefined
+        ? { observationDays: Number(req.query.observationDays) }
+        : {}),
+    }),
+  );
 });
 adminRouter.get("/landing-assets", async (req, res) => {
   res.set("Cache-Control", "no-store").json(await listLandingAssets(req.query));
@@ -120,6 +119,18 @@ adminRouter.post(
 adminRouter.get("/dashboard", async (_req, res) => {
   res.json(await dashboard());
 });
+adminRouter.post(
+  "/statistics/report",
+  rateLimit({
+    windowMs: 60000,
+    limit: 20,
+    standardHeaders: "draft-8",
+    legacyHeaders: false,
+  }),
+  async (req, res) => {
+    res.set("Cache-Control", "no-store").json(await statisticsReport(req.body));
+  },
+);
 adminRouter.get("/experiments/:id", async (req, res) => {
   res.json(await experimentResults(String(req.params.id)));
 });

@@ -38,8 +38,10 @@ import { Badge, Empty, Modal, Field, Spinner, External } from "./components/ui";
 import { ExperimentEditor, ChainEditor } from "./components/editors";
 import { SettingsView } from "./components/settings";
 import { TimezoneSelect } from "./components/timezone-select";
+import { Statistics } from "./components/statistics";
 const nav: [string, string, LucideIcon][] = [
   ["overview", "Overview", LayoutDashboard],
+  ["statistics", "Statistics", Activity],
   ["audience", "Audience", Users],
   ["experiments", "Experiments", FlaskConical],
   ["journeys", "Follow-up chains", Workflow],
@@ -306,6 +308,8 @@ export function Admin() {
                     {
                       overview:
                         "Turn traffic into relationships. See what’s working, from first click to funded loan.",
+                      statistics:
+                        "See which traffic earns its place. Compare ad clicks, visitor quality and the actions that follow.",
                       audience:
                         "Your contacts, their preferences, and every step of their journey.",
                       experiments:
@@ -357,6 +361,7 @@ export function Admin() {
               {error}
             </div>
           )}
+          {page === "statistics" && <Statistics />}
           {page === "overview" && (
             <>
               <div className="launch-banner">
@@ -388,7 +393,7 @@ export function Admin() {
                 <Metric
                   label="Tracked visitors"
                   value={number(stats.visits)}
-                  caption={`${number(stats.verified)} verified submissions`}
+                  caption={`${number(stats.verified)} verified visits`}
                   icon={MousePointer2}
                 />
                 <Metric

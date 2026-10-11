@@ -35,6 +35,7 @@ import {
   integrationStatus,
 } from "./services/control.js";
 import { sources, blockSource } from "./services/traffic.js";
+import { statisticsReport, statisticsSchema } from "./services/statistics.js";
 import { tick } from "./services/engine.js";
 import { timezoneSchema } from "./timezones.js";
 import { landingImages } from "./landing-images.js";
@@ -184,6 +185,13 @@ function makeServer() {
         .default("source"),
     },
     trafficReport,
+    true,
+  );
+  register(
+    "statistics_report",
+    "Compare acquisition by zone, campaign, landing, country, state, city, device, browser, OS or UTC day. Reports verified/suspected-bot/unverified rates, unique engaged and confirmed subscription visits, applications, deduplicated sales and revenue. Reads paginated PropellerAds impressions/clicks/spend for supported dimensions, cached 15 minutes; refreshAds refreshes the read-only snapshot. Date strings are inclusive YYYY-MM-DD (up to 93 days). No invented historical geography, no automatic campaign changes, no treating unverified as bots or missing advertiser data as zero.",
+    statisticsSchema.shape,
+    statisticsReport,
     true,
   );
   register(

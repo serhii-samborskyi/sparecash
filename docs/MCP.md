@@ -229,6 +229,17 @@ Use `engagement_report` to measure quiz answers/completions, update-form opens a
 Raw engagement alone does not establish visitor verification. Use
 `retargeting_report` for verified engagement and failed/unverified traffic.
 
+## Statistics
+
+For a combined optimization view, use `statistics_report` or the owner
+**Statistics** page. It groups traffic by zone, campaign, landing, country,
+state, city, device, browser, OS or day and includes verification, suspected-bot,
+engagement and confirmed-subscription rates. Supported slices read actual
+PropellerAds impressions/clicks/spend with a 15-minute cache. Dates are inclusive
+UTC `YYYY-MM-DD`, up to 93 days; `refreshAds: true` refreshes the read-only
+snapshot. Missing location/ad data stays unknown. See the
+[statistics contract](STATISTICS.md) for exact denominators and filters.
+
 ## Retargeting V1
 
 SpareCash qualifies visits, approves browser pixels and links return visits to

@@ -101,6 +101,11 @@ Spend import, bid management, campaign creation, and advertiser conversion feedb
 Official reference: https://ssp-api.propellerads.com/v5/docs/
 Official MCP: https://propellerads.com/mcp-connector/
 
+The owner **Statistics** page also reads paginated advertiser impressions,
+clicks and spend with the saved API token. Complete UTC snapshots are cached
+for 15 minutes; read failures keep local engagement reporting available.
+[Statistics setup and metric definitions](STATISTICS.md).
+
 ## Cloudflare Turnstile
 
 Set a hostname-restricted site key and secret. All live landings run early

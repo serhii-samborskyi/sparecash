@@ -142,6 +142,10 @@ model Visit {
   externalClickId       String?
   ipHash                String
   userAgent             String
+  country               String?
+  region                String?
+  city                  String?
+  geoSource             String?
   verified              Boolean               @default(false)
   challenged            Boolean               @default(false)
   botScore              Int                   @default(0)
@@ -157,6 +161,15 @@ model Visit {
   @@index([ipHash, createdAt])
   @@index([experimentId, createdAt])
   @@index([journeyId, createdAt])
+  @@index([createdAt])
+}
+
+// Complete read-only advertiser report snapshots. Never mixed with click costs.
+model AdStatisticsSnapshot {
+  id        String   @id
+  query     Json
+  rows      Json
+  fetchedAt DateTime @default(now())
 }
 
 // Browser journeys are deliberately not fingerprints or cross-device identities.
