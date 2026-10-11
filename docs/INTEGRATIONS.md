@@ -112,8 +112,9 @@ accepted for existing clients but does not supply an audience proof.
 
 The retargeting gate additionally requires verified engagement, explicit
 advertising permission and treatment-group assignment. Provider timeouts and
-expired tokens are not automatic bot evidence. The live Cloudflare firewall
-account audit is still pending. See [the retargeting contract](ENGAGEMENT-RETARGETING.md)
+expired tokens are not automatic bot evidence. Turnstile works independently
+of Cloudflare DNS/CDN/WAF; no DNS migration or firewall account audit is required.
+See [the retargeting contract](ENGAGEMENT-RETARGETING.md)
 for settings, suppression limits, tests and deployment.
 
 Reference: [Cloudflare server validation](https://developers.cloudflare.com/turnstile/get-started/server-side-validation/)

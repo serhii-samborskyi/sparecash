@@ -149,7 +149,7 @@ function makeServer() {
   );
   register(
     "validate_retargeting_setup",
-    "Read launch gaps: Turnstile configuration, exact supported pixels, mapped campaigns, current inclusion/exclusion readback, end-to-end suppression evidence and the Cloudflare audit. Collection readiness is separate from campaign launch readiness. Account targeting evidence is operator-supplied, not a live account audit. Does not activate advertising.",
+    "Read launch gaps: Turnstile configuration, exact supported pixels, mapped campaigns, current inclusion/exclusion readback and end-to-end suppression evidence. Cloudflare DNS/CDN/WAF and an account audit are not required. Collection readiness is separate from campaign launch readiness. Account targeting evidence is operator-supplied, not a live account audit. Does not activate advertising.",
     {},
     async () => validateRetargetingSetup(),
     true,
