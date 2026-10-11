@@ -9,7 +9,7 @@ import type { Server } from "node:http";
 import { Prisma } from "@prisma/client";
 import { app } from "../server/index";
 import { db } from "../server/db";
-import { env } from "../server/config";
+import { env, runtimeContext } from "../server/config";
 import { token, hash } from "../server/security";
 import { landingSchema, settingsSchema } from "../server/domain";
 import { activateSubscription, unsubscribe } from "../server/services/journeys";
@@ -3100,11 +3100,6 @@ async function rtSetup() {
       testedAt: now,
       reference: "Simulated integration test fixture",
     },
-    cloudflareAudit: {
-      passed: true,
-      testedAt: now,
-      reference: "Simulated audit fixture; no production account audit",
-    },
   });
   await saveRetargetingSettings({ enabled: true, audiences: rtAudiences });
 }
@@ -3469,6 +3464,28 @@ it("preserves every return click and original journey, progresses application au
     paidLeadAcquisitionCost: 2.25,
   });
   expect((await retargetingStatus()).confirmedAudienceMembership).toBeNull();
+});
+
+it("allows standalone Turnstile without an edge audit while retaining verification and suppression requirements", async () => {
+  await rtSetup();
+  const config = await retargetingConfiguration();
+  expect(config.plan.cloudflareAudit).toBeUndefined();
+  expect(validateConfiguration(config).ready).toBe(true);
+  config.plan.cloudflareAudit = {
+    passed: false,
+    testedAt: "2000-01-01T00:00:00.000Z",
+    reference: "Optional historical review does not gate Turnstile",
+  };
+  expect(validateConfiguration(config).ready).toBe(true);
+  const runtime = await readRuntimeConfiguration();
+  const noSecret = runtimeContext.run(
+    { ...runtime, TURNSTILE_SECRET_KEY: "" },
+    () => validateConfiguration(config),
+  );
+  expect(noSecret.collectionReady).toBe(false);
+  expect(noSecret.collectionGaps).toContain("Configure both Turnstile keys.");
+  delete config.plan.suppressionTest;
+  expect(validateConfiguration(config).ready).toBe(false);
 });
 
 it("exposes MCP controls, requires exact pixels for collection, and keeps launch checks separate for prelaunch testing", async () => {

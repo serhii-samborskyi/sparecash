@@ -166,7 +166,10 @@ export const planSchema = z
         reference: z.string().min(5).max(1000),
       })
       .strict()
-      .optional(),
+      .optional()
+      .describe(
+        "Optional historical edge-security review. Cloudflare DNS/CDN/WAF and this audit are not required for Turnstile or retargeting readiness.",
+      ),
   })
   .strict();
 export type RetargetingPlan = z.infer<typeof planSchema>;
@@ -316,13 +319,6 @@ export function validateConfiguration(
     launchGaps.push(
       "Record a recent end-to-end suppression test; a server-side sale cannot run browser removal pixels.",
     );
-  if (
-    !config.plan.cloudflareAudit?.passed ||
-    !freshEvidence(config.plan.cloudflareAudit.testedAt)
-  )
-    launchGaps.push(
-      "Record the requested Cloudflare account audit with DNS/origin, firewall and Turnstile hostname observations.",
-    );
   return {
     ready: collectionGaps.length + launchGaps.length === 0,
     collectionReady: collectionGaps.length === 0,
@@ -343,7 +339,7 @@ export function validateConfiguration(
       "Pixel load is not confirmed audience membership.",
       "Suppression after a sale waits for a verified, consenting browser return; advertiser exclusions must be tested separately.",
       "Browser identifiers do not link cleared cookies or different devices.",
-      "Cloudflare account audit evidence is operator-supplied; this server has no Cloudflare account access.",
+      "Turnstile works independently of Cloudflare DNS/CDN/WAF; an edge-security audit is optional and does not gate readiness.",
     ],
   };
 }

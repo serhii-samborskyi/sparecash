@@ -99,7 +99,7 @@ Use `save_retargeting_plan` for event stages with:
   time and evidence reference for each campaign, obtained through PropellerAds MCP.
 - `suppressionTest`: passed, testedAt and evidence reference for the end-to-end
   suppression test.
-- `cloudflareAudit`: passed, testedAt and evidence reference for the account audit.
+- `cloudflareAudit`: optional historical edge-security review, retained for compatibility. It does not affect readiness.
 
 Launch validation checks that destination readbacks point to a published `/go/`
 landing on `APP_URL`, preserve campaign/zone/click macros, and that RoundSky is
@@ -222,12 +222,13 @@ the PropellerAds login page. Obtain account access, then create dedicated quiz,
 application and paid-exclusion audiences and copy their exact **Get code** pixels.
 No placeholder test IDs from the automated tests should be used in production.
 
-The live Cloudflare account configuration is **unverified**. The dashboard was
-blocked at its challenge and no account API is connected. The read-only audit
-must record DNS proxy/origin bypass controls, applicable WAF/bot/rate-limit and
-allow/skip rules, Turnstile hostname restrictions and relevant security events.
-Check legitimate mobile traffic and RoundSky/provider/MCP callbacks. Record
-actual enabled features rather than assuming the account plan includes them.
+Cloudflare DNS, proxy/CDN, WAF and an account audit are **not required**.
+Turnstile works with the owner's existing DNS and hosting. Require the widget's
+production keys, successful server-side Siteverify validation, the expected
+hostname/action/visit binding and verified engagement before audience enrollment.
+Advertising permission and holdout checks also remain mandatory. Optional edge
+protection is a separate operational choice, not a retargeting launch gate.
+[Cloudflare Turnstile overview](https://developers.cloudflare.com/turnstile/)
 
 Finish the account audience setup and save disabled settings. Enable collection
 only when deliberately testing/collecting verified, consenting visitors; no ad
