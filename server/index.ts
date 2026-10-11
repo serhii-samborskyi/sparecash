@@ -48,7 +48,12 @@ app.use(
                 "https://onesignal.com",
                 "https://challenges.cloudflare.com",
               ],
-              imgSrc: ["'self'", "data:", "https://*.onesignal.com"],
+              imgSrc: [
+                "'self'",
+                "data:",
+                "https://*.onesignal.com",
+                "https://my.rtmark.net",
+              ],
               workerSrc: ["'self'", "blob:"],
               upgradeInsecureRequests: [],
             },

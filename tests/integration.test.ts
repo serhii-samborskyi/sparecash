@@ -32,6 +32,22 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import sharp from "sharp";
 import { randomBytes } from "node:crypto";
+import {
+  retargetingConfiguration,
+  saveRetargetingPlan,
+  saveRetargetingSettings,
+  validateConfiguration,
+  validateRetargetingSetup,
+} from "../server/services/retargeting-config";
+import {
+  qualifyPixels,
+  retargetingStatus,
+} from "../server/services/retargeting";
+import {
+  recordRetargetingSpend,
+  retargetingReport,
+} from "../server/services/retargeting-report";
+import { recordPostback } from "../server/services/postbacks";
 let server: Server,
   base: string,
   cookie: string,
@@ -234,7 +250,12 @@ it("publishes a weighted experiment and keeps visitor assignment stable", async 
     "POST",
     { slug: "integration" },
     false,
-    { Cookie: a.headers.get("set-cookie")!.split(";")[0] },
+    {
+      Cookie: a.headers
+        .getSetCookie()
+        .map((value) => value.split(";")[0])
+        .join("; "),
+    },
   );
   expect(b.data.visitId).toBe(visitId);
   expect(b.data.config.title).toBe(a.data.config.title);
@@ -558,7 +579,9 @@ it("retains the assigned variant while attributing a new paid click separately",
       clickId: "new-paid-click",
     },
     false,
-    { Cookie: `sc_visit_integration=${visitToken}` },
+    {
+      Cookie: `sc_visit_integration=${visitToken}; sc_journey=${token("journey", original.journeyId!)}`,
+    },
   );
   expect(r.status).toBe(200);
   expect(r.data.visitId).not.toBe(visitId);
@@ -2062,7 +2085,7 @@ it("attributes source/landing and follow-up results without multiplying sales or
     sold: 2,
     approved: 1,
     funded: 0,
-    revenue: 9,
+    revenue: 7,
     directApplications: 1,
     followupApplications: 1,
     costCoverage: 0.5,
@@ -2101,7 +2124,7 @@ it("attributes source/landing and follow-up results without multiplying sales or
     sold: 1,
     approved: 1,
     applications: 1,
-    revenue: 4,
+    revenue: 2,
     convertedMessages: 1,
   });
   expect(followup.rows.find((row) => row.step === 1)).toMatchObject({
@@ -2122,7 +2145,7 @@ it("attributes source/landing and follow-up results without multiplying sales or
       sold: 2,
       approved: 1,
       funded: 0,
-      revenue: 9,
+      revenue: 7,
     },
   ]);
   await recordVisitCosts(
@@ -2138,8 +2161,8 @@ it("attributes source/landing and follow-up results without multiplying sales or
   ).toMatchObject({
     recordedSpend: 3,
     costCoverage: 1,
-    adContribution: 6,
-    returnOnAdSpend: 3,
+    adContribution: 4,
+    returnOnAdSpend: 7 / 3,
   });
   await expect(
     recordVisitCosts(
@@ -2771,4 +2794,713 @@ it("allows an omitted first name but still requires channel consent and adulthoo
   expect(
     await db.subscription.count({ where: { leadId: result.data.leadId } }),
   ).toBe(0);
+});
+
+// Fixture pixels are never requested: server tests only reserve them and submit
+// simulated browser receipts. These IDs are not production provider configuration.
+const rtAudiences = [
+  {
+    id: "88001",
+    name: "Test quiz",
+    purpose: "REENGAGEMENT",
+    enabled: true,
+    enrollment: {
+      type: "image",
+      url: "https://my.rtmark.net/img.gif?f=on&lr=1&partner=88001",
+    },
+    removal: {
+      type: "image",
+      url: "https://my.rtmark.net/img.gif?f=off&lr=1&partner=88001",
+    },
+    qualifyingEvents: ["QUIZ_PARTICIPATED"],
+    excludeOn: ["APPLICATION", "SUBSCRIBED", "PAID"],
+  },
+  {
+    id: "88002",
+    name: "Test application",
+    purpose: "APPLICATION",
+    enabled: true,
+    enrollment: {
+      type: "image",
+      url: "https://my.rtmark.net/img.gif?f=on&partner=88002",
+    },
+    removal: {
+      type: "image",
+      url: "https://my.rtmark.net/img.gif?f=off&partner=88002",
+    },
+    qualifyingEvents: ["APPLICATION"],
+    excludeOn: ["PAID"],
+  },
+  {
+    id: "88003",
+    name: "Test paid exclusion",
+    purpose: "PAID_EXCLUSION",
+    enabled: true,
+    enrollment: {
+      type: "image",
+      url: "https://my.rtmark.net/img.gif?f=on&partner=88003",
+    },
+    qualifyingEvents: ["PAID"],
+    excludeOn: [],
+  },
+];
+async function rtSetup() {
+  await saveRetargetingSettings({ enabled: false, audiences: rtAudiences });
+  const now = new Date().toISOString();
+  await saveRetargetingPlan({
+    stages: [
+      {
+        name: "Quiz",
+        audienceId: "88001",
+        excludeAudienceIds: ["88002", "88003"],
+        campaignIds: ["88101"],
+      },
+      {
+        name: "Application",
+        audienceId: "88002",
+        excludeAudienceIds: ["88003"],
+        campaignIds: ["88102"],
+      },
+    ],
+    targetingChecks: [
+      {
+        campaignId: "88101",
+        targetUrl:
+          env.APP_URL +
+          "/go/integration?campaign_id={campaign_id}&zone_id={zone_id}&click_id=${SUBID}",
+        includedAudienceIds: ["88001"],
+        excludedAudienceIds: ["88002", "88003"],
+        observedAt: now,
+        reference: "Simulated test fixture, not a real readback",
+      },
+      {
+        campaignId: "88102",
+        targetUrl:
+          env.APP_URL +
+          "/go/integration?campaign_id={campaign_id}&zone_id={zone_id}&click_id=${SUBID}",
+        includedAudienceIds: ["88002"],
+        excludedAudienceIds: ["88003"],
+        observedAt: now,
+        reference: "Simulated test fixture, not a real readback",
+      },
+    ],
+    suppressionTest: {
+      passed: true,
+      testedAt: now,
+      reference: "Simulated integration test fixture",
+    },
+    cloudflareAudit: {
+      passed: true,
+      testedAt: now,
+      reference: "Simulated audit fixture; no production account audit",
+    },
+  });
+  await saveRetargetingSettings({ enabled: true, audiences: rtAudiences });
+}
+let rtCounter = 20;
+async function rtVisit(group: "TREATMENT" | "CONTROL" = "TREATMENT") {
+  const n = ++rtCounter;
+  const config = landingSchema.parse({
+    title: "Retargeting test",
+    description: "Visit verification test.",
+    questions: [
+      { id: "amount", label: "Amount?", options: ["Small", "Large"] },
+    ],
+  });
+  const experiment = await db.experiment.create({
+    data: {
+      name: `RT ${n}`,
+      slug: `rt-${n}`,
+      status: "ACTIVE",
+      variants: { create: { name: "Original angle", weight: 100, config } },
+    },
+  });
+  const created = await request(
+    "/api/public/visit",
+    "POST",
+    {
+      slug: experiment.slug,
+      campaignId: "88100",
+      zoneId: "1",
+      clickId: `original-${n}`,
+    },
+    false,
+    { "X-Forwarded-For": `203.0.113.${n}` },
+  );
+  expect(created.status).toBe(200);
+  const headers = {
+    Cookie: created.headers
+      .getSetCookie()
+      .map((c) => c.split(";")[0])
+      .join("; "),
+    "X-Forwarded-For": `203.0.113.${n}`,
+  };
+  const visit = await db.visit.findUniqueOrThrow({
+    where: { id: created.data.visitId },
+  });
+  // Deterministically exercise both arms; production never changes an assignment.
+  await db.visitorJourney.update({
+    where: { id: visit.journeyId! },
+    data: { group },
+  });
+  const send = (
+    path: string,
+    body: object = {},
+    extra: Record<string, string> = {},
+  ) =>
+    request(
+      `/api/public/${path}`,
+      "POST",
+      { visitToken: created.data.visitToken, ...body },
+      false,
+      { ...headers, ...extra },
+    );
+  const verify = async (
+    fields: object = {},
+    challenge = `test-${visit.id}-${randomBytes(4).toString("hex")}`,
+  ) => {
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+      Response.json({
+        success: true,
+        hostname: new URL(env.APP_URL).hostname,
+        action: "visit",
+        cdata: visit.id,
+        ...fields,
+      }),
+    );
+    return send("verify-visit", { turnstileToken: challenge });
+  };
+  return { visit, session: created.data, experiment, headers, send, verify };
+}
+
+it("verifies anonymous quiz visits, binds single-use proofs, and never enrolls unverified or non-consenting browsers", async () => {
+  await rtSetup();
+  const f = await rtVisit();
+  await f.send("engagement", {
+    event: {
+      kind: "QUESTION_ANSWERED",
+      questionId: "amount",
+      answers: { amount: "Small" },
+    },
+  });
+  expect((await f.send("retargeting/qualify")).data.pixels).toEqual([]);
+  await f.send("advertising-choice", { choice: "GRANTED" });
+  expect((await f.send("retargeting/qualify")).data.pixels).toEqual([]);
+  expect((await f.verify({ cdata: "another-visit" })).data.verified).toBe(
+    false,
+  );
+  expect((await f.verify({ hostname: "attacker.test" })).data.verified).toBe(
+    false,
+  );
+  expect((await f.verify({ action: "subscribe" })).data.verified).toBe(false);
+  expect((await f.send("retargeting/qualify")).data.pixels).toEqual([]);
+  const valid = `valid-${f.visit.id}`;
+  expect((await f.verify({}, valid)).data.verified).toBe(true);
+  // Network retry reuses the local receipt, not the single-use Cloudflare token.
+  const before = vi.mocked(globalThis.fetch).mock.calls.length;
+  expect(
+    (await f.send("verify-visit", { turnstileToken: valid })).data.verified,
+  ).toBe(true);
+  expect(vi.mocked(globalThis.fetch).mock.calls.length).toBe(before);
+  const concurrent = await Promise.all([
+    f.send("retargeting/qualify"),
+    f.send("retargeting/qualify"),
+  ]);
+  const pixels = concurrent.flatMap((r) => r.data.pixels);
+  expect(pixels).toHaveLength(1);
+  expect(pixels[0].url).toBe(rtAudiences[0].enrollment.url);
+  expect(
+    (await f.send("retargeting/receipt", { id: pixels[0].id, state: "LOADED" }))
+      .data,
+  ).toEqual({ recorded: true, confirmedAudienceMembership: false });
+  expect(
+    (await f.send("retargeting/receipt", { id: pixels[0].id, state: "FAILED" }))
+      .data.recorded,
+  ).toBe(false);
+  const other = await rtVisit();
+  expect(
+    (await other.send("verify-visit", { turnstileToken: valid })).data.verified,
+  ).toBe(false);
+  expect(
+    (
+      await other.send("retargeting/receipt", {
+        id: pixels[0].id,
+        state: "FAILED",
+      })
+    ).data.recorded,
+  ).toBe(false);
+  expect(
+    (await other.send("retargeting/qualify", {}, { Cookie: f.headers.Cookie }))
+      .status,
+  ).toBe(400);
+  await db.visit.update({
+    where: { id: f.visit.id },
+    data: { verificationExpiresAt: new Date(Date.now() - 1) },
+  });
+  expect((await f.send("retargeting/qualify")).data.reason).toBe(
+    "VERIFICATION_REQUIRED",
+  );
+  expect(
+    (await db.visit.findUniqueOrThrow({ where: { id: f.visit.id } })).botScore,
+  ).toBeLessThan(70);
+});
+
+it("keeps controls out of audiences, honors advertising refusal/GPC and records verification outages separately", async () => {
+  const f = await rtVisit("CONTROL");
+  await f.verify();
+  await f.send("engagement", {
+    event: {
+      kind: "QUESTION_ANSWERED",
+      questionId: "amount",
+      answers: { amount: "Large" },
+    },
+  });
+  await f.send("advertising-choice", { choice: "GRANTED" });
+  const result = await f.send("retargeting/qualify");
+  expect(result.data).toMatchObject({ reason: "CONTROL", pixels: [] });
+  expect(
+    (
+      await db.visitorJourney.findUniqueOrThrow({
+        where: { id: f.visit.journeyId! },
+      })
+    ).eligibleAt,
+  ).not.toBeNull();
+  const treatment = await rtVisit();
+  await treatment.verify();
+  await treatment.send("engagement", {
+    event: {
+      kind: "QUESTION_ANSWERED",
+      questionId: "amount",
+      answers: { amount: "Small" },
+    },
+  });
+  await treatment.send(
+    "advertising-choice",
+    { choice: "GRANTED" },
+    { "Sec-GPC": "1" },
+  );
+  expect((await treatment.send("retargeting/qualify")).data.pixels).toEqual([]);
+  expect(
+    (
+      await db.visitorJourney.findUniqueOrThrow({
+        where: { id: treatment.visit.journeyId! },
+      })
+    ).privacy,
+  ).toBe("DENIED");
+  vi.mocked(globalThis.fetch).mockRejectedValueOnce(
+    new Error("Provider timeout"),
+  );
+  const failed = await treatment.send("verify-visit", {
+    turnstileToken: "outage-token",
+  });
+  expect(failed.data).toMatchObject({ verified: false, state: "ERROR" });
+  expect(
+    (await db.visit.findUniqueOrThrow({ where: { id: treatment.visit.id } }))
+      .botScore,
+  ).toBeLessThan(70);
+  await expect(
+    saveRetargetingSettings({
+      enabled: false,
+      controlPercent: 30,
+      audiences: rtAudiences,
+    }),
+  ).rejects.toThrow("frozen");
+});
+
+it("preserves every return click and original journey, progresses application audiences, and queues sale suppression without server pixels", async () => {
+  const f = await rtVisit();
+  await f.verify();
+  await f.send("advertising-choice", { choice: "GRANTED" });
+  await f.send("engagement", {
+    event: {
+      kind: "QUESTION_ANSWERED",
+      questionId: "amount",
+      answers: { amount: "Small" },
+    },
+  });
+  await f.send("retargeting/qualify");
+  const next = await request(
+    "/api/public/visit",
+    "POST",
+    {
+      slug: f.experiment.slug,
+      campaignId: "88101",
+      zoneId: "2",
+      clickId: "retargeting-click-a",
+    },
+    false,
+    f.headers,
+  );
+  const returned = await db.visit.findUniqueOrThrow({
+    where: { id: next.data.visitId },
+  });
+  expect(returned).toMatchObject({
+    journeyId: f.visit.journeyId,
+    externalClickId: "retargeting-click-a",
+    retargetingCampaignId: "88101",
+    retargetingAudienceId: "88001",
+  });
+  expect(returned.id).not.toBe(f.visit.id);
+  expect(
+    (await db.visit.findUniqueOrThrow({ where: { id: f.visit.id } }))
+      .externalClickId,
+  ).toBe(f.visit.externalClickId);
+  const send = (path: string, body: object = {}) =>
+    request(
+      `/api/public/${path}`,
+      "POST",
+      { visitToken: next.data.visitToken, ...body },
+      false,
+      f.headers,
+    );
+  vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+    Response.json({
+      success: true,
+      hostname: new URL(env.APP_URL).hostname,
+      action: "visit",
+      cdata: returned.id,
+    }),
+  );
+  await send("verify-visit", { turnstileToken: `return-${returned.id}` });
+  const continuing = await send("continue", { entryPoint: "optional_updates" });
+  expect(continuing.status).toBe(200);
+  const appId = new URL(continuing.data.url).searchParams.get("subId3")!;
+  expect(
+    (await db.applicationClick.findUniqueOrThrow({ where: { id: appId } }))
+      .visitId,
+  ).toBe(returned.id);
+  const progression = (await send("retargeting/qualify")).data.pixels;
+  expect(
+    progression
+      .map((p: any) => [p.action, new URL(p.url).searchParams.get("partner")])
+      .sort(),
+  ).toEqual([
+    ["ENROLL", "88002"],
+    ["REMOVE", "88001"],
+  ]);
+  const calls = providerCalls.length;
+  expect(
+    await recordPostback({
+      eventId: `retargeting-sale-${appId}`,
+      applicationId: appId,
+      event: "SOLD",
+      revenue: "4.50",
+    }),
+  ).toMatchObject({ duplicate: false });
+  expect(
+    await recordPostback({
+      eventId: `retargeting-sale-${appId}`,
+      applicationId: appId,
+      event: "SOLD",
+      revenue: "4.50",
+    }),
+  ).toMatchObject({ duplicate: true });
+  expect(providerCalls).toHaveLength(calls);
+  expect(
+    (
+      await db.visitorJourney.findUniqueOrThrow({
+        where: { id: f.visit.journeyId! },
+      })
+    ).suppressionReason,
+  ).toBe("PAID_LEAD");
+  expect(
+    await db.retargetingPixelAttempt.count({
+      where: {
+        journeyId: f.visit.journeyId!,
+        audienceId: "88002",
+        action: "REMOVE",
+      },
+    }),
+  ).toBe(0);
+  const suppression = (await send("retargeting/qualify")).data.pixels;
+  expect(
+    suppression
+      .map((p: any) => [p.action, new URL(p.url).searchParams.get("partner")])
+      .sort(),
+  ).toEqual([
+    ["ENROLL", "88003"],
+    ["REMOVE", "88002"],
+  ]);
+  expect((await send("retargeting/qualify")).data.pixels).toEqual([]);
+  await recordPostback({
+    eventId: `retargeting-other-sale-id-${appId}`,
+    applicationId: appId,
+    event: "SOLD",
+    revenue: "4.50",
+  });
+  const today = new Date().toISOString().slice(0, 10);
+  let report = await retargetingReport({
+    from: today,
+    through: today,
+    groupBy: "campaign",
+  });
+  expect(report.rows.find((r) => r.key === "88101")).toMatchObject({
+    paidLeads: 1,
+    commission: 4.5,
+    repeatedSaleEvents: 1,
+    spend: null,
+    paidLeadAcquisitionCost: null,
+  });
+  const rows = [
+    {
+      campaignId: "88101",
+      day: today,
+      amount: 2.25,
+      currency: "USD",
+      reference: "Isolated test daily spend",
+    },
+  ];
+  await recordRetargetingSpend({ rows });
+  await recordRetargetingSpend({ rows });
+  report = await retargetingReport({ from: today, through: today });
+  expect(report.rows.find((r) => r.key === "88101")).toMatchObject({
+    spend: 2.25,
+    paidLeadAcquisitionCost: 2.25,
+  });
+  expect((await retargetingStatus()).confirmedAudienceMembership).toBeNull();
+});
+
+it("exposes MCP controls, requires exact pixels for collection, and keeps launch checks separate for prelaunch testing", async () => {
+  const client = new Client({ name: "retargeting-test", version: "1" });
+  await client.connect(
+    new StreamableHTTPClientTransport(new URL(base + "/mcp"), {
+      requestInit: { headers: { Authorization: `Bearer ${env.MCP_TOKEN}` } },
+    }),
+  );
+  try {
+    const names = (await client.listTools()).tools.map((t) => t.name);
+    for (const name of [
+      "save_retargeting_settings",
+      "save_retargeting_plan",
+      "validate_retargeting_setup",
+      "retargeting_report",
+      "retargeting_status",
+      "record_retargeting_spend",
+    ])
+      expect(names).toContain(name);
+    const configured = await retargetingConfiguration();
+    const badDestination = structuredClone(configured);
+    badDestination.plan.targetingChecks[0].targetUrl =
+      "https://example.test/missing-macros";
+    const destinationCheck = await validateRetargetingSetup(badDestination);
+    expect(destinationCheck.collectionReady).toBe(true);
+    expect(destinationCheck.ready).toBe(false);
+    expect(destinationCheck.attributionGaps).toHaveLength(2);
+    const gaps = await client.callTool({
+      name: "save_retargeting_plan",
+      arguments: { stages: [] },
+    });
+    expect(gaps.isError).not.toBe(true);
+    expect(validateConfiguration(await retargetingConfiguration()).ready).toBe(
+      false,
+    );
+    expect(
+      (
+        await client.callTool({
+          name: "save_retargeting_settings",
+          arguments: { enabled: true, audiences: [] },
+        })
+      ).isError,
+    ).toBe(true);
+    const f = await rtVisit();
+    await f.verify();
+    await f.send("advertising-choice", { choice: "GRANTED" });
+    await f.send("engagement", {
+      event: {
+        kind: "QUESTION_ANSWERED",
+        questionId: "amount",
+        answers: { amount: "Small" },
+      },
+    });
+    expect((await f.send("retargeting/qualify")).data.pixels).toHaveLength(1);
+    expect(validateConfiguration(await retargetingConfiguration()).ready).toBe(
+      false,
+    );
+    expect(
+      (
+        await client.callTool({
+          name: "retargeting_report",
+          arguments: { groupBy: "group" },
+        })
+      ).isError,
+    ).not.toBe(true);
+    expect(
+      (
+        await client.callTool({
+          name: "save_retargeting_settings",
+          arguments: { enabled: false, audiences: rtAudiences },
+        })
+      ).isError,
+    ).not.toBe(true);
+  } finally {
+    await client.close();
+  }
+});
+
+it("compares mature treatment/control journeys with equal windows, counts sales once, and retains immature journeys outside the comparison", async () => {
+  const now = new Date(),
+    elapsed = 86400_000;
+  const day = (d: Date) => d.toISOString().slice(0, 10);
+  const eligible = new Date(now.getTime() - 10 * elapsed),
+    sold = new Date(eligible.getTime() + elapsed);
+  for (const group of ["TREATMENT", "CONTROL"] as const) {
+    const f = await rtVisit(group);
+    await db.visitorJourney.update({
+      where: { id: f.visit.journeyId! },
+      data: {
+        eligibleAt: eligible,
+        createdAt: new Date(eligible.getTime() - elapsed),
+      },
+    });
+    await db.visit.update({
+      where: { id: f.visit.id },
+      data: {
+        createdAt: eligible,
+        verifiedAt: eligible,
+        verificationState: "VERIFIED",
+      },
+    });
+    const app = await db.applicationClick.create({
+      data: { visitId: f.visit.id, createdAt: eligible },
+    });
+    await db.postback.createMany({
+      data: [
+        {
+          applicationId: app.id,
+          eventId: `control-study-first-${app.id}`,
+          event: "SOLD",
+          revenue: 3,
+          createdAt: sold,
+        },
+        {
+          applicationId: app.id,
+          eventId: `control-study-retry-${app.id}`,
+          event: "SOLD",
+          revenue: 3,
+          createdAt: new Date(sold.getTime() + elapsed),
+        },
+      ],
+    });
+  }
+  const report = await retargetingReport({
+    from: day(eligible),
+    through: day(now),
+    observationDays: 7,
+    groupBy: "group",
+  });
+  for (const arm of report.controlStudy.arms)
+    expect(arm).toMatchObject({
+      eligibleJourneys: 1,
+      convertedJourneys: 1,
+      paidLeadRate: 1,
+      commission: 3,
+    });
+  expect(report.controlStudy.observedRateDifference).toBe(0);
+  for (const row of report.rows) expect(row.spend).toBeNull();
+  expect((await request("/api/admin/retargeting/status")).status).toBe(401);
+  expect(
+    (await request("/api/admin/retargeting/status", "GET", undefined, true))
+      .status,
+  ).toBe(200);
+});
+
+it("marks engagement verified only with a current proof and preserves newer verification results when responses arrive out of order", async () => {
+  await rtSetup();
+  const f = await rtVisit();
+  await f.send("advertising-choice", { choice: "GRANTED" });
+  await f.verify();
+  await db.visit.update({
+    where: { id: f.visit.id },
+    data: { verificationExpiresAt: new Date(Date.now() - 1) },
+  });
+  await f.send("engagement", {
+    event: {
+      kind: "QUESTION_ANSWERED",
+      questionId: "amount",
+      answers: { amount: "Small" },
+    },
+  });
+  expect(
+    (
+      await db.visitEvent.findFirstOrThrow({
+        where: { visitId: f.visit.id, kind: "QUESTION_ANSWERED" },
+      })
+    ).verifiedAt,
+  ).toBeNull();
+  expect((await f.send("retargeting/qualify")).data.pixels).toEqual([]);
+  let resolveSlow!: (response: Response) => void;
+  vi.mocked(globalThis.fetch).mockImplementationOnce(
+    () =>
+      new Promise<Response>((resolve) => {
+        resolveSlow = resolve;
+      }),
+  );
+  const earlier = f.send("verify-visit", {
+    turnstileToken: `slow-${f.visit.id}`,
+  });
+  await expect
+    .poll(
+      async () =>
+        (await db.visit.findUniqueOrThrow({ where: { id: f.visit.id } }))
+          .verificationState,
+    )
+    .toBe("PENDING");
+  expect((await f.send("retargeting/qualify")).data.pixels).toEqual([]);
+  expect((await f.verify()).data.verified).toBe(true);
+  resolveSlow(
+    Response.json({ success: false, "error-codes": ["timeout-or-duplicate"] }),
+  );
+  await earlier;
+  expect(
+    (await db.visit.findUniqueOrThrow({ where: { id: f.visit.id } }))
+      .verificationState,
+  ).toBe("VERIFIED");
+  expect(
+    (
+      await db.visitEvent.findFirstOrThrow({
+        where: { visitId: f.visit.id, kind: "QUESTION_ANSWERED" },
+      })
+    ).verifiedAt,
+  ).not.toBeNull();
+  expect((await f.send("retargeting/qualify")).data.pixels).toHaveLength(1);
+  const lead = await db.lead.create({
+    data: {
+      visitId: f.visit.id,
+      name: "Subscription suppression fixture",
+      answers: {},
+    },
+  });
+  const sub = await db.subscription.create({
+    data: {
+      leadId: lead.id,
+      channel: "EMAIL",
+      address: `suppression-${f.visit.id}@example.test`,
+      consentText: "Test consent",
+      consentVersion: "test",
+      consentIpHash: "test",
+    },
+  });
+  await activateSubscription(sub.id);
+  expect(
+    (
+      await db.retargetingPixelAttempt.findFirstOrThrow({
+        where: {
+          journeyId: f.visit.journeyId!,
+          action: "ENROLL",
+          audienceId: "88001",
+        },
+      })
+    ).suppressionReason,
+  ).not.toBeNull();
+  await f.send("advertising-choice", { choice: "DENIED" });
+  expect((await f.send("retargeting/qualify")).data.pixels).toEqual([]);
+  expect(
+    await db.retargetingPixelAttempt.count({
+      where: { journeyId: f.visit.journeyId!, action: "REMOVE" },
+    }),
+  ).toBe(0);
+  expect(
+    (await retargetingStatus()).recentVerificationFailures.length,
+  ).toBeGreaterThan(0);
+  await saveRetargetingSettings({ enabled: false, audiences: rtAudiences });
 });

@@ -3,6 +3,10 @@ import { Router } from "express";
 import { rateLimit } from "express-rate-limit";
 import { z } from "zod";
 import { randomInt } from "node:crypto";
+import { retargetingRouter } from "./retargeting.js";
+import { visitorJourney } from "../services/retargeting.js";
+import { retargetingConfiguration } from "../services/retargeting-config.js";
+import { hasVisitorProof } from "../services/visitor-verification.js";
 import { db } from "../db.js";
 import { env } from "../config.js";
 import {
@@ -43,6 +47,7 @@ publicRouter.use(
     legacyHeaders: false,
   }),
 );
+publicRouter.use(retargetingRouter);
 publicRouter.get("/info", async (_req, res) => {
   const s = await settings();
   res.json({
@@ -70,6 +75,8 @@ publicRouter.post("/visit", async (req, res) => {
     res.status(404).json({ error: "This page is not accepting visitors yet." });
     return;
   }
+  const journey = await visitorJourney(req, res);
+  const retargeting = await retargetingConfiguration();
   const stored = verifyToken(
     String(req.cookies[`sc_visit_${experiment.slug}`] ?? ""),
     "visit",
@@ -79,6 +86,7 @@ publicRouter.post("/visit", async (req, res) => {
         where: {
           id: stored,
           experimentId: experiment.id,
+          journeyId: journey.id,
           createdAt: { gte: new Date(Date.now() - 86400000) },
         },
       })
@@ -86,7 +94,17 @@ publicRouter.post("/visit", async (req, res) => {
   const stickyVariant = visit
     ? experiment.variants.find((v) => v.id === visit!.variantId && v.weight > 0)
     : undefined;
-  if (visit && input.clickId && input.clickId !== visit.externalClickId)
+  const priorSource = visit?.sourceId
+    ? await db.trafficSource.findUnique({ where: { id: visit.sourceId } })
+    : null;
+  if (
+    visit &&
+    ((input.clickId && input.clickId !== visit.externalClickId) ||
+      (input.campaignId &&
+        input.campaignId !==
+          (visit.retargetingCampaignId ?? priorSource?.campaignId)) ||
+      (input.zoneId && input.zoneId !== priorSource?.zoneId))
+  )
     visit = null;
   if (!visit) {
     const variant =
@@ -125,6 +143,15 @@ publicRouter.post("/visit", async (req, res) => {
     }
     visit = await db.visit.create({
       data: {
+        journeyId: journey.id,
+        retargetingCampaignId: retargeting.plan.stages.some((s) =>
+          s.campaignIds.includes(input.campaignId ?? ""),
+        )
+          ? input.campaignId
+          : null,
+        retargetingAudienceId: retargeting.plan.stages.find((s) =>
+          s.campaignIds.includes(input.campaignId ?? ""),
+        )?.audienceId,
         experimentId: experiment.id,
         variantId: variant.id,
         configSnapshot: variant.config as any,
@@ -157,6 +184,15 @@ publicRouter.post("/visit", async (req, res) => {
     turnstileSiteKey: env.TURNSTILE_SITE_KEY,
     oneSignalAppId: env.ONESIGNAL_APP_ID,
     deliveryEnabled: env.LIVE_DELIVERY === "true",
+    advertising: {
+      privacy: journey.privacy,
+      notice: retargeting.advertisingNotice,
+      available: retargeting.audiences.some((a) => a.enabled),
+    },
+    verification: {
+      verified: hasVisitorProof(visit),
+      expiresAt: visit.verificationExpiresAt,
+    },
   });
 });
 publicRouter.post("/engagement", checkOrigin, async (req, res) => {
@@ -188,7 +224,7 @@ publicRouter.post(
     const input = z
       .object({
         visitToken: z.string(),
-        turnstileToken: z.string().max(2048),
+        turnstileToken: z.string().max(2048).optional(),
         name: z.string().trim().max(80).default(""),
         timezone: z.string().max(80).optional(),
         answers: z.record(z.string().max(200)),
@@ -224,63 +260,62 @@ publicRouter.post(
       res.status(400).json({ error: "Unable to verify this submission" });
       return;
     }
-    if (!env.TURNSTILE_SECRET_KEY) {
-      res
-        .status(503)
-        .json({ error: "Visitor verification is not configured yet." });
-      return;
-    }
-    const response = await fetch(
-      "https://challenges.cloudflare.com/turnstile/v0/siteverify",
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          secret: env.TURNSTILE_SECRET_KEY,
-          response: input.turnstileToken,
-          remoteip: req.ip,
-        }),
-        signal: AbortSignal.timeout(10000),
-      },
-    );
-    if (!response.ok)
-      throw new Error("Visitor verification temporarily unavailable");
-    const verification = (await response.json()) as {
-      success: boolean;
-      hostname?: string;
-      action?: string;
-      cdata?: string;
-      "error-codes"?: string[];
-    };
-    const localTest =
-      env.NODE_ENV !== "production" &&
-      env.TURNSTILE_SECRET_KEY.startsWith("1x000");
-    if (
-      !verification.success ||
-      (!localTest &&
-        (verification.hostname !== new URL(env.APP_URL).hostname ||
-          verification.action !== "subscribe" ||
-          verification.cdata !== visit.id))
-    ) {
-      const forged =
-        verification["error-codes"]?.includes("invalid-input-response") ??
-        false;
-      await db.visit.update({
-        where: { id: visit.id },
-        data: {
-          challenged: true,
-          ...(forged
-            ? {
-                botScore: Math.max(80, visit.botScore),
-                evidence: { push: "Invalid challenge response" },
-              }
-            : {}),
+    if (!hasVisitorProof(visit)) {
+      if (!input.turnstileToken) {
+        res
+          .status(400)
+          .json({ error: "Finish browser verification, then try again." });
+        return;
+      }
+      if (!env.TURNSTILE_SECRET_KEY) {
+        res
+          .status(503)
+          .json({ error: "Visitor verification is not configured yet." });
+        return;
+      }
+      const response = await fetch(
+        "https://challenges.cloudflare.com/turnstile/v0/siteverify",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            secret: env.TURNSTILE_SECRET_KEY,
+            response: input.turnstileToken,
+            remoteip: req.ip,
+          }),
+          signal: AbortSignal.timeout(10000),
         },
-      });
-      res
-        .status(400)
-        .json({ error: "Verification failed or expired. Please try again." });
-      return;
+      );
+      if (!response.ok)
+        throw new Error("Visitor verification temporarily unavailable");
+      const verification = (await response.json()) as {
+        success: boolean;
+        hostname?: string;
+        action?: string;
+        cdata?: string;
+        "error-codes"?: string[];
+      };
+      const localTest =
+        env.NODE_ENV !== "production" &&
+        env.TURNSTILE_SECRET_KEY.startsWith("1x000");
+      if (
+        !verification.success ||
+        (!localTest &&
+          (verification.hostname !== new URL(env.APP_URL).hostname ||
+            verification.action !== "subscribe" ||
+            verification.cdata !== visit.id))
+      ) {
+        await db.visit.update({
+          where: { id: visit.id },
+          data: {
+            challenged: true,
+          },
+        });
+        res
+          .status(400)
+          .json({ error: "Verification failed or expired. Please try again." });
+        return;
+      }
     }
     const detected = detectTimezone(
       input.timezone,

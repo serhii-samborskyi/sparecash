@@ -103,9 +103,20 @@ Official MCP: https://propellerads.com/mcp-connector/
 
 ## Cloudflare Turnstile
 
-Set a hostname-restricted site key and secret. The browser uses `action=subscribe` and the server-issued visit ID as `cData`. The server validates the token, hostname, action, and visit binding before recording a subscription. Test keys are allowed only outside production. Tokens are one-use; a failed submission asks for a fresh challenge.
+Set a hostname-restricted site key and secret. All live landings run early
+verification with `action=visit` and the server-issued visit ID as `cData`, even
+when the visitor never subscribes. The server checks Siteverify success,
+hostname, action and visit binding, then retains a 30-minute visit proof.
+Audience verification has no test-key bypass. Legacy `action=subscribe` remains
+accepted for existing clients but does not supply an audience proof.
 
-Reference: https://developers.cloudflare.com/turnstile/get-started/server-side-validation/
+The retargeting gate additionally requires verified engagement, explicit
+advertising permission and treatment-group assignment. Provider timeouts and
+expired tokens are not automatic bot evidence. The live Cloudflare firewall
+account audit is still pending. See [the retargeting contract](ENGAGEMENT-RETARGETING.md)
+for settings, suppression limits, tests and deployment.
+
+Reference: [Cloudflare server validation](https://developers.cloudflare.com/turnstile/get-started/server-side-validation/)
 
 ## Lead time zones
 

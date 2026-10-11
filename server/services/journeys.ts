@@ -2,6 +2,7 @@ import type { Channel, LeadStatus } from "@prisma/client";
 import { db } from "../db.js";
 import { nextLeadStatus, shouldStop } from "../domain.js";
 import { settings } from "./control.js";
+import { refreshJourneySuppression } from "./retargeting.js";
 export async function enroll(subscriptionId: string, trigger: string) {
   return db.$transaction(async (tx) => {
     const sub = await tx.subscription.findUniqueOrThrow({
@@ -55,6 +56,10 @@ export async function activateSubscription(id: string) {
       },
     });
     await enroll(id, "SUBSCRIBED");
+    const visit = await db.visit.findFirst({
+      where: { leads: { some: { id: record.leadId } } },
+    });
+    if (visit?.journeyId) await refreshJourneySuppression(visit.journeyId);
   }
 }
 export async function unsubscribe(id: string, reason = "Visitor opted out") {

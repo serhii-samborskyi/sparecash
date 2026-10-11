@@ -1730,6 +1730,31 @@ summary {
   --public-bg: #f8f5f8;
   --green: #674c67;
 }
+.visitor-controls {
+  max-width: 1320px;
+  margin: 0 auto 24px;
+  padding: 12px 24px;
+  color: var(--public, #234d3e);
+  font-size: 14px;
+}
+.visitor-controls details {
+  margin-top: 12px;
+}
+.visitor-controls summary {
+  cursor: pointer;
+}
+.visitor-controls p {
+  max-width: 850px;
+  line-height: 1.6;
+}
+.advertising-choices {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.advertising-choices .button {
+  min-height: 44px;
+}
 .public-header {
   max-width: 1180px;
   width: 100%;

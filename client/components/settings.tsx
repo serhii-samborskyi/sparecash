@@ -5,6 +5,7 @@ import { api } from "../api";
 import { useAutosave } from "../hooks/use-autosave";
 import { AutosaveStatus } from "./autosave-status";
 import { TimezoneSelect } from "./timezone-select";
+import { RetargetingSettings } from "./retargeting-settings";
 export function SettingsView({
   value,
   onSaved,
@@ -63,6 +64,7 @@ export function SettingsView({
           void queue.commit();
         }}
       />
+      <RetargetingSettings />
       <section className="panel">
         <div className="panel-heading">
           <ShieldCheck size={20} />

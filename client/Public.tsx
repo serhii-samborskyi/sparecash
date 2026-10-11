@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { createEngagementTracker } from "./engagement";
+import { VisitorGate } from "./VisitorGate";
+import { beforeApplicationNavigation } from "./retargeting";
 import { visibleQuestions } from "../server/domain";
 import {
   ArrowRight,
@@ -46,40 +48,6 @@ function loadScript(url: string) {
     );
   return scripts.get(url)!;
 }
-function Turnstile({
-  siteKey,
-  visitId,
-  onToken,
-}: {
-  siteKey: string;
-  visitId: string;
-  onToken: (token: string) => void;
-}) {
-  const container = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    let widget: string | undefined,
-      disposed = false;
-    if (!siteKey) return;
-    void loadScript(
-      "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit",
-    ).then(() => {
-      if (!disposed && container.current)
-        widget = window.turnstile.render(container.current, {
-          sitekey: siteKey,
-          action: "subscribe",
-          cData: visitId,
-          callback: onToken,
-          "expired-callback": () => onToken(""),
-          "error-callback": () => onToken(""),
-        });
-    });
-    return () => {
-      disposed = true;
-      if (widget) window.turnstile?.remove(widget);
-    };
-  }, [siteKey, visitId, onToken]);
-  return <div className="turnstile-container" ref={container} />;
-}
 export function Public() {
   const preview = location.pathname.startsWith("/preview/"),
     utility = [
@@ -104,14 +72,14 @@ function Landing({ preview }: { preview: boolean }) {
     [consent, setConsent] = useState(false),
     [adult, setAdult] = useState(false),
     [company, setCompany] = useState(""),
-    [turnstileToken, setToken] = useState(""),
-    [captchaKey, setCaptchaKey] = useState(0),
+    [visitorVerified, setVisitorVerified] = useState(false),
     [busy, setBusy] = useState(false),
     [result, setResult] = useState<any>(null),
     [code, setCode] = useState(""),
     [smsConfirmed, setSmsConfirmed] = useState(false),
     [pushStatus, setPushStatus] = useState(""),
     [showUpdates, setShowUpdates] = useState(false);
+  const pixelRunner = useRef<(() => Promise<void>) | undefined>(undefined);
   const pushAttempt = useRef<AbortController | null>(null);
   const trackEngagement = useRef(createEngagementTracker());
   const updatesRecorded = useRef(false);
@@ -166,7 +134,6 @@ function Landing({ preview }: { preview: boolean }) {
         : [...channels, channel],
     );
     setConsent(false);
-    if (channels.length === 1 && channels.includes(channel)) setToken("");
   };
   async function subscribe(e: React.FormEvent) {
     e.preventDefault();
@@ -176,7 +143,6 @@ function Landing({ preview }: { preview: boolean }) {
     try {
       const r = await post("/public/subscribe", {
         visitToken: session.visitToken,
-        turnstileToken,
         name,
         timezone: (() => {
           try {
@@ -194,10 +160,9 @@ function Landing({ preview }: { preview: boolean }) {
         company,
       });
       setResult(r);
+      void pixelRunner.current?.();
     } catch (e) {
       setError((e as Error).message);
-      setToken("");
-      setCaptchaKey((x) => x + 1);
     } finally {
       setBusy(false);
     }
@@ -257,6 +222,7 @@ function Landing({ preview }: { preview: boolean }) {
       );
       await confirmPushSubscription(result.leadToken, id, attempt.signal);
       setPushStatus("confirmed");
+      void pixelRunner.current?.();
     } catch (e) {
       if (!attempt.signal.aborted) {
         setPushStatus(e instanceof PushConfirmationPending ? "pending" : "");
@@ -280,6 +246,7 @@ function Landing({ preview }: { preview: boolean }) {
             visitToken: session.visitToken,
             entryPoint,
           });
+      await beforeApplicationNavigation(pixelRunner.current);
       location.assign(r.url);
     } catch (e) {
       setError((e as Error).message);
@@ -325,6 +292,13 @@ function Landing({ preview }: { preview: boolean }) {
         </div>
       )}
       <PublicHeader logoImage={config.logoImage} />
+      {!preview && (
+        <VisitorGate
+          session={session}
+          onVerified={setVisitorVerified}
+          runner={pixelRunner}
+        />
+      )}
       <main className="landing-layout">
         <div className="landing-story">
           {config.heroImage && config.heroPosition === "before_title" && (
@@ -761,18 +735,13 @@ function Landing({ preview }: { preview: boolean }) {
                           </span>
                         </label>
                       )}
-                      {!preview && (
-                        <Turnstile
-                          key={captchaKey}
-                          siteKey={session.turnstileSiteKey}
-                          visitId={session.visitId}
-                          onToken={setToken}
-                        />
-                      )}
                       <button
                         className="button full"
                         disabled={
-                          busy || preview || !channels.length || !turnstileToken
+                          busy ||
+                          preview ||
+                          !channels.length ||
+                          !visitorVerified
                         }
                       >
                         {busy ? <Spinner /> : null}

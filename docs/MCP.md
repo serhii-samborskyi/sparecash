@@ -155,3 +155,39 @@ For recurring optimization, configure a recurring task in the AI client that can
 ## Anonymous engagement
 
 Use `engagement_report` to measure quiz answers/completions, update-form opens and continue-without-updates clicks even when visitors never subscribe. Use `list_traffic_visits` with `engagementKind` to inspect matching attribution IDs. These are first-party observations, not lender conversions or advertiser audience uploads. See [the event and retargeting contract](ENGAGEMENT-RETARGETING.md).
+
+Raw engagement alone does not establish visitor verification. Use
+`retargeting_report` for verified engagement and failed/unverified traffic.
+
+## Retargeting V1
+
+SpareCash qualifies visits, approves browser pixels and links return visits to
+applications and sales. PropellerAds MCP creates/targets campaigns and retrieves
+advertising statistics. Start with `retargeting_status` and
+`validate_retargeting_setup`; no advertiser pixel is enabled by default.
+
+| Tool                         | Purpose                                                                                                                                                                                         |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `save_retargeting_settings`  | Replace audience IDs, names, purposes, exact enrollment/removal image URLs, eligibility rules, enabled state and the initial 20% control share. Omitted audiences are disabled.                 |
+| `save_retargeting_plan`      | Save event stages, included/excluded audiences, linked campaigns, targeting readbacks, suppression-test and Cloudflare-audit evidence.                                                          |
+| `validate_retargeting_setup` | Separate collection readiness from campaign launch gaps. Account evidence is supplied by the operator, not independently verified by SpareCash.                                                 |
+| `retargeting_report`         | Campaign, audience, zone, original-angle and control-group cohorts with verified returns, subscriptions, applications, paid leads, commission, spend coverage and observed control differences. |
+| `retargeting_status`         | Current settings/plan, setup gaps, verification states, pixel failures/uncertainty and suppression counts.                                                                                      |
+| `record_retargeting_spend`   | Upsert USD spend by campaign and UTC day from PropellerAds reporting; include explicit zero days and a source reference.                                                                        |
+
+Audience rules support `QUIZ_PARTICIPATED`, `QUIZ_COMPLETED`, `APPLICATION`,
+`SUBSCRIBED` and exclusion-only `PAID`. Opening updates is not qualification.
+Application/subscription status conditions are independent of messaging consent.
+The exact image adapter, property schemas, account setup sequence and limitations
+are documented in [Engagement and retargeting V1](ENGAGEMENT-RETARGETING.md).
+
+Collection can be deliberately enabled after pixel/key checks for prelaunch
+browser testing. Campaign launch readiness also requires actual targeting and
+suppression/audit evidence. Never claim the account is verified based only on
+code tests. Never infer pixel partner IDs from audience IDs, fabricate pixel
+codes/evidence, treat image loads as audience membership, equate SOLD with FUNDED,
+or mark missing advertising costs as zero. The app does not create timed
+advertiser sequences or execute browser removal pixels from server callbacks.
+
+No new environment variables are required. After deployment, reconnect external
+MCP clients to refresh tool discovery.

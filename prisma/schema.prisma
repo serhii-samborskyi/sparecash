@@ -74,14 +74,14 @@ model LandingAsset {
 }
 
 model LandingAssetUpload {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   tokenHash String
   name      String
   alt       String
   kind      String
   expiresAt DateTime
   usedAt    DateTime?
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
 
   @@index([expiresAt])
 }
@@ -122,74 +122,166 @@ model TrafficSource {
 }
 
 model Visit {
-  configSnapshot  Json               @default("{}")
-  id              String             @id @default(uuid())
-  experimentId    String
-  experiment      Experiment         @relation(fields: [experimentId], references: [id])
-  variantId       String
-  variant         Variant            @relation(fields: [variantId], references: [id])
-  sourceId        String?
-  source          TrafficSource?     @relation(fields: [sourceId], references: [id])
-  externalClickId String?
-  ipHash          String
-  userAgent       String
-  verified        Boolean            @default(false)
-  challenged      Boolean            @default(false)
-  botScore        Int                @default(0)
-  evidence        String[]
-  cost            Decimal            @default(0) @db.Decimal(12, 6)
-  costRecorded    Boolean            @default(false)
-  createdAt       DateTime           @default(now())
-  leads           Lead[]
-  applications    ApplicationClick[]
-  engagementEvents VisitEvent[]
+  journeyId             String?
+  journey               VisitorJourney?       @relation(fields: [journeyId], references: [id], onDelete: SetNull)
+  verificationState     String                @default("UNVERIFIED")
+  verificationAttemptId String?
+  verifiedAt            DateTime?
+  verificationExpiresAt DateTime?
+  verifications         VisitorVerification[]
+  retargetingCampaignId String?
+  retargetingAudienceId String?
+  configSnapshot        Json                  @default("{}")
+  id                    String                @id @default(uuid())
+  experimentId          String
+  experiment            Experiment            @relation(fields: [experimentId], references: [id])
+  variantId             String
+  variant               Variant               @relation(fields: [variantId], references: [id])
+  sourceId              String?
+  source                TrafficSource?        @relation(fields: [sourceId], references: [id])
+  externalClickId       String?
+  ipHash                String
+  userAgent             String
+  verified              Boolean               @default(false)
+  challenged            Boolean               @default(false)
+  botScore              Int                   @default(0)
+  evidence              String[]
+  cost                  Decimal               @default(0) @db.Decimal(12, 6)
+  costRecorded          Boolean               @default(false)
+  createdAt             DateTime              @default(now())
+  leads                 Lead[]
+  applications          ApplicationClick[]
+  engagementEvents      VisitEvent[]
 
   @@index([sourceId, createdAt])
   @@index([ipHash, createdAt])
   @@index([experimentId, createdAt])
+  @@index([journeyId, createdAt])
+}
+
+// Browser journeys are deliberately not fingerprints or cross-device identities.
+model VisitorJourney {
+  id                String                    @id @default(uuid())
+  group             String
+  controlPercent    Int
+  privacy           String                    @default("UNKNOWN")
+  privacyAt         DateTime?
+  eligibleAt        DateTime?
+  suppressedAt      DateTime?
+  suppressionReason String?
+  createdAt         DateTime                  @default(now())
+  visits            Visit[]
+  pixels            RetargetingPixelAttempt[]
+  privacyEvents     AdvertisingPrivacyEvent[]
+}
+
+model AdvertisingPrivacyEvent {
+  id        String         @id @default(cuid())
+  journeyId String
+  journey   VisitorJourney @relation(fields: [journeyId], references: [id], onDelete: Cascade)
+  choice    String
+  source    String
+  text      String
+  createdAt DateTime       @default(now())
+
+  @@index([journeyId, createdAt])
+}
+
+model VisitorVerification {
+  id        String   @id @default(uuid())
+  visitId   String
+  visit     Visit    @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  tokenHash String   @unique
+  state     String   @default("PENDING")
+  errors    String[]
+  createdAt DateTime @default(now())
+
+  @@index([visitId, createdAt])
+}
+
+model RetargetingAudience {
+  id        String                    @id
+  config    Json
+  revision  String
+  updatedAt DateTime                  @updatedAt
+  pixels    RetargetingPixelAttempt[]
+}
+
+model RetargetingPixelAttempt {
+  id                String              @id @default(uuid())
+  journeyId         String
+  journey           VisitorJourney      @relation(fields: [journeyId], references: [id], onDelete: Cascade)
+  audienceId        String
+  audience          RetargetingAudience @relation(fields: [audienceId], references: [id])
+  revision          String
+  // Snapshot removal configuration so later edits cannot remove the wrong audience.
+  config            Json
+  visitId           String
+  action            String
+  state             String              @default("ISSUED")
+  reason            String?
+  suppressionReason String?
+  createdAt         DateTime            @default(now())
+  reportedAt        DateTime?
+
+  // V1 never silently retries an uncertain dispatch or reenrolls a suppressed browser.
+  @@unique([journeyId, audienceId, action])
+  @@index([state, createdAt])
+}
+
+model RetargetingSpend {
+  campaignId String
+  day        String
+  amount     Decimal  @db.Decimal(12, 6)
+  currency   String   @default("USD")
+  reference  String
+  updatedAt  DateTime @updatedAt
+
+  @@id([campaignId, day])
 }
 
 model VisitEvent {
-  id         String   @id @default(cuid())
+  id         String    @id @default(cuid())
   visitId    String
-  visit      Visit    @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  visit      Visit     @relation(fields: [visitId], references: [id], onDelete: Cascade)
   kind       String
-  questionId String   @default("")
+  questionId String    @default("")
   answer     String?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  verifiedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
   @@unique([visitId, kind, questionId])
   @@index([kind, createdAt])
 }
 
 model AppConfiguration {
-  id               String   @id
-  values           Json
-  secrets          Json?
+  id                    String   @id
+  values                Json
+  secrets               Json?
   // Retained only as a backup of credentials from installations before database storage.
-  encryptedSecrets String?
-  credentialsNeedReview Boolean @default(false)
-  revision         Int      @default(1)
-  updatedAt        DateTime @updatedAt
+  encryptedSecrets      String?
+  credentialsNeedReview Boolean  @default(false)
+  revision              Int      @default(1)
+  updatedAt             DateTime @updatedAt
 }
 
 model Lead {
-  id            String             @id @default(uuid())
-  visitId       String
-  visit         Visit              @relation(fields: [visitId], references: [id])
-  name          String
-  status        LeadStatus         @default(NEW)
-  timezone      String             @default("America/Chicago")
-  timezoneSource String            @default("UNKNOWN")
-  answers       Json
-  notes         String             @default("")
-  createdAt     DateTime           @default(now())
-  updatedAt     DateTime           @updatedAt
-  lastClickedAt DateTime?
-  subscriptions Subscription[]
-  applications  ApplicationClick[]
-  events        LeadEvent[]
+  id             String             @id @default(uuid())
+  visitId        String
+  visit          Visit              @relation(fields: [visitId], references: [id])
+  name           String
+  status         LeadStatus         @default(NEW)
+  timezone       String             @default("America/Chicago")
+  timezoneSource String             @default("UNKNOWN")
+  answers        Json
+  notes          String             @default("")
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  lastClickedAt  DateTime?
+  subscriptions  Subscription[]
+  applications   ApplicationClick[]
+  events         LeadEvent[]
 }
 
 model Subscription {

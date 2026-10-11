@@ -21,6 +21,11 @@ export function createEngagementTracker() {
       keepalive: true,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ visitToken, event }),
-    }).catch(() => {});
+    })
+      .then((response) => {
+        if (response?.ok && typeof window !== "undefined")
+          window.dispatchEvent(new Event("sparecash-engagement"));
+      })
+      .catch(() => {});
   };
 }

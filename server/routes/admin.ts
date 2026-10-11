@@ -1,4 +1,6 @@
 import { rateLimit } from "express-rate-limit";
+import { retargetingStatus } from "../services/retargeting.js";
+import { retargetingReport } from "../services/retargeting-report.js";
 import { testDelivery } from "../services/delivery-tests.js";
 import { roundSkyPixelSetup } from "../services/roundsky.js";
 import {
@@ -40,6 +42,21 @@ import {
 } from "../services/journeys.js";
 export const adminRouter = Router();
 adminRouter.use(requireAdmin, checkOrigin);
+adminRouter.get("/retargeting/status", async (_req, res) => {
+  res.set("Cache-Control", "no-store").json(await retargetingStatus());
+});
+adminRouter.get("/retargeting/report", async (req, res) => {
+  res
+    .set("Cache-Control", "no-store")
+    .json(
+      await retargetingReport({
+        ...req.query,
+        ...(req.query.observationDays !== undefined
+          ? { observationDays: Number(req.query.observationDays) }
+          : {}),
+      }),
+    );
+});
 adminRouter.get("/landing-assets", async (req, res) => {
   res.set("Cache-Control", "no-store").json(await listLandingAssets(req.query));
 });

@@ -1,95 +1,259 @@
-# Opt-in and engagement tracking
+# Engagement and retargeting V1
 
-The optional-update form begins with channel choices. First name is optional;
-contact fields, age/residency confirmation, consent and the verification challenge
-appear after a channel is selected. Browser notifications use a plain-language
-label. A separate **Continue to application** button remains available without
-subscribing. Existing channel-specific consent and confirmation rules still apply.
+SpareCash qualifies browser journeys, authorizes audience pixels and measures
+first-party results. PropellerAds MCP owns campaign creation, targeting,
+exclusions, budgets and advertiser statistics. V1 implements event stages;
+it does not schedule day 1 → day 3 → day 7 advertiser sequences.
 
-## First-party events
+**Deployment status:** implemented in this branch, disabled by default. No real
+pixel configuration, advertiser audience change or retargeting campaign was
+created by this implementation. Production account checks remain outstanding.
 
-`POST /api/public/engagement` accepts a signed visit token and an allowlisted event:
+## Verification and engagement
+
+Every live landing mounts Turnstile after creating its visit, before any channel
+is selected. This covers quiz participants and people who never subscribe.
+Rendering, raw engagement and continuation to loan options remain available
+while verification is incomplete; audience enrollment does not.
+
+`POST /api/public/verify-visit` requires the signed visit token and matching
+first-party journey cookie. Siteverify must return success, the `APP_URL`
+hostname, action `visit`, and `cdata` equal to the visit ID. No local/test-key
+bypass applies to audience verification. Configure real keys when testing the
+flow against Cloudflare, or mock the provider in automated tests.
+
+Cloudflare tokens are single-use and expire after five minutes; validation is
+mandatory on the server. [Cloudflare validation documentation](https://developers.cloudflare.com/turnstile/get-started/server-side-validation/)
+
+The app stores a token digest, attempt outcomes and error codes, never the raw
+challenge token. A retry of an already accepted token can read its same-visit
+receipt while that visit's proof remains valid; it cannot transfer verification
+to another visit. A new attempt becomes the current attempt, so a slow earlier
+response cannot overwrite its result. Accepted app verification lasts **30
+minutes**; this is distinct from Cloudflare's token lifetime. New ad clicks
+require their own verification. Failures, missing keys and provider outages
+leave audience enrollment closed. An invalid/expired token is not automatically
+classified as bot traffic.
+
+`POST /api/public/engagement` accepts these allowlisted events:
 
 - `QUESTION_ANSWERED`: validates the visible answered quiz prefix against the
-  configuration snapshot from the original visit. Stores one event per question.
-- `QUIZ_COMPLETED`: recorded by the server when that prefix completes a visible
-  quiz path. This is a historical action, not the final submitted lead response.
-- `UPDATES_OPENED`: the optional-update form was shown.
-- `CONTINUE_WITHOUT_UPDATES`: recorded in `/api/public/continue` when the visitor
-  clicks **Continue to application** inside the optional-update form. The primary
-  application CTA is recorded as an application click but not as an opt-in skip.
+  immutable visit configuration. Stores the first answer per question.
+- `QUIZ_COMPLETED`: derived by the server when that prefix completes a quiz path.
+- `UPDATES_OPENED`: optional updates were displayed; not qualifying engagement.
+- `CONTINUE_WITHOUT_UPDATES`: recorded by `/continue` for its optional-updates CTA.
+- `APPLICATION_CONTINUED`: recorded when the server creates an application click,
+  for both the primary application path and the skip-updates path.
 
-Unique `(visitId, kind, questionId)` keys prevent retry inflation. Events retain
-the first recorded answer and timestamp; submitted lead answers remain separate.
-The client dispatches small keepalive requests immediately and does not block
-navigation on analytics. Browser/network failures can still lose client events.
-Skip events are stored server-side before returning the application URL.
+Unique `(visitId, kind, questionId)` keys prevent raw-event retry inflation. Raw
+quiz events arriving before verification acquire their verified marker only
+after that same visit passes server verification. Later events require a
+current proof. Verification and event writes lock the visit to avoid ordering
+races. Opening updates or merely loading the page never qualifies an audience.
+Preview mode never creates visits, verifies visitors or loads advertising pixels.
+Legacy subscription verification remains compatible with already-open clients,
+but does not establish the new audience proof. Messaging consent and channel
+confirmation remain separate.
 
-Preview mode sends no events or applications. Engagement creates no subscription,
-does not mark a visitor verified, and calls no advertising or messaging provider.
-It is self-reported activity, not proof of identity or lender qualification.
-Counts represent visit sessions, not unique people across devices. There is no
-historical backfill or page-view/scroll/time-on-page event collection.
+`engagement_report` retains raw event measurements. `retargeting_report` separates
+raw visits, latest verification states, ever-verified visits and verified
+engagement, including zone grouping. Failed attempts remain in verification
+history after a successful retry. No historic visits/events are backfilled as
+verified audience engagement. A visit or browser journey is not a unique person
+across devices.
 
-Use experiment results for all-time per-variant counts. MCP `engagement_report`
-adds a visit-cohort date window, campaign/zone filters, application visitors and
-confirmed opt-in visitors. It defaults to the last 30 days excluding the newest
-24 hours; use `minimumAgeHours: 0` to inspect recent events. The owner endpoint is
-`GET /api/admin/experiments/:id/engagement`.
+## Audience settings and event stages
 
-`list_traffic_visits` accepts `engagementKind` and returns event markers alongside
-existing attribution/click IDs, without contact details or quiz answer values.
-No list is automatically uploaded to an advertiser. Existing retention/deletion
-procedures should include `VisitEvent`; deleting a visit cascades its events.
+Use `save_retargeting_settings` to save audience IDs, names, purposes, enabled
+status, qualifying events, application/subscription conditions, suppression
+conditions and **exact account-provided pixel URLs**. Settings and changes are
+stored in PostgreSQL and audited. Omitted audiences are disabled, not deleted.
 
-## PropellerAds feasibility — checked October 10, 2026
+Supported qualifying events are `QUIZ_PARTICIPATED`, `QUIZ_COMPLETED`,
+`APPLICATION`, `SUBSCRIBED`, and `PAID`. `PAID` is reserved for a
+`PAID_EXCLUSION` audience, which must only be used as a campaign exclusion.
+Marketing audiences always exclude paid journeys regardless of configured rules.
+Subscription conditions use confirmed, currently active subscriptions, not form
+preferences or pending confirmation. Application conditions use actual
+server-recorded application clicks, not opening the optional-update form.
 
-PropellerAds documents three audience sources: ad clicks, conversions reported
-through S2S, and website retargeting pixels. Click-based audiences include all ad
-clickers, so they cannot by themselves identify quiz participants or opt-in skips.
-Website pixels can be placed on the relevant page or fired after the corresponding
-action to collect an engagement audience; event-triggering is the proposed site
-integration, not a documented arbitrary server-side audience-upload API.
+V1 supports the provider's **HTTPS image pixel** at
+`https://my.rtmark.net/img.gif`, with the supplied partner, `f` and optional
+`lr=1` parameters. Enrollment requires `f=on`; removal requires `f=off` and the
+same partner. Only configure this adapter when it exactly matches the account's
+code. The optional `sourceCode` field preserves the supplied snippet for review;
+it is never executed. Script-only snippets, arbitrary HTML/JavaScript and other
+pixel formats are rejected and need an adapter review. Audience ID and pixel
+partner ID must never be assumed equal. No contact details or quiz answers are
+sent to advertiser pixels.
 
-The connected account exposes audience **retarget-loans1 (165991)** through
-`get_targeting_list(targeting_type="audience")`. The available MCP tools and
-public SSP specification do not expose its pixel snippet or audience creation.
-The audience's ID must not be guessed to be the pixel's `partner` identifier.
-Copy the exact snippet from the account's audience **Get code** action first.
+PropellerAds documents browser removal with `f=off`, using the partner from the
+original audience code. [Provider setup and removal documentation](https://help.propellerads.com/en/articles/1954798-how-to-use-propellerads-retargeting)
 
-Suggested segments after account setup:
+Use `save_retargeting_plan` for event stages with:
 
-1. Quiz participants (at least one valid answer).
-2. Visitors who continue without updates.
-3. A separate confirmed-conversion audience to exclude from relevant reminders.
+- `name`, `audienceId`, `excludeAudienceIds`, and linked `campaignIds`.
+- `targetingChecks`: actual `targetUrl`, inclusion/exclusion readback, observation
+  time and evidence reference for each campaign, obtained through PropellerAds MCP.
+- `suppressionTest`: passed, testedAt and evidence reference for the end-to-end
+  suppression test.
+- `cloudflareAudit`: passed, testedAt and evidence reference for the account audit.
 
-Use generic engagement signals for ad audiences; do not send names, contact
-details or loan-answer values to the pixel. Advertising privacy choices and
-applicable opt-outs need their own handling: skipping email/SMS/push updates
-does not grant advertising-tracking permission. Browser restrictions and ad
-blockers can prevent pixel matching, so first-party event totals and audience
-sizes will not necessarily match. S2S callbacks alone cannot execute a browser
-pixel to remove a visitor after a later asynchronous sale.
+Launch validation checks that destination readbacks point to a published `/go/`
+landing on `APP_URL`, preserve campaign/zone/click macros, and that RoundSky is
+configured. These configuration checks do not replace a real callback test.
 
-The S2S documentation supports `goal=2` and `goal=3` for secondary events and says
-only the main event affects CPA Goal optimization. It does not establish which
-goals populate the converted-users audience or support separate per-goal
-audiences. Keep the purchased-lead conversion separate from engagement; confirm
-that account behavior before using a secondary goal as an audience source.
+A campaign maps to one stage for reporting. Inclusion must contain only its
+mapped audience; readback must include all configured exclusions. Each marketing
+stage needs a paid-lead exclusion audience. Future-dated or older-than-seven-day
+account evidence fails readiness. This is **operator-supplied evidence**, not
+an independent live check by SpareCash. Re-check after changing targeting.
 
-No PropellerAds pixel, S2S engagement postback, audience membership change or
-retargeting campaign is enabled by this release. Campaigns remain drafts.
+`validate_retargeting_setup` separates `collectionReady` (valid keys and exact
+enrollment/removal pixels) from campaign launch `ready` (also requires mappings,
+targeting and account-test evidence). `enabled: true` is rejected if collection
+checks fail. This permits a controlled pixel/suppression test before a campaign
+exists, without fabricating a passed test to unlock the test itself. Verification,
+engagement, advertising permission and holdout checks always apply. Expired
+account evidence blocks launch readiness, not existing audience collection.
+SpareCash does not pause advertiser campaigns; PropellerAds MCP manages those.
+Removal remains possible when collection is disabled, subject to verification
+and advertising choice.
 
-Sources:
+## Browser pixel approval and privacy
 
-- [PropellerAds Audiences 2.0](https://help.propellerads.com/en/articles/4240694-audiences-2-0)
-- [Website retargeting and pixel setup](https://help.propellerads.com/en/articles/1954798-how-to-use-propellerads-retargeting)
-- [S2S conversion tracking and secondary goals](https://help.propellerads.com/en/articles/1954809-how-to-integrate-propellerads-s2s-conversion-tracking)
-- [Public SSP API specification](https://ssp-api.propellerads.com/v5/docs/)
+The landing provides an explicit advertising choice, separate from email, text
+and push consent. The initial choice is UNKNOWN, which does not permit pixels.
+The notice and each choice are recorded with the journey. Browser Global Privacy
+Control and `Sec-GPC: 1` override permission to DENIED.
 
-## Deployment
+`POST /api/public/retargeting/qualify` rechecks the signed visit, matching journey
+cookie, fresh proof, verified qualifying events, subscription/application state,
+paid status, current advertising choice, setup readiness and control assignment.
+The browser receives only URLs the server reserved for that journey. Reservations
+are serialized with privacy changes and paid-lead suppression. A repeat or
+concurrent request cannot reserve the same journey/audience/action again.
 
-Deploy the web/worker image containing migration
-`202610100002_visit_engagement`. The normal container entrypoint applies it.
-Reconnect MCP to discover `engagement_report` and the new visit filter. Existing
-variants, weights, hero images, logos and message-chain settings are preserved.
+The browser requests approved images with no referrer and reports `LOADED`,
+`FAILED` or `UNCERTAIN` to `/retargeting/receipt`. The server initially records
+`ISSUED`; an absent receipt becomes operationally uncertain, not successful.
+A lost response or failed attempt is never silently retried. V1 does not reenroll
+a previously removed audience automatically. Reusing an audience for a new cycle
+requires a future explicit retry/study design.
+
+**Neither an attempt nor an image load confirms audience membership.** There is
+no provider membership acknowledgment implemented. Browser restrictions, blocked
+scripts and ad blockers can affect matching. Loan navigation waits at most 2.5
+seconds for best-effort dispatch, then continues. In-flight requests cannot be
+recalled after they have reached the advertiser.
+
+## Attribution and suppression
+
+The signed, HttpOnly, SameSite=Lax `sc_journey` cookie lasts 90 days and links
+browser visits without fingerprinting. The original journey visit supplies the
+original landing angle. Each new advertising click creates its own visit and
+keeps its own campaign, zone and external click ID. Campaign-to-audience mapping
+is snapshotted at arrival; it is not inferred from pixel attempts.
+
+Each RoundSky application retains its visit and a unique application ID in
+`subId3`. A paid callback therefore reaches the correct journey, including
+anonymous visitors who never subscribed. Existing follow-up applications remain
+attributed to their originating lead/visit. Clearing cookies or switching devices
+can break browser linkage; the app does not claim cross-device identity.
+
+Application/confirmation changes refresh eligibility and mark previous audience
+enrollments for suppression. `SOLD` callbacks immediately suppress further
+marketing enrollment and queue suppression on prior attempts. They never request
+browser pixels from the server. On a later verified, consenting browser return,
+the app can attempt the saved removal pixel and enroll the paid exclusion
+audience. The configured advertiser campaign must actually exclude that audience.
+
+Advertising withdrawal stops further ad requests, **including removal pixels**;
+issuing a fresh advertiser request after refusal is not used as a workaround.
+Audience removal/exclusion can therefore remain incomplete. The status report
+retains suppression reasons and attempts without claiming successful removal.
+The current PropellerAds MCP's inclusion/exclusion limitations must be resolved
+or handled in the account before campaigns can pass launch validation.
+
+## Reports and the control group
+
+At the first journey, the server randomly assigns **80% treatment / 20% control**
+before any audience pixels. Assignment never changes across returning clicks.
+`controlPercent` can be configured before the first journey; after that, changing
+it requires a separately designed new study. V1 provides one persistent study.
+
+Both arms acquire `eligibleAt` under the same readiness, verified-engagement and
+privacy rules. Controls never receive enrollment pixels. Reports compare mature
+eligible journeys over the same observation window (default seven days),
+including sales from original visits as well as return clicks. Recent journeys
+without a full window are omitted from this comparison, not from raw reporting.
+Control journeys arriving through linked retargeting campaigns are flagged as
+contamination. Rate differences are descriptive, not automatic proof of lift;
+inspect sample sizes, rule changes, targeting evidence and cookie loss.
+
+`retargeting_report` groups by campaign, audience, original landing variant,
+advertising zone or treatment/control group. It reports raw/verified engagement,
+verified return visits, applications, confirmed subscriptions, paid leads,
+commission and spend coverage. Arrival cohorts include later outcomes through
+report time. The Settings panel exposes these reports and tracking failures.
+
+Import advertiser data using `record_retargeting_spend`: one USD total per
+campaign and UTC day, with the source reference. Re-imports replace totals.
+Include explicit zero-spend days; missing days mean **unknown spend and unknown
+acquisition cost**. Campaign spend is not added to existing click-cost imports,
+and is not proportionally invented for audience, angle or control segments.
+Current-day imports are provisional advertiser snapshots.
+
+Sales and commission use the earliest `SOLD` per application (timestamp, then
+record ID). Repeated sale events are flagged rather than counted twice;
+`APPROVED`/`FUNDED` updates are not extra commissions. This definition is shared
+by acquisition, follow-up, quiz, dashboard and experiment reports. These views
+overlap: do not add reports describing the same application. Distinct application
+IDs can represent distinct sales; conflicting duplicate events need review.
+A sold lead does not establish that the consumer was approved or funded.
+
+## Account setup still required
+
+As of October 11, 2026, MCP lists `retarget-loans1` (165991), but does not expose
+its pixel snippet or an audience-creation operation. The available browser opens
+the PropellerAds login page. Obtain account access, then create dedicated quiz,
+application and paid-exclusion audiences and copy their exact **Get code** pixels.
+No placeholder test IDs from the automated tests should be used in production.
+
+The live Cloudflare account configuration is **unverified**. The dashboard was
+blocked at its challenge and no account API is connected. The read-only audit
+must record DNS proxy/origin bypass controls, applicable WAF/bot/rate-limit and
+allow/skip rules, Turnstile hostname restrictions and relevant security events.
+Check legitimate mobile traffic and RoundSky/provider/MCP callbacks. Record
+actual enabled features rather than assuming the account plan includes them.
+
+Finish the account audience setup and save disabled settings. Enable collection
+only when deliberately testing/collecting verified, consenting visitors; no ad
+campaign needs to be active. Test the browser/callback/removal path. Create
+**draft** campaigns in PropellerAds MCP, read back targeting and test exclusions,
+then record the actual evidence and run launch validation. SpareCash must never record a passed test just to clear a gap.
+Live campaign activation remains a separate advertiser action.
+
+No bot filter guarantees 100% human traffic. Blocking after arrival does not
+guarantee the original advertising click was free or refundable. Preserve raw
+rejected traffic and use advertiser billing records for cost measurement.
+
+## Deployment and acceptance
+
+Deploy web/worker code containing migrations `202610110001_retargeting` and
+`202610110002_verified_engagement`, after PR #2's engagement migration. The normal
+Docker entrypoint runs migrations. No new environment variables or persistent
+file storage are required. Reconnect MCP to discover the new tools.
+
+Automated tests cover strict proof binding, replay/expiry, pending raw events,
+privacy/GPC, controls, concurrent dispatch, receipts, application progression,
+return attribution, anonymous paid callbacks, sale/spend deduplication and equal
+control observation windows. Mobile browser checks use mocked provider responses
+and image requests, so they do not establish real audience membership. Complete
+the documented account and suppression checks before launch.
+
+Retention/deletion procedures must cover VisitorJourney, AdvertisingPrivacyEvent,
+VisitorVerification, RetargetingPixelAttempt and VisitEvent. Deleting a journey
+cascades its privacy/pixel history and unlinks its visits; deleting a visit removes
+its event/verification history. No historical control or verification backfill is
+performed by the migrations.

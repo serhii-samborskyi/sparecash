@@ -1,3 +1,4 @@
+import { deduplicateSales } from "./retargeting-report.js";
 import { engagementCounts } from "./engagement.js";
 import { Prisma } from "@prisma/client";
 import { db } from "../db.js";
@@ -274,7 +275,13 @@ export async function dashboard() {
     db.subscription.count({ where: { status: "ACTIVE" } }),
     db.lead.count(),
     db.postback.findMany({
-      select: { event: true, revenue: true, applicationId: true },
+      select: {
+        id: true,
+        createdAt: true,
+        event: true,
+        revenue: true,
+        applicationId: true,
+      },
     }),
     db.delivery.groupBy({ by: ["status"], _count: true }),
     db.trafficSource.count({ where: { state: "BLOCKED" } }),
@@ -316,7 +323,7 @@ export async function dashboard() {
           .filter((p) => p.event === "FUNDED")
           .map((p) => p.applicationId),
       ).size,
-      revenue: postbacks.reduce((s, p) => s + Number(p.revenue), 0),
+      revenue: deduplicateSales(postbacks).commission,
       spend: Number(spend._sum.cost ?? 0),
       blocked: sources,
       deliveries,
@@ -360,7 +367,7 @@ export async function experimentResults(id: string) {
         new Set(
           postbacks.filter((p) => p.event === type).map((p) => p.applicationId),
         ).size;
-      const revenue = postbacks.reduce((s, p) => s + Number(p.revenue), 0),
+      const revenue = deduplicateSales(postbacks).commission,
         spend = visits.reduce((s, v) => s + Number(v.cost), 0);
       const value =
         experiment.objective === "SUBSCRIPTIONS"

@@ -7,6 +7,8 @@ import {
   buildRoundSkyPixelUrl,
 } from "../roundsky-contract.js";
 import { settings } from "./control.js";
+import { lockJourney, refreshJourneySuppression } from "./retargeting.js";
+import { hasVisitorProof } from "./visitor-verification.js";
 
 export function roundSkyWebhookSecret() {
   return env.ROUNDSKY_WEBHOOK_TOKEN;
@@ -63,7 +65,35 @@ export async function createRoundSkyApplication(input: {
   ]);
   if (lead && lead.visitId !== visit.id)
     throw new Error("Application attribution does not match the contact");
-  const application = await db.applicationClick.create({ data: input });
+  const application = await db.$transaction(async (tx) => {
+    if (visit.journeyId) await lockJourney(tx, visit.journeyId);
+    await tx.$queryRaw`SELECT id FROM "Visit" WHERE id=${visit.id} FOR UPDATE`;
+    const current = await tx.visit.findUniqueOrThrow({
+      where: { id: visit.id },
+    });
+    const application = await tx.applicationClick.create({ data: input });
+    await tx.visitEvent.createMany({
+      data: [
+        {
+          visitId: visit.id,
+          kind: "APPLICATION_CONTINUED",
+          verifiedAt: hasVisitorProof(current) ? new Date() : null,
+        },
+      ],
+      skipDuplicates: true,
+    });
+    if (hasVisitorProof(current))
+      await tx.visitEvent.updateMany({
+        where: {
+          visitId: visit.id,
+          kind: "APPLICATION_CONTINUED",
+          verifiedAt: null,
+        },
+        data: { verifiedAt: new Date() },
+      });
+    return application;
+  });
+  if (visit.journeyId) await refreshJourneySuppression(visit.journeyId);
   const answers =
     lead?.answers &&
     typeof lead.answers === "object" &&

@@ -3,6 +3,7 @@ import { db } from "../db.js";
 import { nextLeadStatus, shouldStop } from "../domain.js";
 import { settings } from "./control.js";
 import { transitionLead } from "./journeys.js";
+import { lockJourney } from "./retargeting.js";
 
 export class PostbackConflictError extends Error {}
 
@@ -18,7 +19,24 @@ export async function recordPostback(input: {
     const application = await db.$transaction(async (tx) => {
       const app = await tx.applicationClick.findUniqueOrThrow({
         where: { id: input.applicationId },
+        include: { visit: { select: { journeyId: true } } },
       });
+      if (input.event === "SOLD" && app.visit.journeyId) {
+        await lockJourney(tx, app.visit.journeyId);
+        await tx.visitorJourney.update({
+          where: { id: app.visit.journeyId },
+          data: { suppressedAt: new Date(), suppressionReason: "PAID_LEAD" },
+        });
+        const enrollments = await tx.retargetingPixelAttempt.findMany({
+          where: { journeyId: app.visit.journeyId, action: "ENROLL" },
+        });
+        for (const enrollment of enrollments)
+          if ((enrollment.config as any).purpose !== "PAID_EXCLUSION")
+            await tx.retargetingPixelAttempt.update({
+              where: { id: enrollment.id },
+              data: { suppressionReason: "PAID_LEAD" },
+            });
+      }
       await tx.postback.create({ data: { ...input, revenue } });
       if (app.leadId) {
         await tx.$queryRaw`SELECT id FROM "Lead" WHERE id=${app.leadId} FOR UPDATE`;

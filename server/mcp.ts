@@ -2,6 +2,20 @@ import { Router, json } from "express";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
+import {
+  retargetingSettingsSchema,
+  planSchema,
+  saveRetargetingSettings,
+  saveRetargetingPlan,
+  validateRetargetingSetup,
+} from "./services/retargeting-config.js";
+import { retargetingStatus } from "./services/retargeting.js";
+import {
+  retargetingReportSchema,
+  retargetingReport,
+  spendSchema,
+  recordRetargetingSpend,
+} from "./services/retargeting-report.js";
 import { db } from "./db.js";
 import { requireMcp } from "./security.js";
 import { experimentSchema, chainSchema, settingsSchema } from "./domain.js";
@@ -99,6 +113,45 @@ function makeServer() {
     {},
     marketingContext,
     true,
+  );
+  register(
+    "save_retargeting_settings",
+    "Replace retargeting settings: exact PropellerAds HTTPS image pixel URLs, audience IDs, purposes and event/status eligibility. Omitted audiences are disabled; history remains. Disabled by default. A separate advertising opt-in and visit-bound server verification always apply. Control split defaults to 20% and freezes after the first browser journey. Collection requires valid Turnstile keys and enrollment/removal pixels; validate_retargeting_setup separately lists campaign launch gaps so controlled pixel/suppression testing can precede advertising. Pixel URLs are never inferred from audience IDs; arbitrary scripts are unsupported.",
+    retargetingSettingsSchema.shape,
+    saveRetargetingSettings,
+  );
+  register(
+    "save_retargeting_plan",
+    "Save event-based campaign stages, audience mappings, exclusions, linked PropellerAds campaign IDs, targeting readback evidence and suppression test evidence. Create/target campaigns with PropellerAds MCP, then record the actual readback here. This does not modify advertiser campaigns. Timed day 1/3/7 sequencing is unsupported. Each campaign belongs to one stage for attribution.",
+    planSchema.shape,
+    saveRetargetingPlan,
+  );
+  register(
+    "validate_retargeting_setup",
+    "Read launch gaps: Turnstile configuration, exact supported pixels, mapped campaigns, current inclusion/exclusion readback, end-to-end suppression evidence and the Cloudflare audit. Collection readiness is separate from campaign launch readiness. Account targeting evidence is operator-supplied, not a live account audit. Does not activate advertising.",
+    {},
+    async () => validateRetargetingSetup(),
+    true,
+  );
+  register(
+    "retargeting_report",
+    "Report acquisition cohorts by campaign, audience, original landing angle or persistent treatment/control group: raw and verified visits, return visits, applications, confirmed subscriptions, deduplicated SOLD commission and cost coverage. Includes equal-window control analysis. Imports spend through record_retargeting_spend; missing spend is unknown. Pixel attempts are not audience membership. Observed treatment/control differences do not prove lift.",
+    retargetingReportSchema.shape,
+    retargetingReport,
+    true,
+  );
+  register(
+    "retargeting_status",
+    "Read exact retargeting settings/plan, launch gaps, verification states, pixel failures/uncertainty, privacy/sale suppression and holdout counts. A removal pixel needs the visitor browser; no server callback can execute it. Reports no confirmed membership without provider evidence.",
+    {},
+    retargetingStatus,
+    true,
+  );
+  register(
+    "record_retargeting_spend",
+    "Import PropellerAds MCP daily campaign spend in USD with its source reference. Upserts campaign + UTC day totals, including explicit zero days. Never add these totals to per-click costs. Supply complete daily coverage for acquisition cost calculations.",
+    spendSchema.shape,
+    recordRetargetingSpend,
   );
   register(
     "traffic_report",

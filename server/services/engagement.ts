@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { db } from "../db.js";
 import { landingSchema, visibleQuestions } from "../domain.js";
+import { hasVisitorProof } from "./visitor-verification.js";
 
 export const engagementSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("UPDATES_OPENED") }).strict(),
@@ -60,9 +61,23 @@ export async function recordEngagement(visitId: string, input: unknown) {
   const events = engagementEvents(config, input);
   // Keep the first recorded event, even if clicks arrive out of order.
   // These records measure engagement, not the final submitted quiz response.
-  await db.visitEvent.createMany({
-    data: events.map((event) => ({ visitId, ...event })),
-    skipDuplicates: true,
+  await db.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "Visit" WHERE id=${visitId} FOR UPDATE`;
+    const latest = await tx.visit.findUniqueOrThrow({ where: { id: visitId } });
+    const verifiedAt = hasVisitorProof(latest) ? new Date() : null;
+    await tx.visitEvent.createMany({
+      data: events.map((event) => ({ visitId, ...event, verifiedAt })),
+      skipDuplicates: true,
+    });
+    if (verifiedAt)
+      await tx.visitEvent.updateMany({
+        where: {
+          visitId,
+          verifiedAt: null,
+          OR: events.map((e) => ({ kind: e.kind, questionId: e.questionId })),
+        },
+        data: { verifiedAt },
+      });
   });
 }
 
