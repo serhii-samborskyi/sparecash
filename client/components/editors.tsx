@@ -4,6 +4,7 @@ import { Field, Spinner } from "./ui";
 import { post } from "../api";
 import { landingSchema } from "../../server/domain";
 import { LandingAssetPicker } from "./landing-asset-picker";
+import { landingDesignExamples } from "../../server/landing-design-guide";
 export const defaultLanding = () =>
   landingSchema.parse({
     title: "A little more room for what matters.",
@@ -201,6 +202,69 @@ export function ExperimentEditor({
           Once a variant has traffic, duplicate it before changing its design,
           copy or quiz. This keeps each version’s results separate.
         </p>
+        <div className="question-editor">
+          <Field
+            label="Design system"
+            hint="A canvas lets your AI arrange sections, columns, typography and artwork around the working form."
+          >
+            <select
+              value={v.config.design ? "canvas" : "template"}
+              onChange={(e) =>
+                config(
+                  "design",
+                  e.target.value === "canvas"
+                    ? structuredClone(landingDesignExamples[0].design)
+                    : undefined,
+                )
+              }
+            >
+              <option value="template">Classic template</option>
+              <option value="canvas">Composable canvas</option>
+            </select>
+          </Field>
+          {v.config.design && (
+            <>
+              <p className="help">
+                This variant uses a custom canvas with{" "}
+                {v.config.design.nodes.length} elements. Your AI can edit it
+                through MCP using landing_design_guide and save_experiment. The
+                headline, story, images and layout come from the canvas; the
+                quiz, logo and form settings below still apply.
+              </p>
+              <Field label="Replace canvas with a starting point">
+                <select
+                  value=""
+                  onChange={(e) => {
+                    if (e.target.value)
+                      config(
+                        "design",
+                        structuredClone(
+                          landingDesignExamples[Number(e.target.value) - 1]
+                            .design,
+                        ),
+                      );
+                  }}
+                >
+                  <option value="">Keep current design</option>
+                  {landingDesignExamples.map((example, index) => (
+                    <option value={index + 1} key={example.name}>
+                      {example.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <details>
+                <summary>View canvas definition</summary>
+                <textarea
+                  aria-label="Canvas definition"
+                  readOnly
+                  rows={12}
+                  value={JSON.stringify(v.config.design, null, 2)}
+                />
+              </details>
+            </>
+          )}
+        </div>
         <button
           type="button"
           className="text-button"
@@ -239,26 +303,32 @@ export function ExperimentEditor({
               onChange={(e) => variant("weight", Number(e.target.value))}
             />
           </Field>
-          <Field label="Headline">
-            <input
-              value={v.config.title}
-              onChange={(e) => config("title", e.target.value)}
-            />
-          </Field>
-          <Field label="Intro label">
-            <input
-              value={v.config.eyebrow}
-              onChange={(e) => config("eyebrow", e.target.value)}
-            />
-          </Field>
+          {!v.config.design && (
+            <Field label="Headline">
+              <input
+                value={v.config.title}
+                onChange={(e) => config("title", e.target.value)}
+              />
+            </Field>
+          )}
+          {!v.config.design && (
+            <Field label="Intro label">
+              <input
+                value={v.config.eyebrow}
+                onChange={(e) => config("eyebrow", e.target.value)}
+              />
+            </Field>
+          )}
         </div>
-        <Field label="Description">
-          <textarea
-            rows={3}
-            value={v.config.description}
-            onChange={(e) => config("description", e.target.value)}
-          />
-        </Field>
+        {!v.config.design && (
+          <Field label="Description">
+            <textarea
+              rows={3}
+              value={v.config.description}
+              onChange={(e) => config("description", e.target.value)}
+            />
+          </Field>
+        )}
         <div className="form-grid">
           <Field label="Button label">
             <input
@@ -266,55 +336,65 @@ export function ExperimentEditor({
               onChange={(e) => config("button", e.target.value)}
             />
           </Field>
-          <Field label="Color palette">
-            <select
-              value={v.config.theme}
-              onChange={(e) => config("theme", e.target.value)}
+          {!v.config.design && (
+            <Field label="Color palette">
+              <select
+                value={v.config.theme}
+                onChange={(e) => config("theme", e.target.value)}
+              >
+                <option value="forest">Forest & mint</option>
+                <option value="blue">Navy & sky</option>
+                <option value="plum">Plum & lilac</option>
+              </select>
+            </Field>
+          )}
+          {!v.config.design && (
+            <Field label="Page layout">
+              <select
+                value={v.config.layout}
+                onChange={(e) => config("layout", e.target.value)}
+              >
+                <option value="split">Split introduction</option>
+                <option value="centered">Centered guide</option>
+                <option value="editorial">Editorial story</option>
+              </select>
+            </Field>
+          )}
+          {!v.config.design && (
+            <Field label="Typography">
+              <select
+                value={v.config.typography}
+                onChange={(e) => config("typography", e.target.value)}
+              >
+                <option value="sans">Modern</option>
+                <option value="serif">Editorial serif</option>
+              </select>
+            </Field>
+          )}
+          {!v.config.design && (
+            <Field
+              label="Custom accent color"
+              hint="Optional six-digit hex color, such as #294961."
             >
-              <option value="forest">Forest & mint</option>
-              <option value="blue">Navy & sky</option>
-              <option value="plum">Plum & lilac</option>
-            </select>
-          </Field>
-          <Field label="Page layout">
-            <select
-              value={v.config.layout}
-              onChange={(e) => config("layout", e.target.value)}
-            >
-              <option value="split">Split introduction</option>
-              <option value="centered">Centered guide</option>
-              <option value="editorial">Editorial story</option>
-            </select>
-          </Field>
-          <Field label="Typography">
-            <select
-              value={v.config.typography}
-              onChange={(e) => config("typography", e.target.value)}
-            >
-              <option value="sans">Modern</option>
-              <option value="serif">Editorial serif</option>
-            </select>
-          </Field>
-          <Field
-            label="Custom accent color"
-            hint="Optional six-digit hex color, such as #294961."
-          >
-            <input
-              value={v.config.accentColor ?? ""}
-              onChange={(e) =>
-                config("accentColor", e.target.value || undefined)
-              }
-            />
-          </Field>
+              <input
+                value={v.config.accentColor ?? ""}
+                onChange={(e) =>
+                  config("accentColor", e.target.value || undefined)
+                }
+              />
+            </Field>
+          )}
           <div className="asset-picker-row">
-            <LandingAssetPicker
-              key={`hero-${selected}`}
-              label="Landing picture"
-              onUploadChange={uploadChanged}
-              kind="HERO"
-              value={v.config.heroImage}
-              onChange={(image) => config("heroImage", image)}
-            />
+            {!v.config.design && (
+              <LandingAssetPicker
+                key={`hero-${selected}`}
+                label="Landing picture"
+                onUploadChange={uploadChanged}
+                kind="HERO"
+                value={v.config.heroImage}
+                onChange={(image) => config("heroImage", image)}
+              />
+            )}
             <LandingAssetPicker
               key={`logo-${selected}`}
               label="Logo"
@@ -324,15 +404,17 @@ export function ExperimentEditor({
               onChange={(image) => config("logoImage", image)}
             />
           </div>
-          <Field label="Picture placement">
-            <select
-              value={v.config.heroPosition}
-              onChange={(e) => config("heroPosition", e.target.value)}
-            >
-              <option value="after_copy">After the introduction</option>
-              <option value="before_title">Above the headline</option>
-            </select>
-          </Field>
+          {!v.config.design && (
+            <Field label="Picture placement">
+              <select
+                value={v.config.heroPosition}
+                onChange={(e) => config("heroPosition", e.target.value)}
+              >
+                <option value="after_copy">After the introduction</option>
+                <option value="before_title">Above the headline</option>
+              </select>
+            </Field>
+          )}
           <Field label="Primary action">
             <select
               value={String(v.config.offerFirst)}
@@ -342,20 +424,22 @@ export function ExperimentEditor({
               <option value="true">Continue to application first</option>
             </select>
           </Field>
-          <Field
-            label="Decorative illustration"
-            hint="Used only when no landing picture is selected."
-          >
-            <select
-              value={String(v.config.showIllustration)}
-              onChange={(e) =>
-                config("showIllustration", e.target.value === "true")
-              }
+          {!v.config.design && (
+            <Field
+              label="Decorative illustration"
+              hint="Used only when no landing picture is selected."
             >
-              <option value="true">Show</option>
-              <option value="false">Hide</option>
-            </select>
-          </Field>
+              <select
+                value={String(v.config.showIllustration)}
+                onChange={(e) =>
+                  config("showIllustration", e.target.value === "true")
+                }
+              >
+                <option value="true">Show</option>
+                <option value="false">Hide</option>
+              </select>
+            </Field>
+          )}
           <Field label="Form heading">
             <input
               value={v.config.formTitle}
@@ -368,91 +452,97 @@ export function ExperimentEditor({
               onChange={(e) => config("formDescription", e.target.value)}
             />
           </Field>
-          <Field label="Benefits (one per line)">
-            <textarea
-              rows={4}
-              value={v.config.benefits.join("\n")}
-              onChange={(e) => config("benefits", e.target.value.split("\n"))}
-            />
-          </Field>
-        </div>
-        <div className="editor-divider">
-          <h3>Story sections</h3>
-          <button
-            type="button"
-            className="text-button"
-            disabled={v.config.sections.length >= 5}
-            onClick={() =>
-              config("sections", [
-                ...v.config.sections,
-                {
-                  heading: "A helpful next step",
-                  body: "Compare the terms of any offer before deciding.",
-                },
-              ])
-            }
-          >
-            <Plus size={15} />
-            Add section
-          </button>
-        </div>
-        {v.config.sections.map((section: any, i: number) => (
-          <div className="question-editor" key={i}>
-            <Field label="Section heading">
-              <input
-                value={section.heading}
-                onChange={(e) =>
-                  config(
-                    "sections",
-                    v.config.sections.map((s: any, j: number) =>
-                      j === i ? { ...s, heading: e.target.value } : s,
-                    ),
-                  )
-                }
-              />
-            </Field>
-            <Field label="Section text">
+          {!v.config.design && (
+            <Field label="Benefits (one per line)">
               <textarea
-                value={section.body}
-                onChange={(e) =>
-                  config(
-                    "sections",
-                    v.config.sections.map((s: any, j: number) =>
-                      j === i ? { ...s, body: e.target.value } : s,
-                    ),
-                  )
-                }
+                rows={4}
+                value={v.config.benefits.join("\n")}
+                onChange={(e) => config("benefits", e.target.value.split("\n"))}
               />
             </Field>
-            <LandingAssetPicker
-              key={`section-${selected}-${i}`}
-              label="Section image"
-              onUploadChange={uploadChanged}
-              kind="SECTION"
-              value={section.image}
-              onChange={(image) =>
-                config(
-                  "sections",
-                  v.config.sections.map((s: any, j: number) =>
-                    j === i ? { ...s, image } : s,
-                  ),
-                )
-              }
-            />
-            <button
-              type="button"
-              className="text-button danger"
-              onClick={() =>
-                config(
-                  "sections",
-                  v.config.sections.filter((_: any, j: number) => j !== i),
-                )
-              }
-            >
-              Remove section
-            </button>
-          </div>
-        ))}
+          )}
+        </div>
+        {!v.config.design && (
+          <>
+            <div className="editor-divider">
+              <h3>Story sections</h3>
+              <button
+                type="button"
+                className="text-button"
+                disabled={v.config.sections.length >= 5}
+                onClick={() =>
+                  config("sections", [
+                    ...v.config.sections,
+                    {
+                      heading: "A helpful next step",
+                      body: "Compare the terms of any offer before deciding.",
+                    },
+                  ])
+                }
+              >
+                <Plus size={15} />
+                Add section
+              </button>
+            </div>
+            {v.config.sections.map((section: any, i: number) => (
+              <div className="question-editor" key={i}>
+                <Field label="Section heading">
+                  <input
+                    value={section.heading}
+                    onChange={(e) =>
+                      config(
+                        "sections",
+                        v.config.sections.map((s: any, j: number) =>
+                          j === i ? { ...s, heading: e.target.value } : s,
+                        ),
+                      )
+                    }
+                  />
+                </Field>
+                <Field label="Section text">
+                  <textarea
+                    value={section.body}
+                    onChange={(e) =>
+                      config(
+                        "sections",
+                        v.config.sections.map((s: any, j: number) =>
+                          j === i ? { ...s, body: e.target.value } : s,
+                        ),
+                      )
+                    }
+                  />
+                </Field>
+                <LandingAssetPicker
+                  key={`section-${selected}-${i}`}
+                  label="Section image"
+                  onUploadChange={uploadChanged}
+                  kind="SECTION"
+                  value={section.image}
+                  onChange={(image) =>
+                    config(
+                      "sections",
+                      v.config.sections.map((s: any, j: number) =>
+                        j === i ? { ...s, image } : s,
+                      ),
+                    )
+                  }
+                />
+                <button
+                  type="button"
+                  className="text-button danger"
+                  onClick={() =>
+                    config(
+                      "sections",
+                      v.config.sections.filter((_: any, j: number) => j !== i),
+                    )
+                  }
+                >
+                  Remove section
+                </button>
+              </div>
+            ))}
+          </>
+        )}
         <div className="editor-divider">
           <h3>
             Quiz questions <span className="muted">· optional</span>

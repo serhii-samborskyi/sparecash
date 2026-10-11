@@ -48,6 +48,7 @@ import {
   retargetingReport,
 } from "../server/services/retargeting-report";
 import { recordPostback } from "../server/services/postbacks";
+import { landingDesignExamples } from "../server/landing-design-guide";
 let server: Server,
   base: string,
   cookie: string,
@@ -2586,6 +2587,152 @@ it("uploads and reuses original artwork through authenticated MCP, serves immuta
     await client.close();
   }
 }, 20000);
+
+it("round-trips protected canvases through MCP, previews and visit snapshots", async () => {
+  const client = new Client({ name: "canvas-test", version: "1" });
+  await client.connect(
+    new StreamableHTTPClientTransport(new URL(`${base}/mcp`), {
+      requestInit: { headers: { Authorization: `Bearer ${env.MCP_TOKEN}` } },
+    }),
+  );
+  const call = async (name: string, args: any = {}) => {
+    const result = await client.callTool({ name, arguments: args });
+    if (result.isError) throw new Error(JSON.stringify(result));
+    return JSON.parse((result.content as any)[0].text);
+  };
+  try {
+    const guide = await call("landing_design_guide");
+    expect(guide.examples).toHaveLength(3);
+    expect(guide.protectedElements.join(" ")).toContain("Turnstile");
+    const config = landingSchema.parse({
+      title: "Canvas test",
+      description:
+        "A completely composed page with the normal application flow.",
+      design: landingDesignExamples[2].design,
+      questions: [
+        {
+          id: "timing",
+          label: "When are you looking?",
+          options: ["Now", "Later"],
+        },
+      ],
+    });
+    expect(await call("validate_landing_design", { config })).toMatchObject({
+      valid: true,
+      mode: "canvas",
+    });
+    const invalid = structuredClone(config);
+    invalid.design!.nodes = invalid.design!.nodes.filter(
+      (n) => n.type !== "funnel",
+    );
+    const rejected = await call("validate_landing_design", { config: invalid });
+    expect(rejected.valid).toBe(false);
+    expect(
+      rejected.issues.some((issue: any) => issue.message.includes("funnel")),
+    ).toBe(true);
+    const missing = structuredClone(config);
+    const picture = missing.design!.nodes.find((n) => n.type === "image")!;
+    if (picture.type === "image")
+      picture.image.src = "/media/landing/cmissing00000000000000000.webp";
+    expect(
+      await call("validate_landing_design", { config: missing }),
+    ).toMatchObject({ valid: false });
+    const missingBundled = structuredClone(config);
+    const bundled = missingBundled.design!.nodes.find(
+      (n) => n.type === "image",
+    )!;
+    if (bundled.type === "image")
+      bundled.image.src = "/landing-assets/not-a-real-image.jpg";
+    expect(
+      await call("validate_landing_design", { config: missingBundled }),
+    ).toMatchObject({ valid: false });
+    const brokenSave = await client.callTool({
+      name: "save_experiment",
+      arguments: {
+        experiment: {
+          name: "Missing canvas image",
+          slug: "missing-canvas-image",
+          variants: [{ name: "Bad image", weight: 100, config: missing }],
+        },
+      },
+    });
+    expect(brokenSave.isError).toBe(true);
+    expect(
+      await db.experiment.count({ where: { slug: "missing-canvas-image" } }),
+    ).toBe(0);
+    const exp = await call("save_experiment", {
+      experiment: {
+        name: "Canvas test",
+        slug: "canvas-test",
+        status: "ACTIVE",
+        variants: [{ name: "Canvas one", weight: 100, config }],
+      },
+    });
+    const preview = await request(
+      `/api/admin/experiments/${exp.id}`,
+      "GET",
+      undefined,
+      true,
+    );
+    expect(preview.data.variants[0].config.design).toEqual(config.design);
+    const visit = await request("/api/public/visit", "POST", {
+      slug: "canvas-test",
+      campaignId: "971234",
+      zoneId: "981234",
+      clickId: "canvas-click",
+    });
+    expect(visit.status).toBe(200);
+    expect(visit.data.config.design).toEqual(config.design);
+    expect(visit.data.config.questions).toEqual(config.questions);
+    const changed = structuredClone(config);
+    changed.design!.background = "#ffffff";
+    const blocked = await client.callTool({
+      name: "save_experiment",
+      arguments: {
+        experiment: {
+          id: exp.id,
+          name: exp.name,
+          slug: exp.slug,
+          status: "ACTIVE",
+          variants: [
+            {
+              id: exp.variants[0].id,
+              name: "Canvas one",
+              weight: 100,
+              config: changed,
+            },
+          ],
+        },
+      },
+    });
+    expect(blocked.isError).toBe(true);
+    expect(JSON.stringify(blocked)).toContain("already has traffic");
+    const continuation = await request("/api/public/continue", "POST", {
+      visitToken: visit.data.visitToken,
+      entryPoint: "optional_updates",
+    });
+    expect(continuation.status).toBe(200);
+    const application = await db.applicationClick.findFirstOrThrow({
+      where: { visit: { externalClickId: "canvas-click" } },
+    });
+    expect(new URL(continuation.data.url).searchParams.get("subId3")).toBe(
+      application.id,
+    );
+    expect(
+      await db.visitEvent.count({
+        where: {
+          visitId: application.visitId!,
+          kind: "CONTINUE_WITHOUT_UPDATES",
+        },
+      }),
+    ).toBe(1);
+    expect(
+      await db.lead.count({ where: { visitId: application.visitId! } }),
+    ).toBe(0);
+  } finally {
+    await client.close();
+  }
+});
 
 it("records anonymous quiz engagement once per visit without subscribing or sending", async () => {
   const config = landingSchema.parse({

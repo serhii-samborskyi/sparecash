@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { createEngagementTracker } from "./engagement";
 import { VisitorGate } from "./VisitorGate";
+import { LandingCanvas } from "./LandingCanvas";
 import { beforeApplicationNavigation } from "./retargeting";
 import { visibleQuestions } from "../server/domain";
 import {
@@ -277,11 +278,405 @@ function Landing({ preview }: { preview: boolean }) {
   const config = session.config,
     questions = visibleQuestions(config.questions ?? [], answers),
     question = questions[step];
+  const funnel = (
+    <section className="application-card" id="application" tabIndex={-1}>
+      {result ? (
+        <>
+          <span className="success-mark">
+            <Check size={25} />
+          </span>
+          <h2>Your preferences are saved.</h2>
+          <p>
+            {pushStatus === "confirmed" && result.results.length === 0
+              ? "You’re subscribed to browser notifications."
+              : "Finish confirming your channels to receive updates."}
+          </p>
+          {result.results.map((r: any) => (
+            <div className="confirmation-channel" key={r.channel}>
+              <b>{r.channel === "EMAIL" ? "Email updates" : "Text updates"}</b>
+              <p>
+                {r.state === "PENDING"
+                  ? r.channel === "EMAIL"
+                    ? "Check your inbox and confirm your email address."
+                    : smsConfirmed
+                      ? "Your phone number is confirmed."
+                      : "Enter the six-digit confirmation code sent to your phone."
+                  : r.state === "PAUSED"
+                    ? "Updates are not active yet. Your preference has been recorded."
+                    : r.message}
+              </p>
+              {r.channel === "SMS" &&
+                r.state === "PENDING" &&
+                !smsConfirmed && (
+                  <form
+                    className="code-form"
+                    onSubmit={async (e) => {
+                      e.preventDefault();
+                      setBusy(true);
+                      try {
+                        await post("/public/verify-phone", {
+                          token: r.subscriptionToken,
+                          code,
+                        });
+                        setSmsConfirmed(true);
+                      } catch (e) {
+                        setError((e as Error).message);
+                      } finally {
+                        setBusy(false);
+                      }
+                    }}
+                  >
+                    <input
+                      aria-label="Six-digit confirmation code"
+                      inputMode="numeric"
+                      pattern="[0-9]{6}"
+                      maxLength={6}
+                      value={code}
+                      onChange={(e) => setCode(e.target.value)}
+                    />
+                    <button className="button secondary" disabled={busy}>
+                      Confirm
+                    </button>
+                  </form>
+                )}
+            </div>
+          ))}
+          {result.pushRequested && (
+            <div className="confirmation-channel">
+              <b>Browser notifications</b>
+              {pushStatus === "confirmed" ? (
+                <p>Notifications are enabled.</p>
+              ) : (
+                <>
+                  <p role="status">
+                    {pushStatus === "confirming"
+                      ? "Notifications are allowed. We’re confirming your subscription…"
+                      : pushStatus === "pending"
+                        ? "Notifications are allowed. Tap Finish subscribing to complete confirmation."
+                        : "Allow notifications in your browser to finish subscribing."}
+                  </p>
+                  <button
+                    className="button secondary"
+                    onClick={() => void push()}
+                    disabled={busy}
+                  >
+                    {pushStatus === "starting" ||
+                    pushStatus === "confirming" ? (
+                      <Spinner />
+                    ) : (
+                      <Bell size={16} />
+                    )}
+                    {pushStatus === "confirming"
+                      ? "Confirming subscription…"
+                      : pushStatus === "starting"
+                        ? "Enabling notifications…"
+                        : pushStatus === "pending"
+                          ? "Finish subscribing"
+                          : "Enable notifications"}
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+          <button
+            className="button full"
+            onClick={() => void continueOffer()}
+            disabled={busy}
+          >
+            Continue to loan options
+            <ArrowRight size={17} />
+          </button>
+          <p className="fine-print">
+            You’ll continue to a third-party application. Your submitted name
+            and contact details may be used to prefill it.
+          </p>
+        </>
+      ) : question ? (
+        <>
+          <div className="form-progress">
+            <span>LET’S START WITH YOU</span>
+            <span>
+              {config.questions.some((q: any) => q.showWhen)
+                ? `QUESTION ${step + 1}`
+                : `${step + 1} / ${questions.length}`}
+            </span>
+          </div>
+          <div className="progress-track">
+            <span
+              style={{
+                width: `${((step + 1) / (questions.length + 1)) * 100}%`,
+              }}
+            />
+          </div>
+          <h2>{question.label}</h2>
+          <div className="quiz-options">
+            {question.options.map((option: string) => (
+              <button
+                key={option}
+                className={answers[question.id] === option ? "selected" : ""}
+                onClick={() => {
+                  const index = config.questions.findIndex(
+                    (q: any) => q.id === question.id,
+                  );
+                  const preceding = new Set(
+                    config.questions.slice(0, index).map((q: any) => q.id),
+                  );
+                  const nextAnswers = {
+                    ...Object.fromEntries(
+                      Object.entries(answers).filter(([id]) =>
+                        preceding.has(id),
+                      ),
+                    ),
+                    [question.id]: option,
+                  };
+                  trackEngagement.current(session.visitToken, preview, {
+                    kind: "QUESTION_ANSWERED",
+                    questionId: question.id,
+                    answers: nextAnswers,
+                  });
+                  setAnswers(nextAnswers);
+                  setStep(step + 1);
+                }}
+              >
+                {option}
+                <ChevronRight size={18} />
+              </button>
+            ))}
+          </div>
+          {step > 0 && (
+            <button className="text-button" onClick={() => setStep(step - 1)}>
+              <ArrowLeft size={15} />
+              Back
+            </button>
+          )}
+          <p className="fine-print">
+            <LockKeyhole size={12} />
+            No credit check to answer these questions.
+          </p>
+        </>
+      ) : (
+        <>
+          {config.offerFirst && (
+            <div className="offer-introduction">
+              <div className="form-progress">
+                <span>YOUR NEXT STEP</span>
+              </div>
+              <h2>Explore personal loan options.</h2>
+              <p>
+                Continue to a third-party loan application. The provider reviews
+                your information and determines which options, if any, are
+                available.
+              </p>
+              <button
+                className="button full"
+                disabled={preview || busy}
+                onClick={() => void continueOffer()}
+              >
+                {busy ? <Spinner /> : null} Continue to application{" "}
+                <ArrowRight size={17} />
+              </button>
+              <p className="fine-print">
+                SpareCash is not a lender. Answering our questions does not
+                check credit or determine approval.
+              </p>
+              <button
+                className="text-button optional-updates-toggle"
+                aria-expanded={showUpdates}
+                aria-controls="optional-updates"
+                onClick={() => setShowUpdates(!showUpdates)}
+              >
+                {showUpdates
+                  ? "Hide optional updates"
+                  : "Want updates? Choose how to hear from us"}
+              </button>
+              {questions.length > 0 && (
+                <button
+                  className="text-button back-link"
+                  onClick={() => setStep(step - 1)}
+                >
+                  <ArrowLeft size={15} /> Back to questions
+                </button>
+              )}
+            </div>
+          )}
+          {(!config.offerFirst || showUpdates) && (
+            <form id="optional-updates" onSubmit={subscribe}>
+              <div className="form-progress">
+                <span>STAY IN THE LOOP, YOUR WAY</span>
+                <span>{questions.length ? "LAST STEP" : "01"}</span>
+              </div>
+              <h2>
+                {config.formTitle ?? "Want daily updates about loan options?"}
+              </h2>
+              <p>
+                {config.formDescription ??
+                  "Choose one or more channels for daily updates about loan options."}
+              </p>
+              <div className="channel-choices">
+                {[
+                  ["PUSH", "Browser notifications", "On this device", Bell],
+                  ["SMS", "Text", "On your phone", MessageSquare],
+                  ["EMAIL", "Email", "In your inbox", Mail],
+                ].map(([channel, label, description, Icon]: any) => (
+                  <button
+                    type="button"
+                    key={channel}
+                    aria-pressed={channels.includes(channel)}
+                    className={channels.includes(channel) ? "selected" : ""}
+                    onClick={() => toggle(channel)}
+                  >
+                    <Icon size={21} />
+                    <b>{label}</b>
+                    <small>{description}</small>
+                    <span className="channel-check">
+                      {channels.includes(channel) && <Check size={11} />}
+                    </span>
+                  </button>
+                ))}
+              </div>
+              {channels.length > 0 && (
+                <div className="opt-in-details">
+                  <Field label="First name (optional)">
+                    <input
+                      maxLength={80}
+                      autoComplete="given-name"
+                      placeholder="Your first name"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                    />
+                  </Field>
+                  {channels.includes("EMAIL") && (
+                    <Field label="Email address">
+                      <input
+                        required
+                        type="email"
+                        autoComplete="email"
+                        placeholder="you@example.com"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                      />
+                    </Field>
+                  )}
+                  {channels.includes("SMS") && (
+                    <Field label="US mobile number">
+                      <input
+                        required
+                        type="tel"
+                        autoComplete="tel"
+                        placeholder="(555) 000-0000"
+                        value={phone}
+                        onChange={(e) => setPhone(e.target.value)}
+                      />
+                    </Field>
+                  )}
+                  <div className="hp" aria-hidden="true">
+                    <label>
+                      Company
+                      <input
+                        tabIndex={-1}
+                        autoComplete="off"
+                        value={company}
+                        onChange={(e) => setCompany(e.target.value)}
+                      />
+                    </label>
+                  </div>
+                  <label className="consent-check">
+                    <input
+                      required
+                      type="checkbox"
+                      checked={adult}
+                      onChange={(e) => setAdult(e.target.checked)}
+                    />
+                    <span>I am 18 or older and live in the United States.</span>
+                  </label>
+                  {channels.length > 0 && (
+                    <label className="consent-check">
+                      <input
+                        required
+                        type="checkbox"
+                        checked={consent}
+                        onChange={(e) => setConsent(e.target.checked)}
+                      />
+                      <span>
+                        {channels
+                          .map(
+                            (c) =>
+                              config[
+                                c === "EMAIL"
+                                  ? "emailConsent"
+                                  : c === "SMS"
+                                    ? "smsConsent"
+                                    : "pushConsent"
+                              ],
+                          )
+                          .join(" ")}{" "}
+                        I have read the{" "}
+                        <a href="/privacy" target="_blank">
+                          Privacy Policy
+                        </a>{" "}
+                        and{" "}
+                        <a href="/terms" target="_blank">
+                          Terms
+                        </a>
+                        .
+                      </span>
+                    </label>
+                  )}
+                  <button
+                    className="button full"
+                    disabled={
+                      busy || preview || !channels.length || !visitorVerified
+                    }
+                  >
+                    {busy ? <Spinner /> : null}
+                    {config.button}
+                    <ArrowRight size={17} />
+                  </button>
+                </div>
+              )}
+              {questions.length > 0 && (
+                <button
+                  type="button"
+                  className="text-button back-link"
+                  onClick={() => setStep(step - 1)}
+                >
+                  <ArrowLeft size={15} />
+                  Back
+                </button>
+              )}
+              <button
+                type="button"
+                className="skip-updates"
+                disabled={preview || busy}
+                onClick={() => void continueOffer("optional_updates")}
+              >
+                Continue to application{" "}
+                <ArrowRight size={16} aria-hidden="true" />
+              </button>
+              <p className="fine-print">
+                You can continue without subscribing. Updates are optional and
+                do not affect loan eligibility.
+              </p>
+            </form>
+          )}
+        </>
+      )}
+      {error && (
+        <p className="error" role="alert">
+          {error}
+        </p>
+      )}
+    </section>
+  );
   return (
     <div
-      className={`public-page theme-${config.theme} layout-${config.layout ?? "split"} typography-${config.typography ?? "sans"}`}
+      className={
+        config.design
+          ? "public-page has-canvas"
+          : `public-page theme-${config.theme} layout-${config.layout ?? "split"} typography-${config.typography ?? "sans"}`
+      }
       style={
-        config.accentColor
+        !config.design && config.accentColor
           ? ({ "--public": config.accentColor } as CSSProperties)
           : undefined
       }
@@ -299,491 +694,103 @@ function Landing({ preview }: { preview: boolean }) {
           runner={pixelRunner}
         />
       )}
-      <main className="landing-layout">
-        <div className="landing-story">
-          {config.heroImage && config.heroPosition === "before_title" && (
-            <LandingPhoto image={config.heroImage} />
-          )}
-          <div className="landing-eyebrow">
-            <span />
-            {config.eyebrow}
-          </div>
-          <h1>{config.title}</h1>
-          <p className="landing-description">{config.description}</p>
-          <div className="promise-list">
-            {(
-              config.benefits ?? [
-                "Choose how you hear from us",
-                "Explore at your own pace",
-                "Unsubscribe whenever you like",
-              ]
-            ).map((text: string, index: number) => (
-              <div key={index}>
-                <Check size={16} />
-                <span>{text}</span>
-              </div>
-            ))}
-          </div>
-          {config.offerFirst && (
-            <a className="landing-jump" href="#application">
-              {config.questions?.length
-                ? "Answer two questions"
-                : "Explore loan options"}
-              <ArrowRight size={16} />
-            </a>
-          )}
-          {config.heroImage
-            ? config.heroPosition !== "before_title" && (
-                <LandingPhoto image={config.heroImage} />
-              )
-            : config.showIllustration !== false && (
-                <div className="landing-illustration" aria-hidden="true">
-                  <div className="illustration-orbit" />
-                  <div className="float-card back">
-                    <span className="circle-icon">
-                      <Wallet size={22} />
-                    </span>
-                    <div>
-                      <span className="art-line long" />
-                      <span className="art-line" />
-                    </div>
-                  </div>
-                  <div className="float-card front">
-                    <span className="circle-icon mint">
-                      <Leaf size={21} />
-                    </span>
-                    <b>A little breathing room.</b>
-                    <span className="art-check">
-                      <Check size={14} />
-                    </span>
-                  </div>
-                  <span className="art-spark">✦</span>
-                </div>
-              )}
-          {(config.sections ?? []).map(
-            (
-              section: {
-                heading: string;
-                body: string;
-                image?: { src: string; alt: string };
-              },
-              index: number,
-            ) => (
-              <section className="landing-section" key={index}>
-                {section.image && <LandingPhoto image={section.image} lazy />}
-                <h2>{section.heading}</h2>
-                <p>{section.body}</p>
-              </section>
-            ),
-          )}
-          <p className="lender-note">
-            SpareCash connects you with third-party loan options. We are not a
-            lender. Approval, amounts, rates, and timing depend on the lender
-            and your application.
-          </p>
-        </div>
-        <section className="application-card" id="application" tabIndex={-1}>
-          {result ? (
-            <>
-              <span className="success-mark">
-                <Check size={25} />
-              </span>
-              <h2>Your preferences are saved.</h2>
-              <p>
-                {pushStatus === "confirmed" && result.results.length === 0
-                  ? "You’re subscribed to browser notifications."
-                  : "Finish confirming your channels to receive updates."}
-              </p>
-              {result.results.map((r: any) => (
-                <div className="confirmation-channel" key={r.channel}>
-                  <b>
-                    {r.channel === "EMAIL" ? "Email updates" : "Text updates"}
-                  </b>
-                  <p>
-                    {r.state === "PENDING"
-                      ? r.channel === "EMAIL"
-                        ? "Check your inbox and confirm your email address."
-                        : smsConfirmed
-                          ? "Your phone number is confirmed."
-                          : "Enter the six-digit confirmation code sent to your phone."
-                      : r.state === "PAUSED"
-                        ? "Updates are not active yet. Your preference has been recorded."
-                        : r.message}
-                  </p>
-                  {r.channel === "SMS" &&
-                    r.state === "PENDING" &&
-                    !smsConfirmed && (
-                      <form
-                        className="code-form"
-                        onSubmit={async (e) => {
-                          e.preventDefault();
-                          setBusy(true);
-                          try {
-                            await post("/public/verify-phone", {
-                              token: r.subscriptionToken,
-                              code,
-                            });
-                            setSmsConfirmed(true);
-                          } catch (e) {
-                            setError((e as Error).message);
-                          } finally {
-                            setBusy(false);
-                          }
-                        }}
-                      >
-                        <input
-                          aria-label="Six-digit confirmation code"
-                          inputMode="numeric"
-                          pattern="[0-9]{6}"
-                          maxLength={6}
-                          value={code}
-                          onChange={(e) => setCode(e.target.value)}
-                        />
-                        <button className="button secondary" disabled={busy}>
-                          Confirm
-                        </button>
-                      </form>
-                    )}
+      {config.design ? (
+        <LandingCanvas design={config.design} funnel={funnel} />
+      ) : (
+        <main className="landing-layout">
+          <div className="landing-story">
+            {config.heroImage && config.heroPosition === "before_title" && (
+              <LandingPhoto image={config.heroImage} />
+            )}
+            <div className="landing-eyebrow">
+              <span />
+              {config.eyebrow}
+            </div>
+            <h1>{config.title}</h1>
+            <p className="landing-description">{config.description}</p>
+            <div className="promise-list">
+              {(
+                config.benefits ?? [
+                  "Choose how you hear from us",
+                  "Explore at your own pace",
+                  "Unsubscribe whenever you like",
+                ]
+              ).map((text: string, index: number) => (
+                <div key={index}>
+                  <Check size={16} />
+                  <span>{text}</span>
                 </div>
               ))}
-              {result.pushRequested && (
-                <div className="confirmation-channel">
-                  <b>Browser notifications</b>
-                  {pushStatus === "confirmed" ? (
-                    <p>Notifications are enabled.</p>
-                  ) : (
-                    <>
-                      <p role="status">
-                        {pushStatus === "confirming"
-                          ? "Notifications are allowed. We’re confirming your subscription…"
-                          : pushStatus === "pending"
-                            ? "Notifications are allowed. Tap Finish subscribing to complete confirmation."
-                            : "Allow notifications in your browser to finish subscribing."}
-                      </p>
-                      <button
-                        className="button secondary"
-                        onClick={() => void push()}
-                        disabled={busy}
-                      >
-                        {pushStatus === "starting" ||
-                        pushStatus === "confirming" ? (
-                          <Spinner />
-                        ) : (
-                          <Bell size={16} />
-                        )}
-                        {pushStatus === "confirming"
-                          ? "Confirming subscription…"
-                          : pushStatus === "starting"
-                            ? "Enabling notifications…"
-                            : pushStatus === "pending"
-                              ? "Finish subscribing"
-                              : "Enable notifications"}
-                      </button>
-                    </>
-                  )}
-                </div>
-              )}
-              <button
-                className="button full"
-                onClick={() => void continueOffer()}
-                disabled={busy}
-              >
-                Continue to loan options
-                <ArrowRight size={17} />
-              </button>
-              <p className="fine-print">
-                You’ll continue to a third-party application. Your submitted
-                name and contact details may be used to prefill it.
-              </p>
-            </>
-          ) : question ? (
-            <>
-              <div className="form-progress">
-                <span>LET’S START WITH YOU</span>
-                <span>
-                  {config.questions.some((q: any) => q.showWhen)
-                    ? `QUESTION ${step + 1}`
-                    : `${step + 1} / ${questions.length}`}
-                </span>
-              </div>
-              <div className="progress-track">
-                <span
-                  style={{
-                    width: `${((step + 1) / (questions.length + 1)) * 100}%`,
-                  }}
-                />
-              </div>
-              <h2>{question.label}</h2>
-              <div className="quiz-options">
-                {question.options.map((option: string) => (
-                  <button
-                    key={option}
-                    className={
-                      answers[question.id] === option ? "selected" : ""
-                    }
-                    onClick={() => {
-                      const index = config.questions.findIndex(
-                        (q: any) => q.id === question.id,
-                      );
-                      const preceding = new Set(
-                        config.questions.slice(0, index).map((q: any) => q.id),
-                      );
-                      const nextAnswers = {
-                        ...Object.fromEntries(
-                          Object.entries(answers).filter(([id]) =>
-                            preceding.has(id),
-                          ),
-                        ),
-                        [question.id]: option,
-                      };
-                      trackEngagement.current(session.visitToken, preview, {
-                        kind: "QUESTION_ANSWERED",
-                        questionId: question.id,
-                        answers: nextAnswers,
-                      });
-                      setAnswers(nextAnswers);
-                      setStep(step + 1);
-                    }}
-                  >
-                    {option}
-                    <ChevronRight size={18} />
-                  </button>
-                ))}
-              </div>
-              {step > 0 && (
-                <button
-                  className="text-button"
-                  onClick={() => setStep(step - 1)}
-                >
-                  <ArrowLeft size={15} />
-                  Back
-                </button>
-              )}
-              <p className="fine-print">
-                <LockKeyhole size={12} />
-                No credit check to answer these questions.
-              </p>
-            </>
-          ) : (
-            <>
-              {config.offerFirst && (
-                <div className="offer-introduction">
-                  <div className="form-progress">
-                    <span>YOUR NEXT STEP</span>
-                  </div>
-                  <h2>Explore personal loan options.</h2>
-                  <p>
-                    Continue to a third-party loan application. The provider
-                    reviews your information and determines which options, if
-                    any, are available.
-                  </p>
-                  <button
-                    className="button full"
-                    disabled={preview || busy}
-                    onClick={() => void continueOffer()}
-                  >
-                    {busy ? <Spinner /> : null} Continue to application{" "}
-                    <ArrowRight size={17} />
-                  </button>
-                  <p className="fine-print">
-                    SpareCash is not a lender. Answering our questions does not
-                    check credit or determine approval.
-                  </p>
-                  <button
-                    className="text-button optional-updates-toggle"
-                    aria-expanded={showUpdates}
-                    aria-controls="optional-updates"
-                    onClick={() => setShowUpdates(!showUpdates)}
-                  >
-                    {showUpdates
-                      ? "Hide optional updates"
-                      : "Want updates? Choose how to hear from us"}
-                  </button>
-                  {questions.length > 0 && (
-                    <button
-                      className="text-button back-link"
-                      onClick={() => setStep(step - 1)}
-                    >
-                      <ArrowLeft size={15} /> Back to questions
-                    </button>
-                  )}
-                </div>
-              )}
-              {(!config.offerFirst || showUpdates) && (
-                <form id="optional-updates" onSubmit={subscribe}>
-                  <div className="form-progress">
-                    <span>STAY IN THE LOOP, YOUR WAY</span>
-                    <span>{questions.length ? "LAST STEP" : "01"}</span>
-                  </div>
-                  <h2>
-                    {config.formTitle ??
-                      "Want daily updates about loan options?"}
-                  </h2>
-                  <p>
-                    {config.formDescription ??
-                      "Choose one or more channels for daily updates about loan options."}
-                  </p>
-                  <div className="channel-choices">
-                    {[
-                      ["PUSH", "Browser notifications", "On this device", Bell],
-                      ["SMS", "Text", "On your phone", MessageSquare],
-                      ["EMAIL", "Email", "In your inbox", Mail],
-                    ].map(([channel, label, description, Icon]: any) => (
-                      <button
-                        type="button"
-                        key={channel}
-                        aria-pressed={channels.includes(channel)}
-                        className={channels.includes(channel) ? "selected" : ""}
-                        onClick={() => toggle(channel)}
-                      >
-                        <Icon size={21} />
-                        <b>{label}</b>
-                        <small>{description}</small>
-                        <span className="channel-check">
-                          {channels.includes(channel) && <Check size={11} />}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                  {channels.length > 0 && (
-                    <div className="opt-in-details">
-                      <Field label="First name (optional)">
-                        <input
-                          maxLength={80}
-                          autoComplete="given-name"
-                          placeholder="Your first name"
-                          value={name}
-                          onChange={(e) => setName(e.target.value)}
-                        />
-                      </Field>
-                      {channels.includes("EMAIL") && (
-                        <Field label="Email address">
-                          <input
-                            required
-                            type="email"
-                            autoComplete="email"
-                            placeholder="you@example.com"
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
-                          />
-                        </Field>
-                      )}
-                      {channels.includes("SMS") && (
-                        <Field label="US mobile number">
-                          <input
-                            required
-                            type="tel"
-                            autoComplete="tel"
-                            placeholder="(555) 000-0000"
-                            value={phone}
-                            onChange={(e) => setPhone(e.target.value)}
-                          />
-                        </Field>
-                      )}
-                      <div className="hp" aria-hidden="true">
-                        <label>
-                          Company
-                          <input
-                            tabIndex={-1}
-                            autoComplete="off"
-                            value={company}
-                            onChange={(e) => setCompany(e.target.value)}
-                          />
-                        </label>
+            </div>
+            {config.offerFirst && (
+              <a className="landing-jump" href="#application">
+                {config.questions?.length
+                  ? "Answer two questions"
+                  : "Explore loan options"}
+                <ArrowRight size={16} />
+              </a>
+            )}
+            {config.heroImage
+              ? config.heroPosition !== "before_title" && (
+                  <LandingPhoto image={config.heroImage} />
+                )
+              : config.showIllustration !== false && (
+                  <div className="landing-illustration" aria-hidden="true">
+                    <div className="illustration-orbit" />
+                    <div className="float-card back">
+                      <span className="circle-icon">
+                        <Wallet size={22} />
+                      </span>
+                      <div>
+                        <span className="art-line long" />
+                        <span className="art-line" />
                       </div>
-                      <label className="consent-check">
-                        <input
-                          required
-                          type="checkbox"
-                          checked={adult}
-                          onChange={(e) => setAdult(e.target.checked)}
-                        />
-                        <span>
-                          I am 18 or older and live in the United States.
-                        </span>
-                      </label>
-                      {channels.length > 0 && (
-                        <label className="consent-check">
-                          <input
-                            required
-                            type="checkbox"
-                            checked={consent}
-                            onChange={(e) => setConsent(e.target.checked)}
-                          />
-                          <span>
-                            {channels
-                              .map(
-                                (c) =>
-                                  config[
-                                    c === "EMAIL"
-                                      ? "emailConsent"
-                                      : c === "SMS"
-                                        ? "smsConsent"
-                                        : "pushConsent"
-                                  ],
-                              )
-                              .join(" ")}{" "}
-                            I have read the{" "}
-                            <a href="/privacy" target="_blank">
-                              Privacy Policy
-                            </a>{" "}
-                            and{" "}
-                            <a href="/terms" target="_blank">
-                              Terms
-                            </a>
-                            .
-                          </span>
-                        </label>
-                      )}
-                      <button
-                        className="button full"
-                        disabled={
-                          busy ||
-                          preview ||
-                          !channels.length ||
-                          !visitorVerified
-                        }
-                      >
-                        {busy ? <Spinner /> : null}
-                        {config.button}
-                        <ArrowRight size={17} />
-                      </button>
                     </div>
-                  )}
-                  {questions.length > 0 && (
-                    <button
-                      type="button"
-                      className="text-button back-link"
-                      onClick={() => setStep(step - 1)}
-                    >
-                      <ArrowLeft size={15} />
-                      Back
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    className="skip-updates"
-                    disabled={preview || busy}
-                    onClick={() => void continueOffer("optional_updates")}
-                  >
-                    Continue to application{" "}
-                    <ArrowRight size={16} aria-hidden="true" />
-                  </button>
-                  <p className="fine-print">
-                    You can continue without subscribing. Updates are optional
-                    and do not affect loan eligibility.
-                  </p>
-                </form>
-              )}
-            </>
-          )}
-          {error && (
-            <p className="error" role="alert">
-              {error}
+                    <div className="float-card front">
+                      <span className="circle-icon mint">
+                        <Leaf size={21} />
+                      </span>
+                      <b>A little breathing room.</b>
+                      <span className="art-check">
+                        <Check size={14} />
+                      </span>
+                    </div>
+                    <span className="art-spark">✦</span>
+                  </div>
+                )}
+            {(config.sections ?? []).map(
+              (
+                section: {
+                  heading: string;
+                  body: string;
+                  image?: { src: string; alt: string };
+                },
+                index: number,
+              ) => (
+                <section className="landing-section" key={index}>
+                  {section.image && <LandingPhoto image={section.image} lazy />}
+                  <h2>{section.heading}</h2>
+                  <p>{section.body}</p>
+                </section>
+              ),
+            )}
+            <p className="lender-note">
+              SpareCash connects you with third-party loan options. We are not a
+              lender. Approval, amounts, rates, and timing depend on the lender
+              and your application.
             </p>
-          )}
-        </section>
-      </main>
+          </div>
+          {funnel}
+        </main>
+      )}
+      {config.design && (
+        <p className="canvas-disclosure">
+          SpareCash connects you with third-party loan options. We are not a
+          lender. Approval, amounts, rates, and timing depend on the lender and
+          your application. Updates are optional and do not affect loan
+          eligibility.
+        </p>
+      )}
       <PublicFooter />
     </div>
   );

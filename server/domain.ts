@@ -1,6 +1,9 @@
 import { z } from "zod";
 import { ROUND_SKY_OFFER_URL } from "./roundsky-contract.js";
 import { timezoneSchema } from "./timezones.js";
+import { landingImageSchema } from "./landing-image-schema.js";
+import { landingDesignSchema } from "./landing-design.js";
+export { landingImageSchema } from "./landing-image-schema.js";
 export { withinSendingHours } from "./timezones.js";
 export const channelSchema = z.enum(["EMAIL", "SMS", "PUSH"]);
 export const objectiveSchema = z.enum([
@@ -19,15 +22,6 @@ export const questionSchema = z.object({
   options: z.array(z.string().min(1).max(100)).min(2).max(8),
   showWhen: z.object({ questionId: z.string(), equals: z.string() }).optional(),
 });
-export const landingImageSchema = z.object({
-  src: z
-    .string()
-    .regex(
-      /^(?:\/landing-assets\/[a-z0-9][a-z0-9-]*\.(?:jpg|jpeg|png|webp)|\/media\/landing\/[a-z0-9]{20,40}\.webp)$/,
-      "Choose a bundled image or upload an image to the media library",
-    ),
-  alt: z.string().trim().min(3).max(240),
-});
 export const landingSchema = z
   .object({
     eyebrow: z.string().max(80).default("A little breathing room"),
@@ -45,6 +39,11 @@ export const landingSchema = z
     heroImage: landingImageSchema.optional(),
     logoImage: landingImageSchema.optional(),
     heroPosition: z.enum(["before_title", "after_copy"]).default("after_copy"),
+    design: landingDesignSchema
+      .optional()
+      .describe(
+        "Optional composable canvas. Replaces the legacy story/layout. Keep quiz, consent, form and image/logo settings at config level. Read landing_design_guide first.",
+      ),
     offerFirst: z.boolean().default(false),
     benefits: z
       .array(z.string().min(1).max(160))

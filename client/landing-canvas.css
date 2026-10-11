@@ -1,0 +1,180 @@
+/* Authored styles apply only to design nodes. The application form, visitor
+   verification and legal footer remain application-owned siblings. */
+.public-page.has-canvas {
+  --public: #234d3e;
+  --public-bg: #ffffff;
+  --public-light: #e5efdb;
+  --green: #234d3e;
+  background: #fff;
+}
+.landing-canvas {
+  width: 100%;
+  flex: 1;
+  padding: 24px;
+}
+.landing-canvas .design-node {
+  --dc-width: var(--dc-d-width);
+  --dc-padding: var(--dc-d-padding);
+  --dc-background: var(--dc-d-background);
+  --dc-color: var(--dc-d-color);
+  --dc-border-width: var(--dc-d-border-width);
+  --dc-border-color: var(--dc-d-border-color);
+  --dc-radius: var(--dc-d-radius);
+  --dc-shadow: var(--dc-d-shadow);
+  --dc-font: var(--dc-d-font);
+  --dc-size: var(--dc-d-size);
+  --dc-weight: var(--dc-d-weight);
+  --dc-leading: var(--dc-d-leading);
+  --dc-tracking: var(--dc-d-tracking);
+  --dc-text-align: var(--dc-d-text-align);
+  --dc-columns: var(--dc-d-columns);
+  --dc-gap: var(--dc-d-gap);
+  --dc-align: var(--dc-d-align);
+  box-sizing: border-box;
+  min-width: 0;
+  width: 100%;
+  max-width: var(--dc-width);
+  margin: 0 auto;
+  padding: var(--dc-padding);
+  background: var(--dc-background);
+  color: var(--dc-color);
+  border: var(--dc-border-width) solid var(--dc-border-color);
+  border-radius: var(--dc-radius);
+  box-shadow: var(--dc-shadow);
+  font-family: var(--dc-font);
+  font-size: var(--dc-size);
+  font-weight: var(--dc-weight);
+  line-height: var(--dc-leading);
+  letter-spacing: var(--dc-tracking);
+  text-align: var(--dc-text-align);
+  overflow-wrap: anywhere;
+}
+.landing-canvas .design-container {
+  display: grid;
+  /* Automatically wrap narrow nested columns, including around the funnel. */
+  grid-template-columns: repeat(
+    auto-fit,
+    minmax(
+      min(
+        100%,
+        max(
+          280px,
+          calc(
+            (100% - (var(--dc-columns) - 1) * var(--dc-gap)) / var(--dc-columns)
+          )
+        )
+      ),
+      1fr
+    )
+  );
+  gap: var(--dc-gap);
+  align-items: var(--dc-align);
+}
+.landing-canvas .design-text {
+  white-space: pre-line;
+}
+.landing-canvas .design-image img {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: inherit;
+}
+.landing-canvas .design-list {
+  list-style-position: inside;
+}
+.landing-canvas .design-list li + li {
+  margin-top: 12px;
+}
+.landing-canvas .design-action {
+  min-height: 48px;
+  padding: max(12px, var(--dc-padding));
+  display: block;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  transition: transform 140ms ease-out;
+}
+.landing-canvas .design-action:active {
+  transform: scale(0.98);
+}
+.landing-canvas .design-action:focus-visible,
+.landing-canvas .design-faq summary:focus-visible {
+  outline: 3px solid currentColor;
+  outline-offset: 4px;
+}
+.landing-canvas .design-faq summary {
+  cursor: pointer;
+  min-height: 44px;
+  font: inherit;
+  font-weight: 700;
+}
+.landing-canvas .design-faq p {
+  margin: 16px 0 0;
+  font: inherit;
+  color: inherit;
+  white-space: pre-line;
+}
+.landing-canvas .design-divider {
+  min-height: 1px;
+  background: currentColor;
+}
+.design-funnel {
+  min-width: 0;
+  width: 100%;
+  color: #234d3e;
+  text-align: left;
+  font:
+    16px/1.6 "Manrope",
+    system-ui,
+    sans-serif;
+  letter-spacing: normal;
+}
+.design-funnel > .application-card {
+  margin: 0;
+  width: 100%;
+  max-width: none;
+  padding: clamp(20px, 4vw, 40px);
+  border-radius: 16px;
+  background: #fff;
+}
+.canvas-disclosure {
+  margin: 0 auto;
+  padding: 24px;
+  width: 100%;
+  max-width: 1180px;
+  color: #365144;
+  background: #fff;
+  font-size: 14px;
+  line-height: 1.6;
+}
+@media (max-width: 760px) {
+  .landing-canvas {
+    padding: 12px;
+  }
+  .landing-canvas .design-node {
+    --dc-width: var(--dc-m-width);
+    --dc-padding: var(--dc-m-padding);
+    --dc-background: var(--dc-m-background);
+    --dc-color: var(--dc-m-color);
+    --dc-border-width: var(--dc-m-border-width);
+    --dc-border-color: var(--dc-m-border-color);
+    --dc-radius: var(--dc-m-radius);
+    --dc-shadow: var(--dc-m-shadow);
+    --dc-font: var(--dc-m-font);
+    --dc-size: var(--dc-m-size);
+    --dc-weight: var(--dc-m-weight);
+    --dc-leading: var(--dc-m-leading);
+    --dc-tracking: var(--dc-m-tracking);
+    --dc-text-align: var(--dc-m-text-align);
+    --dc-columns: var(--dc-m-columns);
+    --dc-gap: var(--dc-m-gap);
+    --dc-align: var(--dc-m-align);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .landing-canvas .design-action {
+    transition: none;
+  }
+  .landing-canvas .design-action:active {
+    transform: none;
+  }
+}

@@ -26,6 +26,7 @@ Available tools:
 - `dashboard`, `integration_status`, `audit_log`
 - `list_leads`, `get_lead`, `set_lead_timezone`, `update_lead_notes`, `record_decline`, `unsubscribe`
 - `save_experiment`, `experiment_results`
+- `landing_design_guide`, `validate_landing_design`
 - `list_landing_images`, `list_landing_assets`, `create_landing_asset_upload`, `upload_landing_asset`
 - `save_chain`, `enroll_existing`, `list_deliveries`
 - `list_sources`, `block_source`
@@ -102,7 +103,7 @@ The connected AI can generate original hero illustrations, photographs, logos an
 1. Generate the artwork in the AI client and save the PNG, JPEG or WebP locally. For logos, use a transparent background and include the complete wordmark if desired: `logoImage` replaces the entire default header logo.
 2. Call `create_landing_asset_upload` with `{name, alt, kind}`. Kind is `HERO`, `LOGO` or `SECTION`. Use the returned one-use `uploadUrl` and headers to POST the local file bytes within 20 minutes. The upload response returns `src`, `alt`, dimensions and a public URL. Do not send the full MCP token to that URL; use its limited upload credential.
 3. Alternatively, call `upload_landing_asset` with `{name, alt, kind, base64}` for a client that can send base64 directly. Use canonical base64 with no data-URL prefix or whitespace. For large local files the upload URL avoids passing file contents through the model context.
-4. Call `save_experiment` with the returned `{src, alt}` as `config.heroImage`, `config.logoImage`, or `config.sections[i].image`. Set `heroPosition` to `before_title` for an image above the headline, or `after_copy` (default). Preview before publishing. Duplicate a variant that already has traffic to introduce new artwork.
+4. Call `save_experiment` with the returned `{src, alt}` as an image node’s `image` in `config.design`, or for a template as `config.heroImage`, `config.logoImage`, or `config.sections[i].image`. Set `heroPosition` to `before_title` for an image above the headline, or `after_copy` (default). Preview before publishing. Duplicate a variant that already has traffic to introduce new artwork.
 
 Example image fields inside a variant config (replace the paths with actual upload responses):
 
@@ -138,7 +139,72 @@ Assets are immutable and identical uploads of the same kind reuse an existing as
 
 Set `offerFirst: true` to show the loan application as the primary action after any quiz questions, with channel subscriptions optional and collapsed. The default remains `false` for existing experiments. A direct-versus-quiz experiment can keep all copy and imagery identical and vary only `questions: []` versus two preference questions. Preview submissions remain disabled. Quiz answers are saved only when a visitor submits the optional subscription form; continuation alone does not save answers.
 
-`save_experiment` supports three layouts (`split`, `centered`, `editorial`), `sans`/`serif` typography, an optional six-digit hex `accentColor`, illustration visibility, up to five `benefits`, up to five story `sections` (`heading`, `body`, optional `image`), and custom form heading/introduction. The visual editor supports the same fields. Arbitrary HTML, JavaScript and unrestricted page graphs are not supported.
+Without `config.design`, `save_experiment` supports the three original layouts (`split`, `centered`, `editorial`), `sans`/`serif` typography, an optional six-digit hex `accentColor`, illustration visibility, up to five `benefits`, up to five story `sections` (`heading`, `body`, optional `image`), and custom form heading/introduction. Existing pages keep this behavior. For original compositions use the canvas below.
+
+### Composable designs and client skills
+
+`landing_design_guide` returns the canvas contract, required elements, workflow and three complete editable examples (dark poster, editorial guide and quiz-first composition). These are starting points, not a fixed template catalog. The agent can author a new composition using the design, copywriting or image-generation skills available in its AI client. SpareCash does not install or run those skills itself.
+
+Set `config.design` to a version-1 design containing a `root` container ID and a flat `nodes` array. Containers reference children by ID, in display order. Up to 80 nodes and 8 nesting levels are supported. Compose containers, headings, paragraphs, uploaded images, lists, action links, FAQs, dividers and one `funnel` slot. Every node must be reachable exactly once; IDs are unique. Include exactly one level-1 heading and exactly one funnel.
+
+The canvas replaces the template story and layout. Top-level `title` and `description` remain required fallback metadata. The legacy `layout`, `theme`, `typography`, `accentColor`, `heroImage`, `heroPosition`, `benefits` and `sections` do not control canvas content; place images and text in canvas nodes instead. `logoImage`, `questions`, `offerFirst`, form copy and consent fields continue to control the header and protected funnel. Switching back to a template retains its saved fields.
+
+Styles can vary per node: foreground/background/border colors, padding, gaps, widths, responsive columns, border shape, shadows, alignment, font family, size, weight, line height and letter spacing. Five font stacks are available: `modern`, `humanist`, `editorial`, `classic` and `mono`. Use `mobile` on a node to override its style at 760px and below. Grids stack on mobile by default and wrap any column that cannot fit 280px. Text colors must pass a 4.5:1 foreground/background contrast check at both breakpoints. Numeric lengths use pixels; line height is a multiplier. Exact ranges are in the tool schema.
+
+Minimal example for `config.design`:
+
+```json
+{
+  "version": 1,
+  "background": "#101e28",
+  "color": "#f4f6ec",
+  "headingFont": "editorial",
+  "root": "page",
+  "nodes": [
+    {
+      "id": "page",
+      "type": "container",
+      "children": ["intro", "form"],
+      "style": { "columns": 2, "maxWidth": 1200, "gap": 40, "padding": 32 }
+    },
+    {
+      "id": "intro",
+      "type": "container",
+      "children": ["title", "copy", "jump"]
+    },
+    {
+      "id": "title",
+      "type": "heading",
+      "level": 1,
+      "text": "Your next chapter starts here.",
+      "style": { "fontSize": 72 },
+      "mobile": { "fontSize": 40 }
+    },
+    {
+      "id": "copy",
+      "type": "text",
+      "text": "Explore loan options at your pace. Review the terms before deciding."
+    },
+    {
+      "id": "jump",
+      "type": "action",
+      "text": "Explore options",
+      "style": { "background": "#d3ef90", "color": "#101e28", "radius": 32 }
+    },
+    { "id": "form", "type": "funnel" }
+  ]
+}
+```
+
+The app owns the form implementation, server-validated Turnstile, advertising privacy controls, channel consent, optional continuation, application tracking, non-lender disclosure, and privacy/terms links. The funnel node cannot accept authored styles or children. Actions focus/scroll to it rather than opening an arbitrary URL or submitting a replacement form. Required controls cannot be placed inside an FAQ, hidden, clipped or covered by authored CSS. The form uses a separate palette and typography so ancestor styles cannot make consent unreadable. Content is rendered as escaped text; arbitrary HTML/CSS/JavaScript, external fonts, tracking code and external image URLs are not accepted.
+
+Workflow: use client skills → upload artwork → compose `config.design` → `validate_landing_design` with the complete config → `save_experiment` as DRAFT → `get_experiment` for preview URLs → inspect desktop/mobile and exercise the quiz → publish according to the owner's instructions. Validation returns `{valid, issues}` with field paths, and checks uploaded/bundled image references as well as structure and contrast. It does not certify marketing claims, provider delivery or every accessibility requirement. Draft previews keep submissions disabled.
+
+The CRM editor can switch design mode, select a starting point, inspect the canvas JSON, and edit the shared logo, quiz and form fields. Detailed canvas composition is authored through MCP. Saving a visited variant's canvas is rejected just like other content changes; duplicate the variant to preserve historical results. No new environment variables or database migrations are needed for canvas designs.
+
+Example owner request:
+
+> Use your design and image-generation skills to create three visually distinct draft landings: a dark poster, a practical editorial guide, and a quiz-first page. Start with landing_design_guide. Invent different compositions, upload original artwork, and keep the SpareCash funnel and required disclosures. Validate each config and inspect desktop and mobile previews. Do not publish until I review them.
 
 Quiz questions may include `showWhen: {questionId: "timing", equals: "Now"}`. Conditions must refer to an earlier question and one of its valid answer options. Hidden branches are skipped and hidden answers are excluded from the saved lead. The server validates the same visible path. This allows preference qualification and segmentation while keeping consent optional and the loan application on RoundSky.
 
@@ -148,7 +214,7 @@ A variant that has received traffic cannot have its copy, design or quiz overwri
 
 ### Example instruction for your connected AI
 
-> Act as my SpareCash affiliate marketing operator. Start with marketing_context and inspect integration and worker health. Compare mature cohorts by source, landing and source × landing, then review each follow-up message's clicks, applications, sold leads and commission. Read submitted quiz segments to improve qualification. Treat unknown spend as unknown and preserve a control when testing. Create distinct design and message versions instead of overwriting historical content. Generate original artwork with your image tool, upload it through create_landing_asset_upload, and attach it to heroImage, logoImage or section images before previewing. Respect my publishing instructions and existing live-mode settings. Exclude bot zones only when the configured evidence rules allow it; do not call low-converting visitors bots or assume missing postbacks mean declined. Record what you measured, what you changed, why, and when to review it again. Report unsupported actions such as bid changes, automatic spend sync or randomized chain tests explicitly.
+> Act as my SpareCash affiliate marketing operator. Start with marketing_context and inspect integration and worker health. Compare mature cohorts by source, landing and source × landing, then review each follow-up message's clicks, applications, sold leads and commission. Read submitted quiz segments to improve qualification. Treat unknown spend as unknown and preserve a control when testing. Create distinct design and message versions instead of overwriting historical content. Read landing_design_guide and use your design skills to compose a distinct config.design canvas around the protected funnel. Generate original artwork with your image tool, upload it through create_landing_asset_upload, and attach it to canvas image nodes or logoImage. Validate with validate_landing_design and inspect desktop/mobile previews before publishing. Respect my publishing instructions and existing live-mode settings. Exclude bot zones only when the configured evidence rules allow it; do not call low-converting visitors bots or assume missing postbacks mean declined. Record what you measured, what you changed, why, and when to review it again. Report unsupported actions such as bid changes, automatic spend sync or randomized chain tests explicitly.
 
 For recurring optimization, configure a recurring task in the AI client that can connect to this MCP and supply the owner's chosen publishing authority. `record_marketing_review.nextReviewAt` is a recorded plan, not an executable schedule. The separate PropellerAds MCP/API is needed for advertiser bid/budget management and advertiser-side reports. SpareCash's existing source exclusion adapter continues to support guarded bot-source blocking.
 
