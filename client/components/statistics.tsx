@@ -36,6 +36,13 @@ const groups = {
   device: "Device",
   browser: "Browser",
   os: "Operating system",
+  creative: "Creative",
+  subzone: "Subzone",
+  connection: "Connection type",
+  carrier: "Carrier",
+  language: "Browser language",
+  browserVersion: "Browser version",
+  osVersion: "OS version",
   day: "Day",
 };
 const pct = (v: number | null) =>

@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
+import { propellerTargetUrl } from "../../shared/propeller-attribution.js";
 import { db } from "../db.js";
 import { env } from "../config.js";
 import { settings } from "./control.js";
@@ -591,6 +592,10 @@ export async function getExperiment(id: string) {
   return {
     ...experiment,
     url: `${env.APP_URL}/go/${experiment.slug}`,
+    propellerUrl: propellerTargetUrl(
+      `${env.APP_URL}/go/${experiment.slug}`,
+      experiment.slug,
+    ),
     variants: experiment.variants.map((v) => ({
       ...v,
       previewUrl: `${env.APP_URL}/preview/${experiment.id}?variant=${v.id}`,

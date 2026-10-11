@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "../db.js";
 import { env } from "../config.js";
 import { browserContext } from "./visit-context.js";
+import type { PropellerAdContext } from "../../shared/propeller-attribution.js";
 import {
   advertiserStatistics,
   unavailableAds,
@@ -32,6 +33,13 @@ export const statisticsSchema = z
         "device",
         "browser",
         "os",
+        "creative",
+        "subzone",
+        "connection",
+        "carrier",
+        "language",
+        "browserVersion",
+        "osVersion",
         "day",
       ])
       .default("zone"),
@@ -93,6 +101,14 @@ function counts(segment: Segment) {
   };
 }
 type Counts = ReturnType<typeof counts>;
+function propellerContext(value: Prisma.JsonValue): PropellerAdContext {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value).filter(
+      (entry): entry is [string, string] => typeof entry[1] === "string",
+    ),
+  ) as PropellerAdContext;
+}
 function finish(row: Counts) {
   const comparableCosts =
     row.adSpend !== null &&
@@ -174,6 +190,7 @@ export async function statisticsReport(input: StatisticsInput = {}) {
       region: true,
       city: true,
       userAgent: true,
+      adContext: true,
       cost: true,
       costRecorded: true,
       source: { select: { campaignId: true, zoneId: true } },
@@ -212,7 +229,11 @@ export async function statisticsReport(input: StatisticsInput = {}) {
       "More than 50,000 visits match this report. Narrow the dates or campaign; no partial totals were returned.",
     );
   const visits = allVisits
-    .map((v) => ({ ...v, ...browserContext(v.userAgent) }))
+    .map((v) => ({
+      ...v,
+      propeller: propellerContext(v.adContext),
+      ...browserContext(v.userAgent),
+    }))
     .filter(
       (v) =>
         (!query.device || v.device === query.device) &&
@@ -313,6 +334,50 @@ export async function statisticsReport(input: StatisticsInput = {}) {
         return make(
           [v.createdAt.toISOString().slice(0, 10)],
           v.createdAt.toISOString().slice(0, 10),
+        );
+      case "creative":
+        return make(
+          [v.propeller.bannerId],
+          v.propeller.bannerId
+            ? `Creative ${v.propeller.bannerId}`
+            : "Unknown creative",
+          campaign ? `Campaign ${campaign}` : "",
+        );
+      case "subzone":
+        return make(
+          [v.propeller.subzoneId],
+          v.propeller.subzoneId
+            ? `Subzone ${v.propeller.subzoneId}`
+            : "Unknown subzone",
+          zone ? `Zone ${zone}` : "",
+        );
+      case "connection":
+        return make(
+          [v.propeller.connectionType],
+          v.propeller.connectionType ?? "Unknown connection",
+        );
+      case "carrier":
+        return make(
+          [v.propeller.carrier],
+          v.propeller.carrier ?? "Unknown carrier",
+        );
+      case "language":
+        return make(
+          [v.propeller.language],
+          v.propeller.language ?? "Unknown language",
+        );
+      case "browserVersion":
+        return make(
+          [v.propeller.browser, v.propeller.browserVersion],
+          [v.propeller.browser, v.propeller.browserVersion]
+            .filter(Boolean)
+            .join(" ") || "Unknown browser version",
+        );
+      case "osVersion":
+        return make(
+          [v.propeller.os, v.propeller.osVersion],
+          [v.propeller.os, v.propeller.osVersion].filter(Boolean).join(" ") ||
+            "Unknown OS version",
         );
       default:
         return make([v[query.groupBy]], v[query.groupBy], "", {
@@ -492,6 +557,8 @@ export async function statisticsReport(input: StatisticsInput = {}) {
         "PropellerAds spend is separate from recorded click costs. Cost per subscriber and ROAS require advertiser scope matching for every visit in the row. No estimated allocation to cities, devices or landing variants.",
       geography:
         "Approximate IP location from trusted edge headers. Missing historical locations stay unknown. Browser and device categories come from the stored user agent.",
+      propellerAttribution:
+        "Creative, subzone, carrier, connection, language and version breakdowns use URL tokens supplied by PropellerAds. They are attribution metadata, not security evidence. URL-declared cost is retained for reconciliation but never booked as trusted spend.",
       window:
         "Visits and advertiser impressions/clicks use the selected UTC dates. Subscription and sale outcomes are observed through report time. Recent visits have had less time to convert; current-day advertiser totals can change.",
     },

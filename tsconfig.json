@@ -15,6 +15,7 @@
   "include": [
     "server",
     "client",
+    "shared",
     "prisma",
     "tests",
     "vite.config.ts",

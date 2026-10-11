@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { createEngagementTracker } from "./engagement";
+import { propellerVisitAttribution } from "../shared/propeller-attribution";
 import { VisitorGate } from "./VisitorGate";
 import { LandingCanvas } from "./LandingCanvas";
 import { beforeApplicationNavigation } from "./retargeting";
@@ -116,12 +117,9 @@ function Landing({ preview }: { preview: boolean }) {
             ) ?? exp.variants[0];
           if (current) setSession({ config: v.config, preview: true });
         } else {
-          const q = new URLSearchParams(location.search);
           const data = await post("/public/visit", {
             slug: location.pathname.split("/")[2] || "us-loans",
-            campaignId: q.get("campaign_id") ?? undefined,
-            zoneId: q.get("zone_id") ?? undefined,
-            clickId: q.get("click_id") ?? undefined,
+            ...propellerVisitAttribution(location.search),
           });
           if (current) setSession(data);
         }

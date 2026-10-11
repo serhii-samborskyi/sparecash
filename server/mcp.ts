@@ -307,7 +307,7 @@ function makeServer() {
   );
   register(
     "list_traffic_visits",
-    "Read attribution IDs, external click IDs and engagement markers without contact details. Filter engagementKind to inspect anonymous quiz participants or visitors who continued without updates. These are first-party records, not an advertiser audience upload. Costs must come from trusted advertiser reporting, not visitor query parameters.",
+    "Read attribution IDs, external click IDs, PropellerAds click metadata and engagement markers without contact details. Filter engagementKind to inspect anonymous quiz participants or visitors who continued without updates. adContext values are untrusted URL attribution supplied by the advertiser redirect; declaredCost is not booked spend. Costs must come from trusted advertiser reporting, not visitor query parameters.",
     {
       page: z.number().int().min(1).default(1),
       campaignId: z.string().optional(),
@@ -341,6 +341,7 @@ function makeServer() {
         select: {
           id: true,
           externalClickId: true,
+          adContext: true,
           engagementEvents: {
             select: { kind: true, questionId: true, createdAt: true },
           },
