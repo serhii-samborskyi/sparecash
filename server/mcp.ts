@@ -137,7 +137,7 @@ function makeServer() {
   );
   register(
     "save_retargeting_settings",
-    "Replace retargeting settings: exact PropellerAds HTTPS image pixel URLs, audience IDs, purposes and event/status eligibility. Omitted audiences are disabled; history remains. Disabled by default. A separate advertising opt-in and visit-bound server verification always apply. Control split defaults to 20% and freezes after the first browser journey. Collection requires valid Turnstile keys and enrollment/removal pixels; validate_retargeting_setup separately lists campaign launch gaps so controlled pixel/suppression testing can precede advertising. Pixel URLs are never inferred from audience IDs; arbitrary scripts are unsupported.",
+    "Replace retargeting settings: exact PropellerAds HTTPS image pixel URLs, audience IDs, purposes and event/status eligibility. Omitted audiences are disabled; history remains. Disabled by default. Qualifying actions are tracked automatically without a landing-page advertising prompt; saved opt-outs, Global Privacy Control and visit-bound server verification always apply. Control split defaults to 20% and freezes after the first browser journey. Collection requires valid Turnstile keys and enrollment/removal pixels; validate_retargeting_setup separately lists campaign launch gaps so controlled pixel/suppression testing can precede advertising. Pixel URLs are never inferred from audience IDs; arbitrary scripts are unsupported.",
     retargetingSettingsSchema.shape,
     saveRetargetingSettings,
   );

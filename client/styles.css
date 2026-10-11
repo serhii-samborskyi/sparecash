@@ -1737,12 +1737,6 @@ summary {
   color: var(--public, #234d3e);
   font-size: 14px;
 }
-.visitor-controls details {
-  margin-top: 12px;
-}
-.visitor-controls summary {
-  cursor: pointer;
-}
 .visitor-controls p {
   max-width: 850px;
   line-height: 1.6;

@@ -200,7 +200,7 @@ Minimal example for `config.design`:
 }
 ```
 
-The app owns the form implementation, server-validated Turnstile, advertising privacy controls, channel consent, optional continuation, application tracking, non-lender disclosure, and privacy/terms links. The funnel node cannot accept authored styles or children. Actions focus/scroll to it rather than opening an arbitrary URL or submitting a replacement form. Required controls cannot be placed inside an FAQ, hidden, clipped or covered by authored CSS. The form uses a separate palette and typography so ancestor styles cannot make consent unreadable. Content is rendered as escaped text; arbitrary HTML/CSS/JavaScript, external fonts, tracking code and external image URLs are not accepted.
+The app owns the form implementation, server-validated Turnstile, advertising opt-out enforcement, channel consent, optional continuation, application tracking, non-lender disclosure, and privacy/terms links. The funnel node cannot accept authored styles or children. Actions focus/scroll to it rather than opening an arbitrary URL or submitting a replacement form. Required controls cannot be placed inside an FAQ, hidden, clipped or covered by authored CSS. The form uses a separate palette and typography so ancestor styles cannot make consent unreadable. Content is rendered as escaped text; arbitrary HTML/CSS/JavaScript, external fonts, tracking code and external image URLs are not accepted.
 
 Workflow: use client skills → upload artwork → compose `config.design` → `validate_landing_design` with the complete config → `save_experiment` as DRAFT → `get_experiment` for preview URLs → inspect desktop/mobile and exercise the quiz → publish according to the owner's instructions. Validation returns `{valid, issues}` with field paths, and checks uploaded/bundled image references as well as structure and contrast. It does not certify marketing claims, provider delivery or every accessibility requirement. Draft previews keep submissions disabled.
 
@@ -248,6 +248,10 @@ advertising statistics. Start with `retargeting_status` and
 Audience rules support `QUIZ_PARTICIPATED`, `QUIZ_COMPLETED`, `APPLICATION`,
 `SUBSCRIBED` and exclusion-only `PAID`. Opening updates is not qualification.
 Application/subscription status conditions are independent of messaging consent.
+Configured pixels run automatically after verified qualifying actions, with no
+landing-page advertising-consent prompt. Saved advertising opt-outs and Global
+Privacy Control still block pixels; automatic tracking never records a consent
+grant.
 The exact image adapter, property schemas, account setup sequence and limitations
 are documented in [Engagement and retargeting V1](ENGAGEMENT-RETARGETING.md).
 

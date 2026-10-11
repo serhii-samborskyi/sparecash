@@ -6,7 +6,7 @@ import { settingsSchema } from "../domain.js";
 
 const id = z.string().regex(/^\d+$/).max(30);
 export const ADVERTISING_NOTICE =
-  "Allow SpareCash to share your qualifying activity with PropellerAds for personalized advertising. This is optional, separate from email, text and push subscriptions, and does not affect access to loan options. You can change this choice here.";
+  "SpareCash shares qualifying activity with PropellerAds for personalized advertising. Saved advertising opt-outs and Global Privacy Control are respected. This is separate from email, text and push subscriptions and does not affect access to loan options.";
 
 // V1 deliberately accepts the provider's image adapter, not executable HTML.
 // Keep the supplied URL byte-for-byte; do not infer partner from audience ID.
@@ -337,7 +337,7 @@ export function validateConfiguration(
       "Targeting and suppression evidence is supplied by the operator/PropellerAds MCP; SpareCash cannot independently inspect that account.",
     limits: [
       "Pixel load is not confirmed audience membership.",
-      "Suppression after a sale waits for a verified, consenting browser return; advertiser exclusions must be tested separately.",
+      "Suppression after a sale waits for a verified browser return without an advertising opt-out; advertiser exclusions must be tested separately.",
       "Browser identifiers do not link cleared cookies or different devices.",
       "Turnstile works independently of Cloudflare DNS/CDN/WAF; an edge-security audit is optional and does not gate readiness.",
     ],

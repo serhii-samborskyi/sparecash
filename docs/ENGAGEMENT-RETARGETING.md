@@ -116,7 +116,7 @@ enrollment/removal pixels) from campaign launch `ready` (also requires mappings,
 targeting and account-test evidence). `enabled: true` is rejected if collection
 checks fail. This permits a controlled pixel/suppression test before a campaign
 exists, without fabricating a passed test to unlock the test itself. Verification,
-engagement, advertising permission and holdout checks always apply. Expired
+engagement, advertising opt-out and holdout checks always apply. Expired
 account evidence blocks launch readiness, not existing audience collection.
 SpareCash does not pause advertiser campaigns; PropellerAds MCP manages those.
 Removal remains possible when collection is disabled, subject to verification
@@ -124,10 +124,17 @@ and advertising choice.
 
 ## Browser pixel approval and privacy
 
-The landing provides an explicit advertising choice, separate from email, text
-and push consent. The initial choice is UNKNOWN, which does not permit pixels.
-The notice and each choice are recorded with the journey. Browser Global Privacy
-Control and `Sec-GPC: 1` override permission to DENIED.
+Landings do not display a separate advertising-consent prompt. Configured pixels
+run automatically after verified qualifying actions, subject to audience rules,
+setup readiness and the control group. A page view alone does not qualify.
+The journey remains UNKNOWN until an actual advertising choice or privacy signal
+is received; automatic tracking does not create a GRANTED consent record or
+claim to verify consent on a partner site. Existing GRANTED journeys continue
+to qualify, while saved DENIED choices block all advertiser pixels. Browser
+Global Privacy Control and `Sec-GPC: 1` persist a DENIED choice, including when
+the browser only exposes GPC through JavaScript. The existing
+`/advertising-choice` endpoint retains choice history and supports already-open
+clients. Email, text and push subscriptions still require their own consent.
 
 `POST /api/public/retargeting/qualify` rechecks the signed visit, matching journey
 cookie, fresh proof, verified qualifying events, subscription/application state,
@@ -166,7 +173,7 @@ can break browser linkage; the app does not claim cross-device identity.
 Application/confirmation changes refresh eligibility and mark previous audience
 enrollments for suppression. `SOLD` callbacks immediately suppress further
 marketing enrollment and queue suppression on prior attempts. They never request
-browser pixels from the server. On a later verified, consenting browser return,
+browser pixels from the server. On a later verified browser return without an advertising opt-out,
 the app can attempt the saved removal pixel and enroll the paid exclusion
 audience. The configured advertiser campaign must actually exclude that audience.
 
@@ -226,12 +233,12 @@ Cloudflare DNS, proxy/CDN, WAF and an account audit are **not required**.
 Turnstile works with the owner's existing DNS and hosting. Require the widget's
 production keys, successful server-side Siteverify validation, the expected
 hostname/action/visit binding and verified engagement before audience enrollment.
-Advertising permission and holdout checks also remain mandatory. Optional edge
+Advertising opt-out and holdout checks also remain mandatory. Optional edge
 protection is a separate operational choice, not a retargeting launch gate.
 [Cloudflare Turnstile overview](https://developers.cloudflare.com/turnstile/)
 
 Finish the account audience setup and save disabled settings. Enable collection
-only when deliberately testing/collecting verified, consenting visitors; no ad
+only when deliberately testing/collecting verified qualifying actions; no ad
 campaign needs to be active. Test the browser/callback/removal path. Create
 **draft** campaigns in PropellerAds MCP, read back targeting and test exclusions,
 then record the actual evidence and run launch validation. SpareCash must never record a passed test just to clear a gap.

@@ -3223,7 +3223,7 @@ async function rtVisit(group: "TREATMENT" | "CONTROL" = "TREATMENT") {
   return { visit, session: created.data, experiment, headers, send, verify };
 }
 
-it("verifies anonymous quiz visits, binds single-use proofs, and never enrolls unverified or non-consenting browsers", async () => {
+it("automatically qualifies verified quiz actions without a local advertising opt-in and binds single-use proofs", async () => {
   await rtSetup();
   const f = await rtVisit();
   await f.send("engagement", {
@@ -3234,8 +3234,7 @@ it("verifies anonymous quiz visits, binds single-use proofs, and never enrolls u
     },
   });
   expect((await f.send("retargeting/qualify")).data.pixels).toEqual([]);
-  await f.send("advertising-choice", { choice: "GRANTED" });
-  expect((await f.send("retargeting/qualify")).data.pixels).toEqual([]);
+  expect(f.session.advertising.privacy).toBe("UNKNOWN");
   expect((await f.verify({ cdata: "another-visit" })).data.verified).toBe(
     false,
   );
@@ -3259,6 +3258,16 @@ it("verifies anonymous quiz visits, binds single-use proofs, and never enrolls u
   const pixels = concurrent.flatMap((r) => r.data.pixels);
   expect(pixels).toHaveLength(1);
   expect(pixels[0].url).toBe(rtAudiences[0].enrollment.url);
+  expect(
+    await db.visitorJourney.findUniqueOrThrow({
+      where: { id: f.visit.journeyId! },
+    }),
+  ).toMatchObject({ privacy: "UNKNOWN", privacyAt: null });
+  expect(
+    await db.advertisingPrivacyEvent.count({
+      where: { journeyId: f.visit.journeyId! },
+    }),
+  ).toBe(0);
   expect(
     (await f.send("retargeting/receipt", { id: pixels[0].id, state: "LOADED" }))
       .data,
@@ -3298,6 +3307,7 @@ it("verifies anonymous quiz visits, binds single-use proofs, and never enrolls u
 it("keeps controls out of audiences, honors advertising refusal/GPC and records verification outages separately", async () => {
   const f = await rtVisit("CONTROL");
   await f.verify();
+  expect((await f.send("retargeting/qualify")).data.pixels).toEqual([]);
   await f.send("engagement", {
     event: {
       kind: "QUESTION_ANSWERED",
@@ -3305,7 +3315,6 @@ it("keeps controls out of audiences, honors advertising refusal/GPC and records 
       answers: { amount: "Large" },
     },
   });
-  await f.send("advertising-choice", { choice: "GRANTED" });
   const result = await f.send("retargeting/qualify");
   expect(result.data).toMatchObject({ reason: "CONTROL", pixels: [] });
   expect(
@@ -3357,10 +3366,61 @@ it("keeps controls out of audiences, honors advertising refusal/GPC and records 
   ).rejects.toThrow("frozen");
 });
 
+it.each(["CHOICE", "GPC_HEADER", "GPC_BROWSER"] as const)(
+  "honors %s on automatically tracked actions without recording a grant",
+  async (source) => {
+    await rtSetup();
+    const f = await rtVisit();
+    await f.verify();
+    // A page view alone never enrolls even after browser verification.
+    expect((await f.send("retargeting/qualify")).data.pixels).toEqual([]);
+    await f.send("engagement", {
+      event: {
+        kind: "QUESTION_ANSWERED",
+        questionId: "amount",
+        answers: { amount: "Small" },
+      },
+    });
+    if (source !== "GPC_HEADER")
+      await f.send("advertising-choice", {
+        choice: "DENIED",
+        gpc: source === "GPC_BROWSER",
+      });
+    const headers: Record<string, string> =
+      source === "GPC_HEADER" ? { "Sec-GPC": "1" } : {};
+    expect(
+      (await f.send("retargeting/qualify", {}, headers)).data,
+    ).toMatchObject({
+      privacy: "DENIED",
+      reason: "ADVERTISING_OPTED_OUT",
+      pixels: [],
+    });
+    // The opt-out persists when a subsequent request omits the GPC signal.
+    expect((await f.send("retargeting/qualify")).data.pixels).toEqual([]);
+    expect(
+      await db.visitEvent.count({
+        where: { visitId: f.visit.id, kind: "QUESTION_ANSWERED" },
+      }),
+    ).toBe(1);
+    expect(
+      await db.retargetingPixelAttempt.count({
+        where: { journeyId: f.visit.journeyId! },
+      }),
+    ).toBe(0);
+    expect(
+      await db.advertisingPrivacyEvent.findMany({
+        where: { journeyId: f.visit.journeyId! },
+        select: { choice: true, source: true },
+      }),
+    ).toEqual([
+      { choice: "DENIED", source: source === "CHOICE" ? "CHOICE" : "GPC" },
+    ]);
+  },
+);
+
 it("preserves every return click and original journey, progresses application audiences, and queues sale suppression without server pixels", async () => {
   const f = await rtVisit();
   await f.verify();
-  await f.send("advertising-choice", { choice: "GRANTED" });
   await f.send("engagement", {
     event: {
       kind: "QUESTION_ANSWERED",
@@ -3576,7 +3636,6 @@ it("exposes MCP controls, requires exact pixels for collection, and keeps launch
     ).toBe(true);
     const f = await rtVisit();
     await f.verify();
-    await f.send("advertising-choice", { choice: "GRANTED" });
     await f.send("engagement", {
       event: {
         kind: "QUESTION_ANSWERED",
@@ -3679,7 +3738,6 @@ it("compares mature treatment/control journeys with equal windows, counts sales 
 it("marks engagement verified only with a current proof and preserves newer verification results when responses arrive out of order", async () => {
   await rtSetup();
   const f = await rtVisit();
-  await f.send("advertising-choice", { choice: "GRANTED" });
   await f.verify();
   await db.visit.update({
     where: { id: f.visit.id },

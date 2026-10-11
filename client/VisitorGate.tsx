@@ -30,23 +30,20 @@ export function VisitorGate({
   runner: React.MutableRefObject<(() => Promise<void>) | undefined>;
 }) {
   const container = useRef<HTMLDivElement>(null);
-  const [privacy, setPrivacy] = useState(
-    session.advertising?.privacy ?? "UNKNOWN",
-  );
+  const privacy = session.advertising?.privacy ?? "UNKNOWN";
   const gpc =
     (navigator as Navigator & { globalPrivacyControl?: boolean })
       .globalPrivacyControl === true;
-  const permission = useRef(privacy === "GRANTED" && !gpc);
+  const permission = useRef(privacy !== "DENIED" && !gpc);
   useEffect(() => {
-    if (privacy !== "GRANTED" || gpc) permission.current = false;
-  }, [privacy, gpc]);
+    permission.current = privacy !== "DENIED" && !gpc;
+  }, [session.visitToken, privacy, gpc]);
   const [error, setError] = useState("");
   const [verified, setVerified] = useState(!!session.verification?.verified);
   const [expiresAt, setExpiresAt] = useState<string | null>(
     session.verification?.expiresAt ?? null,
   );
   const [retry, setRetry] = useState(0);
-  const [saving, setSaving] = useState(false);
   const updateVerified = useCallback(
     (value: boolean) => {
       setVerified(value);
@@ -77,9 +74,7 @@ export function VisitorGate({
         visitToken: session.visitToken,
         choice: "DENIED",
         gpc: true,
-      })
-        .then(() => setPrivacy("DENIED"))
-        .catch(() => {});
+      }).catch(() => {});
   }, [session.visitToken, gpc]);
   useEffect(() => {
     updateVerified(verified);
@@ -148,31 +143,8 @@ export function VisitorGate({
     retry,
     updateVerified,
   ]);
-  async function choose(choice: "GRANTED" | "DENIED") {
-    // Stop an in-flight dispatch immediately when the visitor withdraws permission.
-    if (choice === "DENIED") permission.current = false;
-    setSaving(true);
-    setError("");
-    try {
-      const result = await post("/public/advertising-choice", {
-        visitToken: session.visitToken,
-        choice,
-        gpc,
-      });
-      permission.current = result.privacy === "GRANTED" && !gpc;
-      setPrivacy(result.privacy);
-      void runner.current?.();
-    } catch {
-      setError("Could not save your advertising choice. Please retry.");
-    } finally {
-      setSaving(false);
-    }
-  }
   return (
-    <section
-      className="visitor-controls"
-      aria-label="Verification and advertising choices"
-    >
+    <section className="visitor-controls" aria-label="Browser verification">
       {!verified && <div ref={container} className="turnstile-container" />}
       <small>
         {verified
@@ -192,46 +164,6 @@ export function VisitorGate({
             </button>
           )}
         </p>
-      )}
-      {session.advertising?.available && (
-        <details open={privacy === "UNKNOWN"}>
-          <summary>
-            Advertising privacy ·{" "}
-            {gpc || privacy === "DENIED"
-              ? "not allowed"
-              : privacy === "GRANTED"
-                ? "allowed"
-                : "your choice"}
-          </summary>
-          <p>
-            {session.advertising.notice}{" "}
-            <a href="/privacy" target="_blank" rel="noreferrer">
-              Privacy policy
-            </a>
-          </p>
-          {gpc ? (
-            <p>Your browser’s Global Privacy Control is respected.</p>
-          ) : (
-            <div className="advertising-choices">
-              <button
-                type="button"
-                className="button secondary"
-                disabled={saving}
-                onClick={() => void choose("DENIED")}
-              >
-                Do not allow
-              </button>
-              <button
-                type="button"
-                className="button secondary"
-                disabled={saving}
-                onClick={() => void choose("GRANTED")}
-              >
-                Allow personalized ads
-              </button>
-            </div>
-          )}
-        </details>
       )}
     </section>
   );

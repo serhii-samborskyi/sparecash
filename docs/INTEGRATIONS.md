@@ -110,8 +110,9 @@ hostname, action and visit binding, then retains a 30-minute visit proof.
 Audience verification has no test-key bypass. Legacy `action=subscribe` remains
 accepted for existing clients but does not supply an audience proof.
 
-The retargeting gate additionally requires verified engagement, explicit
-advertising permission and treatment-group assignment. Provider timeouts and
+The retargeting gate additionally requires verified engagement, no advertising
+opt-out and treatment-group assignment. There is no separate consent prompt on
+the landing. Provider timeouts and
 expired tokens are not automatic bot evidence. Turnstile works independently
 of Cloudflare DNS/CDN/WAF; no DNS migration or firewall account audit is required.
 See [the retargeting contract](ENGAGEMENT-RETARGETING.md)

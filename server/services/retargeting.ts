@@ -175,7 +175,9 @@ export async function qualifyPixels(visitId: string, journeyId: string) {
     const attempts = await tx.retargetingPixelAttempt.findMany({
       where: { journeyId },
     });
-    const adsAllowed = journey.privacy === "GRANTED";
+    // Qualifying actions run automatically unless the browser has opted out.
+    // UNKNOWN remains unchanged: automatic tracking is not a recorded consent.
+    const adsAllowed = journey.privacy !== "DENIED";
     const verified = hasVisitorProof(visit);
     const eligible = config.audiences.filter((a) => audienceEligible(a, facts));
     // Use the same eligibility definition for both arms, before checking group.
@@ -272,7 +274,7 @@ export async function qualifyPixels(visitId: string, journeyId: string) {
       verified,
       privacy: journey.privacy,
       reason: !adsAllowed
-        ? "ADVERTISING_PERMISSION_REQUIRED"
+        ? "ADVERTISING_OPTED_OUT"
         : !verified
           ? "VERIFICATION_REQUIRED"
           : !ready
@@ -300,7 +302,7 @@ export async function refreshJourneySuppression(journeyId: string) {
         (a) => a.id === attempt.audienceId,
       );
       if (
-        journey.privacy !== "GRANTED" ||
+        journey.privacy === "DENIED" ||
         !config.enabled ||
         !audience ||
         !audienceEligible(audience, facts)
