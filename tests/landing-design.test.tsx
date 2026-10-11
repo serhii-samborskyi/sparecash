@@ -15,6 +15,44 @@ const minimal = () => ({
   ],
 });
 describe("composable landing boundaries", () => {
+  it("prioritizes the first rendered image and defers supporting images", () => {
+    const design = landingDesignSchema.parse({
+      ...minimal(),
+      nodes: [
+        {
+          id: "page",
+          type: "container",
+          children: ["title", "hero", "form", "support"],
+        },
+        { id: "title", type: "heading", level: 1, text: "Explore options" },
+        { id: "form", type: "funnel" },
+        {
+          id: "support",
+          type: "image",
+          image: {
+            src: "/landing-assets/planning.webp",
+            alt: "Planning details",
+          },
+        },
+        {
+          id: "hero",
+          type: "image",
+          image: {
+            src: "/landing-assets/checklist.webp",
+            alt: "Loan checklist",
+          },
+        },
+      ],
+    });
+    const html = renderToStaticMarkup(
+      <LandingCanvas design={design} funnel={<section />} />,
+    );
+    const images = html.match(/<img[^>]+>/g)!;
+    expect(images).toHaveLength(2);
+    expect(images[0]).toContain('loading="eager"');
+    expect(images[0]).toContain('fetchPriority="high"');
+    expect(images[1]).toContain('loading="lazy"');
+  });
   it("accepts distinct compositions and keeps the legacy default unchanged", () => {
     for (const example of landingDesignExamples)
       expect(landingDesignSchema.safeParse(example.design).success).toBe(true);

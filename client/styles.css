@@ -1973,7 +1973,7 @@ summary {
 }
 .channel-choices {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr));
   gap: 9px;
   margin: 22px 0;
 }
@@ -3214,4 +3214,22 @@ summary {
   .layout-centered .landing-layout {
     gap: 24px;
   }
+}
+
+/* Public form text must remain readable alongside the authored landing canvas. */
+.public-page .application-card p,
+.public-page .consent-check,
+.public-page .application-card .field > span,
+.public-page .channel-choices button,
+.public-page .channel-choices small,
+.public-page .form-progress,
+.public-page .public-footer {
+  color: #496051;
+}
+.public-page .field input::placeholder {
+  color: #5a6b5f;
+}
+.public-page .fine-print {
+  color: #496051 !important;
+  font-size: 12px !important;
 }

@@ -57,7 +57,8 @@ let server: Server,
   visitId: string,
   leadId: string,
   applicationId: string,
-  emailId: string;
+  emailId: string,
+  initialEmailChainId: string;
 const originalFetch = globalThis.fetch,
   providerCalls: any[] = [];
 function daytimeTimezone() {
@@ -160,6 +161,29 @@ beforeAll(async () => {
       );
     },
   );
+  const initialEmailChain = await saveChain(
+    {
+      name: "Initial email subscription path",
+      channel: "EMAIL",
+      status: "ACTIVE",
+      trigger: "SUBSCRIBED",
+      maxDays: 14,
+      steps: [
+        {
+          delayHours: 24,
+          subject: "Your options",
+          body: "Hello {{name}}, explore these options: {{link}}",
+        },
+        {
+          delayHours: 24,
+          subject: "Next day",
+          body: "Here are your next options, {{name}}: {{link}}",
+        },
+      ],
+    },
+    "test",
+  );
+  initialEmailChainId = initialEmailChain.id;
   server = app.listen(0, "127.0.0.1");
   await new Promise<void>((r) => server.on("listening", r));
   base = `http://127.0.0.1:${(server.address() as any).port}`;
@@ -281,6 +305,35 @@ it("rejects honeypots without sending a verification message", async () => {
     (await db.visit.findUniqueOrThrow({ where: { id: visitId } })).botScore,
   ).toBe(100);
 });
+it("rejects subscriptions without storing contacts or contacting providers when delivery is paused", async () => {
+  const previous = await readRuntimeConfiguration();
+  const leads = await db.lead.count();
+  const subscriptions = await db.subscription.count();
+  const calls = providerCalls.length;
+  await saveRuntimeSettings({ values: { LIVE_DELIVERY: "false" } }, "test");
+  try {
+    const response = await request("/api/public/subscribe", "POST", {
+      visitToken,
+      channels: ["EMAIL"],
+      email: "paused@example.com",
+      answers: {},
+      consent: true,
+      adultUS: true,
+    });
+    expect(response.status).toBe(503);
+    expect(await db.lead.count()).toBe(leads);
+    expect(await db.subscription.count()).toBe(subscriptions);
+    expect(providerCalls.length).toBe(calls);
+  } finally {
+    await saveRuntimeSettings(
+      {
+        values: { LIVE_DELIVERY: previous.LIVE_DELIVERY },
+        credentialsReviewed: true,
+      },
+      "test",
+    );
+  }
+});
 it("records the rendered consent snapshot and waits for email confirmation", async () => {
   const visit = await db.visit.findUniqueOrThrow({ where: { id: visitId } });
   const oldConsent = (visit.configSnapshot as any).emailConsent;
@@ -334,32 +387,16 @@ it("records the rendered consent snapshot and waits for email confirmation", asy
 it("sends a due email once and enforces the next-day cap", async () => {
   const timezone = daytimeTimezone();
   await db.lead.update({ where: { id: leadId }, data: { timezone } });
-  const chain = await saveChain(
-    {
-      name: "Integration chain",
-      channel: "EMAIL",
-      status: "ACTIVE",
-      steps: [
-        {
-          delayHours: 24,
-          subject: "Your options",
-          body: "Hello {{name}}, explore these options: {{link}}",
-        },
-        {
-          delayHours: 24,
-          subject: "Next day",
-          body: "Here are your next options, {{name}}: {{link}}",
-        },
-      ],
-    },
-    "test",
-  );
-  await db.enrollment.create({
-    data: {
-      chainId: chain.id,
+  const enrollment = await db.enrollment.findFirstOrThrow({
+    where: {
+      chainId: initialEmailChainId,
       subscriptionId: emailId,
-      nextAt: new Date(Date.now() - 1000),
+      status: "ACTIVE",
     },
+  });
+  await db.enrollment.update({
+    where: { id: enrollment.id },
+    data: { nextAt: new Date(Date.now() - 1000) },
   });
   expect(((await tick()) as any).sent).toBe(1);
   await tick();
@@ -488,6 +525,16 @@ it("implements MCP initialization, tool discovery and authenticated tool calls",
   expect(tools.tools.length).toBeGreaterThanOrEqual(18);
   expect(tools.tools.some((t) => t.name === "save_chain")).toBe(true);
   expect(tools.tools.some((t) => t.name === "set_lead_timezone")).toBe(true);
+  expect(tools.tools.some((t) => t.name === "test_provider_connection")).toBe(
+    true,
+  );
+  const readiness = await client.callTool({
+    name: "subscription_readiness",
+    arguments: {},
+  });
+  expect(readiness.isError).not.toBe(true);
+  expect(JSON.stringify(readiness)).toContain("availableChannels");
+  expect(JSON.stringify(readiness)).not.toContain(env.BREVO_API_KEY);
   const result = await client.callTool({ name: "dashboard", arguments: {} });
   const serialized = JSON.stringify(result);
   expect(serialized).toContain("funded");
@@ -2886,6 +2933,23 @@ it("records anonymous quiz engagement once per visit without subscribing or send
 });
 
 it("allows an omitted first name but still requires channel consent and adulthood", async () => {
+  await saveChain(
+    {
+      name: "Optional name push subscription path",
+      channel: "PUSH",
+      status: "ACTIVE",
+      trigger: "SUBSCRIBED",
+      maxDays: 14,
+      steps: [
+        {
+          delayHours: 24,
+          subject: "Loan options",
+          body: "Review options: {{link}}",
+        },
+      ],
+    },
+    "test",
+  );
   const config = landingSchema.parse({
     title: "Optional name",
     description: "Subscribe without providing a first name.",
