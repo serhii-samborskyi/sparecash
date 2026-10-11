@@ -1,4 +1,9 @@
 import { Router, json } from "express";
+import { subscriptionAvailability } from "./services/subscription-availability.js";
+import {
+  testProviderConnection,
+  testProviderSchema,
+} from "./services/integration-tests.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
@@ -114,6 +119,20 @@ function makeServer() {
     "Start here: affiliate marketing workflow, current rules, live switches, worker health, attribution definitions and operating limits.",
     {},
     marketingContext,
+    true,
+  );
+  register(
+    "subscription_readiness",
+    "Read which subscription channels are available to visitors and which lack live delivery, provider configuration or an active SUBSCRIBED chain. Does not send messages or expose credentials; check the worker heartbeat separately.",
+    {},
+    subscriptionAvailability,
+    true,
+  );
+  register(
+    "test_provider_connection",
+    "Verify configured provider access with read-only requests. Brevo also checks its sender, folder and business address. No messages are sent and no credentials are returned.",
+    { provider: testProviderSchema },
+    ({ provider }) => testProviderConnection(provider),
     true,
   );
   register(

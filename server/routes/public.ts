@@ -1,6 +1,7 @@
 import { createRoundSkyApplication } from "../services/roundsky.js";
 import { Router } from "express";
 import { rateLimit } from "express-rate-limit";
+import { subscriptionAvailability } from "../services/subscription-availability.js";
 import { z } from "zod";
 import { randomInt } from "node:crypto";
 import { retargetingRouter } from "./retargeting.js";
@@ -184,6 +185,7 @@ publicRouter.post("/visit", async (req, res) => {
     turnstileSiteKey: env.TURNSTILE_SITE_KEY,
     oneSignalAppId: env.ONESIGNAL_APP_ID,
     deliveryEnabled: env.LIVE_DELIVERY === "true",
+    availableChannels: (await subscriptionAvailability()).availableChannels,
     advertising: {
       privacy: journey.privacy,
       notice: retargeting.advertisingNotice,
@@ -248,6 +250,14 @@ publicRouter.post(
       where: { id: visitId },
       include: { variant: true },
     });
+    const available = (await subscriptionAvailability()).availableChannels;
+    if (input.channels.some((channel) => !available.includes(channel))) {
+      res.status(503).json({
+        error:
+          "These updates are not available right now. You can continue to loan options without subscribing.",
+      });
+      return;
+    }
     if (input.company) {
       await db.visit.update({
         where: { id: visitId },
@@ -413,6 +423,13 @@ publicRouter.post(
   },
 );
 publicRouter.post("/push", async (req, res) => {
+  if (!(await subscriptionAvailability()).availableChannels.includes("PUSH")) {
+    res.status(503).json({
+      error:
+        "Browser updates are not available right now. You can continue to loan options without subscribing.",
+    });
+    return;
+  }
   const input = z
     .object({
       leadToken: z.string(),

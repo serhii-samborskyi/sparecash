@@ -82,6 +82,7 @@ export function LandingCanvas({
   funnel: ReactNode;
 }) {
   const nodes = new Map(design.nodes.map((node) => [node.id, node]));
+  let imageIndex = 0;
   const render = (id: string): ReactNode => {
     const node = nodes.get(id)!;
     if (node.type === "funnel")
@@ -114,13 +115,15 @@ export function LandingCanvas({
             {node.text}
           </p>
         );
-      case "image":
+      case "image": {
+        const primaryImage = imageIndex++ === 0;
         return (
           <figure key={id} {...attrs}>
             <img
               src={node.image.src}
               alt={node.image.alt}
-              loading="lazy"
+              loading={primaryImage ? "eager" : "lazy"}
+              fetchPriority={primaryImage ? "high" : undefined}
               decoding="async"
               style={{
                 aspectRatio: {
@@ -135,6 +138,7 @@ export function LandingCanvas({
             />
           </figure>
         );
+      }
       case "list":
         return createElement(
           node.ordered ? "ol" : "ul",
