@@ -1,0 +1,2 @@
+ALTER TABLE "Visit"
+  ADD COLUMN "adContext" JSONB NOT NULL DEFAULT '{}';

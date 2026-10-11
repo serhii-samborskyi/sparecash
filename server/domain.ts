@@ -135,6 +135,40 @@ export function visibleQuestions(
     return show;
   });
 }
+const attributionText = (maximum = 200) =>
+  z
+    .string()
+    .trim()
+    .min(1)
+    .max(maximum)
+    .refine(
+      (value) => !/[\x00-\x1f\x7f]/.test(value),
+      "Invalid attribution value",
+    );
+export const propellerAdContextSchema = z
+  .object({
+    bannerId: attributionText(),
+    browser: attributionText(),
+    browserVersion: attributionText(),
+    carrier: attributionText(),
+    propellerClickId: attributionText(),
+    connectionType: attributionText(),
+    declaredCost: attributionText(50),
+    country: attributionText(),
+    device: attributionText(),
+    language: attributionText(),
+    os: attributionText(),
+    osVersion: attributionText(),
+    region: attributionText(),
+    subzoneId: attributionText(),
+    userAgent: attributionText(1000),
+    utmSource: attributionText(),
+    utmMedium: attributionText(),
+    utmCampaign: attributionText(),
+    utmContent: attributionText(),
+  })
+  .partial()
+  .strict();
 export const experimentSchema = z
   .object({
     id: z.string().optional(),

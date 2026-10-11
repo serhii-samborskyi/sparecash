@@ -77,10 +77,12 @@ The native integration follows the supplied LeadTechX publisher-link and pixel i
 Landing link structure:
 
 ```text
-https://sparecash.leadtechx.com/go/us-loans?campaign_id=CAMPAIGN_MACRO&zone_id=ZONE_MACRO&click_id=CLICK_MACRO
+https://sparecash.leadtechx.com/go/us-loans?campaign_id={campaign_id}&zone_id={zone_id}&click_id=${SUBID}&banner_id={bannerid}&browser={browser}&browser_version={browser_version}&carrier={carrier}&propeller_click_id={clickID}&connection_type={connection_type}&cost={cost}&country={country}&device={device}&language={language}&os={os}&os_version={osversion}&region={region}&subzone_id={subzone_id}&advertiser_user_agent={useragent}&utm_source=propellerads&utm_medium=push&utm_campaign=us-loans&utm_content={bannerid}
 ```
 
-Replace placeholders with the current macros shown in your advertiser account. Placeholder names above are illustrative, not assumed provider macro syntax. IDs for campaigns/zones must be numeric. User-supplied URL attribution is not cryptographic proof of a paid click; review exclusion evidence and corroborate against advertiser reporting before enabling live automation.
+This template carries every token offered for the current push CPC campaigns. The app stores the values in each visit's `adContext`; `list_traffic_visits` exposes them and Statistics can break visits down by creative, subzone, connection, carrier, language, browser version, and OS version. `${SUBID}` remains the conversion-attribution ID, while `{clickID}` is retained separately as `propellerClickId`.
+
+URL attribution is not cryptographic proof of a paid click. The app never treats `{cost}` as booked spend and never lets token-supplied country, region, or user agent replace trusted edge/security observations. Reconcile costs and campaign totals against authenticated advertiser reporting.
 
 `PROPELLER_API_TOKEN` authenticates server requests. Exclusions use the documented additive operation:
 

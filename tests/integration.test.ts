@@ -311,10 +311,43 @@ it("publishes a weighted experiment and keeps visitor assignment stable", async 
     campaignId: "123",
     zoneId: "456",
     clickId: "click-test",
+    adContext: {
+      bannerId: "27516444",
+      browser: "Chrome",
+      browserVersion: "130",
+      carrier: "Verizon",
+      propellerClickId: "provider-click-test",
+      connectionType: "cellular",
+      declaredCost: "0.031",
+      country: "US",
+      device: "Mobile",
+      language: "en",
+      os: "Android",
+      osVersion: "15",
+      region: "Illinois",
+      subzoneId: "7",
+      userAgent: "Propeller supplied agent",
+      utmSource: "propellerads",
+      utmMedium: "push",
+      utmCampaign: "integration",
+      utmContent: "27516444",
+    },
   });
   expect(a.status).toBe(200);
   visitToken = a.data.visitToken;
   visitId = a.data.visitId;
+  expect(
+    await db.visit.findUniqueOrThrow({ where: { id: visitId } }),
+  ).toMatchObject({
+    externalClickId: "click-test",
+    adContext: {
+      bannerId: "27516444",
+      propellerClickId: "provider-click-test",
+      declaredCost: "0.031",
+      subzoneId: "7",
+    },
+    costRecorded: false,
+  });
   const b = await request(
     "/api/public/visit",
     "POST",
@@ -2381,6 +2414,11 @@ it("lets an authenticated MCP marketer inspect results, author designs and safel
     });
     const definition = await call("get_experiment", { id: exp.id });
     expect(definition.variants[0].previewUrl).toContain("/preview/");
+    expect(definition.propellerUrl).toContain("click_id=${SUBID}");
+    expect(definition.propellerUrl).toContain("banner_id={bannerid}");
+    expect(definition.propellerUrl).toContain(
+      "advertiser_user_agent={useragent}",
+    );
     expect(definition.variants[0].config.sections).toHaveLength(1);
     expect(definition.variants[0].config.heroImage).toEqual({
       src: images[0].src,
@@ -3887,6 +3925,17 @@ it("compares zones and locations with honest traffic quality, weighted CTR and d
     geoSource: "TRUSTED_EDGE",
     costRecorded: true,
     cost: 0.5,
+    adContext: {
+      bannerId: "27516444",
+      browser: "Chrome",
+      browserVersion: "130",
+      connectionType: "cellular",
+      carrier: "Verizon",
+      language: "en",
+      os: "Windows",
+      osVersion: "10",
+      subzoneId: "7",
+    },
   });
   await create({
     botScore: 100,
@@ -4027,6 +4076,11 @@ it("compares zones and locations with honest traffic quality, weighted CTR and d
     expect(
       (await statisticsReport({ ...input, groupBy: "device" })).rows[0].label,
     ).toBe("Desktop");
+    expect(
+      (await statisticsReport({ ...input, groupBy: "creative" })).rows.find(
+        (row) => row.label === "Creative 27516444",
+      )?.visits,
+    ).toBe(1);
     const unauthorized = await request(
       "/api/admin/statistics/report",
       "POST",

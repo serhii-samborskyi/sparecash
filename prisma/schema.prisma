@@ -140,6 +140,7 @@ model Visit {
   sourceId              String?
   source                TrafficSource?        @relation(fields: [sourceId], references: [id])
   externalClickId       String?
+  adContext             Json                  @default("{}")
   ipHash                String
   userAgent             String
   country               String?

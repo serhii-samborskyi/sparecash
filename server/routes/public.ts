@@ -15,6 +15,7 @@ import {
   landingSchema,
   normalizePhone,
   nextLeadStatus,
+  propellerAdContextSchema,
   visibleQuestions,
 } from "../domain.js";
 import {
@@ -67,6 +68,7 @@ publicRouter.post("/visit", async (req, res) => {
       campaignId: z.string().regex(/^\d*$/).max(30).optional(),
       zoneId: z.string().regex(/^\d*$/).max(30).optional(),
       clickId: z.string().max(200).optional(),
+      adContext: propellerAdContextSchema.default({}),
     })
     .parse(req.body);
   const experiment = await db.experiment.findUnique({
@@ -159,6 +161,7 @@ publicRouter.post("/visit", async (req, res) => {
         configSnapshot: variant.config as any,
         sourceId: source?.id,
         externalClickId: input.clickId,
+        adContext: input.adContext,
         ipHash: fingerprint,
         userAgent: ua,
         ...trustedVisitLocation(req),
