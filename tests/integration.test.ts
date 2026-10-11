@@ -229,6 +229,50 @@ it("preserves credentials and owner sessions during simultaneous process startup
     (await request("/api/admin/configuration", "GET", undefined, true)).status,
   ).toBe(200);
 });
+it("keeps paused experiments out of the owner workspace without deleting them", async () => {
+  const paused = await saveExperiment(
+    {
+      name: "Archived landing",
+      slug: "archived-landing",
+      status: "PAUSED",
+      variants: [
+        {
+          name: "Control",
+          weight: 100,
+          config: {
+            title: "Archived landing",
+            description: "Historical landing retained for reporting.",
+          },
+        },
+      ],
+    },
+    "test",
+  );
+  try {
+    const workspace = await request(
+      "/api/admin/dashboard",
+      "GET",
+      undefined,
+      true,
+    );
+    expect(workspace.status).toBe(200);
+    expect(workspace.data.experiments).not.toContainEqual(
+      expect.objectContaining({ id: paused.id }),
+    );
+
+    const historical = await request(
+      `/api/admin/experiments/${paused.id}`,
+      "GET",
+      undefined,
+      true,
+    );
+    expect(historical.status).toBe(200);
+    expect(historical.data).toMatchObject({ id: paused.id, status: "PAUSED" });
+  } finally {
+    await db.variant.deleteMany({ where: { experimentId: paused.id } });
+    await db.experiment.delete({ where: { id: paused.id } });
+  }
+});
 it("publishes a weighted experiment and keeps visitor assignment stable", async () => {
   const r = await request(
     "/api/admin/experiments",

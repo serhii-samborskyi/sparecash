@@ -263,6 +263,7 @@ export async function dashboard() {
     db.delivery.groupBy({ by: ["status"], _count: true }),
     db.trafficSource.count({ where: { state: "BLOCKED" } }),
     db.experiment.findMany({
+      where: { status: { not: "PAUSED" } },
       include: {
         variants: { include: { _count: { select: { visits: true } } } },
         _count: { select: { visits: true } },
