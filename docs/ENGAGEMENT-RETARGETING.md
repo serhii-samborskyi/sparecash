@@ -79,8 +79,10 @@ server-recorded application clicks, not opening the optional-update form.
 
 V1 supports the provider's **HTTPS image pixel** at
 `https://my.rtmark.net/img.gif`, with the supplied partner, `f` and optional
-`lr=1` parameters. Enrollment requires `f=on`; removal requires `f=off` and the
-same partner. Only configure this adapter when it exactly matches the account's
+`lr=1` parameters. Enrollment accepts the account-provided `f=on` or `f=sync`;
+the partner may be a legacy numeric ID or the current 64-character hexadecimal
+token. Preserve the supplied enrollment URL without translating `sync` to `on`.
+Removal requires `f=off` and the same exact partner. Only configure this adapter when it exactly matches the account's
 code. The optional `sourceCode` field preserves the supplied snippet for review;
 it is never executed. Script-only snippets, arbitrary HTML/JavaScript and other
 pixel formats are rejected and need an adapter review. Audience ID and pixel

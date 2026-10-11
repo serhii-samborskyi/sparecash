@@ -37,6 +37,58 @@ const none: JourneyFacts = {
   verifiedSubscription: false,
 };
 describe("retargeting contracts", () => {
+  it("preserves modern sync image pixels and matching browser-removal tokens", () => {
+    const partner = "6b081349".repeat(8);
+    const url = `https://my.rtmark.net/img.gif?f=sync&lr=1&partner=${partner}`;
+    const modern = audienceSchema.parse({
+      ...audience,
+      enrollment: { type: "image", url },
+      removal: { type: "image", url: url.replace("f=sync", "f=off") },
+    });
+    expect(modern.enrollment.url).toBe(url);
+    expect(modern.removal?.url).toBe(url.replace("f=sync", "f=off"));
+    expect(
+      audienceSchema.safeParse({ ...modern, enrollment: modern.removal })
+        .success,
+    ).toBe(false);
+    expect(
+      audienceSchema.safeParse({ ...modern, removal: modern.enrollment })
+        .success,
+    ).toBe(false);
+    expect(
+      audienceSchema.safeParse({
+        ...modern,
+        removal: {
+          type: "image",
+          url: `https://my.rtmark.net/img.gif?f=off&partner=${"ab".repeat(32)}`,
+        },
+      }).success,
+    ).toBe(false);
+    for (const invalid of [
+      "a".repeat(63),
+      "a".repeat(65),
+      "g".repeat(64),
+      "-123",
+      "abc/def",
+    ]) {
+      expect(
+        pixelSchema.safeParse({
+          type: "image",
+          url: `https://my.rtmark.net/img.gif?f=sync&partner=${invalid}`,
+        }).success,
+      ).toBe(false);
+    }
+    for (const invalid of [
+      url.replace("f=sync", "f=unknown"),
+      `${url}&email=test`,
+      `${url}&partner=456`,
+      url.replace("img.gif", "p.js"),
+    ]) {
+      expect(
+        pixelSchema.safeParse({ type: "image", url: invalid }).success,
+      ).toBe(false);
+    }
+  });
   it("distinguishes quiz participation, applications, confirmations and paid leads", () => {
     expect(audienceEligible(audience, none)).toBe(false);
     expect(audienceEligible(audience, { ...none, quiz: true })).toBe(true);

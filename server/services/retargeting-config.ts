@@ -25,8 +25,10 @@ export const pixelSchema = z
             u.username ||
             u.password ||
             u.hash ||
-            !/^[1-9]\d*$/.test(u.searchParams.get("partner") ?? "") ||
-            !["on", "off"].includes(u.searchParams.get("f") ?? "") ||
+            !/^(?:[1-9]\d*|[a-fA-F0-9]{64})$/.test(
+              u.searchParams.get("partner") ?? "",
+            ) ||
+            !["on", "sync", "off"].includes(u.searchParams.get("f") ?? "") ||
             [...u.searchParams.keys()].some(
               (k) => !["partner", "f", "lr"].includes(k),
             ) ||
@@ -39,7 +41,7 @@ export const pixelSchema = z
           ctx.addIssue({
             code: "custom",
             message:
-              "Supply the exact HTTPS PropellerAds /img.gif URL with partner, f=on/off and optional lr=1. Scripts and arbitrary pixels are unsupported.",
+              "Supply the exact HTTPS PropellerAds /img.gif URL with a numeric or 64-character hexadecimal partner, f=on/sync/off and optional lr=1. Scripts and arbitrary pixels are unsupported.",
           });
         }
       }),
@@ -76,8 +78,15 @@ export const audienceSchema = z
   })
   .strict()
   .superRefine((a, ctx) => {
-    if (new URL(a.enrollment.url).searchParams.get("f") !== "on")
-      ctx.addIssue({ code: "custom", message: "Enrollment must use f=on" });
+    if (
+      !["on", "sync"].includes(
+        new URL(a.enrollment.url).searchParams.get("f") ?? "",
+      )
+    )
+      ctx.addIssue({
+        code: "custom",
+        message: "Enrollment must use f=on or f=sync",
+      });
     if (
       a.removal &&
       (new URL(a.removal.url).searchParams.get("f") !== "off" ||
