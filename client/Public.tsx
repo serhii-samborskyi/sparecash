@@ -79,8 +79,7 @@ function Landing({ preview }: { preview: boolean }) {
     [result, setResult] = useState<any>(null),
     [code, setCode] = useState(""),
     [smsConfirmed, setSmsConfirmed] = useState(false),
-    [pushStatus, setPushStatus] = useState(""),
-    [showUpdates, setShowUpdates] = useState(false);
+    [pushStatus, setPushStatus] = useState("");
   const pixelRunner = useRef<(() => Promise<void>) | undefined>(undefined);
   const pushAttempt = useRef<AbortController | null>(null);
   const trackEngagement = useRef(createEngagementTracker());
@@ -94,13 +93,13 @@ function Landing({ preview }: { preview: boolean }) {
     )
       return;
     const visible = visibleQuestions(session.config.questions ?? [], answers);
-    if (!visible[step] && (!session.config.offerFirst || showUpdates)) {
+    if (!visible[step]) {
       updatesRecorded.current = true;
       trackEngagement.current(session.visitToken, preview, {
         kind: "UPDATES_OPENED",
       });
     }
-  }, [session, preview, answers, step, showUpdates]);
+  }, [session, preview, answers, step]);
   useEffect(() => () => pushAttempt.current?.abort(), []);
   useEffect(() => {
     let current = true;
@@ -463,7 +462,7 @@ function Landing({ preview }: { preview: boolean }) {
         </>
       ) : (
         <>
-          {(config.offerFirst || availableChannels.length === 0) && (
+          {availableChannels.length === 0 && (
             <div className="offer-introduction">
               <div className="form-progress">
                 <span>YOUR NEXT STEP</span>
@@ -486,18 +485,6 @@ function Landing({ preview }: { preview: boolean }) {
                 SpareCash is not a lender. Answering our questions does not
                 check credit or determine approval.
               </p>
-              {availableChannels.length > 0 && (
-                <button
-                  className="text-button optional-updates-toggle"
-                  aria-expanded={showUpdates}
-                  aria-controls="optional-updates"
-                  onClick={() => setShowUpdates(!showUpdates)}
-                >
-                  {showUpdates
-                    ? "Hide optional updates"
-                    : "Want updates? Choose how to hear from us"}
-                </button>
-              )}
               {questions.length > 0 && (
                 <button
                   className="text-button back-link"
@@ -508,173 +495,176 @@ function Landing({ preview }: { preview: boolean }) {
               )}
             </div>
           )}
-          {availableChannels.length > 0 &&
-            (!config.offerFirst || showUpdates) && (
-              <form id="optional-updates" onSubmit={subscribe}>
-                <div className="form-progress">
-                  <span>STAY IN THE LOOP, YOUR WAY</span>
-                  <span>{questions.length ? "LAST STEP" : "01"}</span>
-                </div>
-                <h2>
-                  {config.formTitle ?? "Want daily updates about loan options?"}
-                </h2>
-                <p>
-                  {config.formDescription ??
-                    "Choose one or more channels for daily updates about loan options."}
-                </p>
-                <div className="channel-choices">
-                  {[
-                    ["PUSH", "Browser notifications", "On this device", Bell],
-                    ["SMS", "Text", "On your phone", MessageSquare],
-                    ["EMAIL", "Email", "In your inbox", Mail],
-                  ]
-                    .filter(([channel]) =>
-                      availableChannels.includes(channel as string),
-                    )
-                    .map(([channel, label, description, Icon]: any) => (
-                      <button
-                        type="button"
-                        key={channel}
-                        aria-pressed={channels.includes(channel)}
-                        className={channels.includes(channel) ? "selected" : ""}
-                        onClick={() => toggle(channel)}
-                      >
-                        <Icon size={21} />
-                        <b>{label}</b>
-                        <small>{description}</small>
-                        <span className="channel-check">
-                          {channels.includes(channel) && <Check size={11} />}
-                        </span>
-                      </button>
-                    ))}
-                </div>
-                {channels.length > 0 && (
-                  <div className="opt-in-details">
-                    <Field label="First name (optional)">
+          {availableChannels.length > 0 && (
+            <form
+              id="optional-updates"
+              className="updates-form"
+              onSubmit={subscribe}
+            >
+              <div className="form-progress">
+                <span>CHOOSE HOW TO STAY UPDATED</span>
+                <span>{questions.length ? "LAST STEP" : "01"}</span>
+              </div>
+              <h2>
+                {config.formTitle ?? "Want daily updates about loan options?"}
+              </h2>
+              <p>
+                {config.formDescription ??
+                  "Choose one or more channels for daily updates about loan options."}
+              </p>
+              <div className="channel-choices">
+                {[
+                  ["PUSH", "Browser notifications", "On this device", Bell],
+                  ["SMS", "Text", "On your phone", MessageSquare],
+                  ["EMAIL", "Email", "In your inbox", Mail],
+                ]
+                  .filter(([channel]) =>
+                    availableChannels.includes(channel as string),
+                  )
+                  .map(([channel, label, description, Icon]: any) => (
+                    <button
+                      type="button"
+                      key={channel}
+                      aria-pressed={channels.includes(channel)}
+                      className={channels.includes(channel) ? "selected" : ""}
+                      onClick={() => toggle(channel)}
+                    >
+                      <Icon size={21} />
+                      <b>{label}</b>
+                      <small>{description}</small>
+                      <span className="channel-check">
+                        {channels.includes(channel) && <Check size={11} />}
+                      </span>
+                    </button>
+                  ))}
+              </div>
+              {channels.length > 0 && (
+                <div className="opt-in-details">
+                  <Field label="First name (optional)">
+                    <input
+                      maxLength={80}
+                      autoComplete="given-name"
+                      placeholder="Your first name"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                    />
+                  </Field>
+                  {channels.includes("EMAIL") && (
+                    <Field label="Email address">
                       <input
-                        maxLength={80}
-                        autoComplete="given-name"
-                        placeholder="Your first name"
-                        value={name}
-                        onChange={(e) => setName(e.target.value)}
+                        required
+                        type="email"
+                        autoComplete="email"
+                        placeholder="you@example.com"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
                       />
                     </Field>
-                    {channels.includes("EMAIL") && (
-                      <Field label="Email address">
-                        <input
-                          required
-                          type="email"
-                          autoComplete="email"
-                          placeholder="you@example.com"
-                          value={email}
-                          onChange={(e) => setEmail(e.target.value)}
-                        />
-                      </Field>
-                    )}
-                    {channels.includes("SMS") && (
-                      <Field label="US mobile number">
-                        <input
-                          required
-                          type="tel"
-                          autoComplete="tel"
-                          placeholder="(555) 000-0000"
-                          value={phone}
-                          onChange={(e) => setPhone(e.target.value)}
-                        />
-                      </Field>
-                    )}
-                    <div className="hp" aria-hidden="true">
-                      <label>
-                        Company
-                        <input
-                          tabIndex={-1}
-                          autoComplete="off"
-                          value={company}
-                          onChange={(e) => setCompany(e.target.value)}
-                        />
-                      </label>
-                    </div>
+                  )}
+                  {channels.includes("SMS") && (
+                    <Field label="US mobile number">
+                      <input
+                        required
+                        type="tel"
+                        autoComplete="tel"
+                        placeholder="(555) 000-0000"
+                        value={phone}
+                        onChange={(e) => setPhone(e.target.value)}
+                      />
+                    </Field>
+                  )}
+                  <div className="hp" aria-hidden="true">
+                    <label>
+                      Company
+                      <input
+                        tabIndex={-1}
+                        autoComplete="off"
+                        value={company}
+                        onChange={(e) => setCompany(e.target.value)}
+                      />
+                    </label>
+                  </div>
+                  <label className="consent-check">
+                    <input
+                      required
+                      type="checkbox"
+                      checked={adult}
+                      onChange={(e) => setAdult(e.target.checked)}
+                    />
+                    <span>I am 18 or older and live in the United States.</span>
+                  </label>
+                  {channels.length > 0 && (
                     <label className="consent-check">
                       <input
                         required
                         type="checkbox"
-                        checked={adult}
-                        onChange={(e) => setAdult(e.target.checked)}
+                        checked={consent}
+                        onChange={(e) => setConsent(e.target.checked)}
                       />
                       <span>
-                        I am 18 or older and live in the United States.
+                        {channels
+                          .map(
+                            (c) =>
+                              config[
+                                c === "EMAIL"
+                                  ? "emailConsent"
+                                  : c === "SMS"
+                                    ? "smsConsent"
+                                    : "pushConsent"
+                              ],
+                          )
+                          .join(" ")}{" "}
+                        I have read the{" "}
+                        <a href="/privacy" target="_blank">
+                          Privacy Policy
+                        </a>{" "}
+                        and{" "}
+                        <a href="/terms" target="_blank">
+                          Terms
+                        </a>
+                        .
                       </span>
                     </label>
-                    {channels.length > 0 && (
-                      <label className="consent-check">
-                        <input
-                          required
-                          type="checkbox"
-                          checked={consent}
-                          onChange={(e) => setConsent(e.target.checked)}
-                        />
-                        <span>
-                          {channels
-                            .map(
-                              (c) =>
-                                config[
-                                  c === "EMAIL"
-                                    ? "emailConsent"
-                                    : c === "SMS"
-                                      ? "smsConsent"
-                                      : "pushConsent"
-                                ],
-                            )
-                            .join(" ")}{" "}
-                          I have read the{" "}
-                          <a href="/privacy" target="_blank">
-                            Privacy Policy
-                          </a>{" "}
-                          and{" "}
-                          <a href="/terms" target="_blank">
-                            Terms
-                          </a>
-                          .
-                        </span>
-                      </label>
-                    )}
-                    <button
-                      className="button full"
-                      disabled={
-                        busy || preview || !channels.length || !visitorVerified
-                      }
-                    >
-                      {busy ? <Spinner /> : null}
-                      {config.button}
-                      <ArrowRight size={17} />
-                    </button>
-                  </div>
-                )}
-                {questions.length > 0 && (
+                  )}
                   <button
-                    type="button"
-                    className="text-button back-link"
-                    onClick={() => setStep(step - 1)}
+                    className="button full"
+                    disabled={
+                      busy || preview || !channels.length || !visitorVerified
+                    }
                   >
-                    <ArrowLeft size={15} />
-                    Back
+                    {busy ? <Spinner /> : null}
+                    {config.button === "Get optional updates"
+                      ? "Get updates"
+                      : config.button}
+                    <ArrowRight size={17} />
                   </button>
-                )}
+                </div>
+              )}
+              {questions.length > 0 && (
                 <button
                   type="button"
-                  className="skip-updates"
-                  disabled={preview || busy}
-                  onClick={() => void continueOffer("optional_updates")}
+                  className="text-button back-link"
+                  onClick={() => setStep(step - 1)}
                 >
-                  Continue to application{" "}
-                  <ArrowRight size={16} aria-hidden="true" />
+                  <ArrowLeft size={15} />
+                  Back
                 </button>
-                <p className="fine-print">
-                  You can continue without subscribing. Updates are optional and
-                  do not affect loan eligibility.
-                </p>
-              </form>
-            )}
+              )}
+              <button
+                type="button"
+                className="skip-updates"
+                disabled={preview || busy}
+                onClick={() => void continueOffer("optional_updates")}
+              >
+                Continue without updates{" "}
+                <ArrowRight size={16} aria-hidden="true" />
+              </button>
+              <p className="fine-print">
+                You can continue without subscribing. Updates are optional and
+                do not affect loan eligibility.
+              </p>
+            </form>
+          )}
         </>
       )}
       {error && (
