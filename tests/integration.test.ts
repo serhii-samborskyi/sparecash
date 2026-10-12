@@ -2450,6 +2450,7 @@ it("lets an authenticated MCP marketer inspect results, author designs and safel
     expect(definition.propellerUrl).toContain(
       "advertiser_user_agent={useragent}",
     );
+    expect(definition.propellerUrl).not.toContain("{clickID}");
     expect(definition.variants[0].config.sections).toHaveLength(1);
     expect(definition.variants[0].config.heroImage).toEqual({
       src: images[0].src,

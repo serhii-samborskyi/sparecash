@@ -48,7 +48,6 @@ const propellerMacros = [
   ["browser", "{browser}"],
   ["browser_version", "{browser_version}"],
   ["carrier", "{carrier}"],
-  ["propeller_click_id", "{clickID}"],
   ["connection_type", "{connection_type}"],
   ["cost", "{cost}"],
   ["country", "{country}"],
