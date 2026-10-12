@@ -2351,6 +2351,8 @@ it("lets an authenticated MCP marketer inspect results, author designs and safel
       "list_landing_images",
       "set_experiment_allocation",
       "set_chain_status",
+      "subscription_readiness",
+      "set_live_delivery",
       "record_marketing_review",
     ])
       expect(tools.tools.some((tool) => tool.name === name)).toBe(true);
@@ -2360,6 +2362,21 @@ it("lets an authenticated MCP marketer inspect results, author designs and safel
     expect(statistics.advertiser.status).toBe("unsupported");
     expect(JSON.stringify(context)).not.toContain(env.MCP_TOKEN);
     expect(context.limits.join(" ")).toContain("external AI client");
+    const initialDelivery = context.liveDelivery;
+    try {
+      const disabled = await call("set_live_delivery", {
+        enabled: false,
+        reason: "Test the audited MCP delivery switch without sending messages",
+      });
+      expect(disabled.liveDelivery).toBe(false);
+      expect(disabled.availableChannels).toEqual([]);
+    } finally {
+      const restored = await call("set_live_delivery", {
+        enabled: initialDelivery,
+        reason: "Restore the delivery mode that existed before this test",
+      });
+      expect(restored.liveDelivery).toBe(initialDelivery);
+    }
     const images = await call("list_landing_images");
     expect(images).toHaveLength(3);
     const exp = await call("save_experiment", {

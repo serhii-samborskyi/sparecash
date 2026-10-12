@@ -63,6 +63,10 @@ import {
 } from "./services/marketing.js";
 import { updateLeadTimezone, leadTiming } from "./services/timezones.js";
 import {
+  saveRuntimeSettings,
+  withRuntimeConfiguration,
+} from "./runtime-config.js";
+import {
   unsubscribe,
   transitionLead,
   enrollExisting,
@@ -128,6 +132,25 @@ function makeServer() {
     {},
     subscriptionAvailability,
     true,
+  );
+  register(
+    "set_live_delivery",
+    "Enable or disable real confirmation and follow-up delivery. Enabling makes configured channels with an ACTIVE SUBSCRIBED chain available on public landings and permits the worker to send due messages. Use only when the owner explicitly authorizes live messaging after provider tests; credentials remain private. Records the reason.",
+    {
+      enabled: z.boolean(),
+      reason: z.string().min(10).max(500),
+    },
+    async ({ enabled, reason }) => {
+      await saveRuntimeSettings(
+        { values: { LIVE_DELIVERY: enabled ? "true" : "false" } },
+        "mcp",
+      );
+      await audit("mcp", "delivery.mode_updated", undefined, {
+        enabled,
+        reason,
+      });
+      return withRuntimeConfiguration(subscriptionAvailability);
+    },
   );
   register(
     "test_provider_connection",
