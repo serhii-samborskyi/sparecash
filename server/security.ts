@@ -98,8 +98,17 @@ export async function requireAdmin(
   next();
 }
 export function requireMcp(req: Request, res: Response, next: NextFunction) {
-  if (!equal(req.headers.authorization || "", `Bearer ${env.MCP_TOKEN}`)) {
-    res.status(401).json({ error: "Valid MCP bearer token required" });
+  const customToken = req.headers["x-sparecash-token"];
+  const hasBearerToken = equal(
+    req.headers.authorization || "",
+    `Bearer ${env.MCP_TOKEN}`,
+  );
+  const hasCustomToken = equal(
+    typeof customToken === "string" ? customToken : "",
+    env.MCP_TOKEN,
+  );
+  if (!hasBearerToken && !hasCustomToken) {
+    res.status(401).json({ error: "Valid MCP token required" });
     return;
   }
   if (req.headers.origin && !allowedOrigin(req.headers.origin)) {
