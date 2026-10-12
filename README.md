@@ -55,7 +55,7 @@ The worker runs separately and acquires a database advisory lock. In-memory HTTP
 - RoundSky's native sold-lead S2S pixel with separate authentication, decimal commission storage, transaction deduplication, and cancellation of pending messages across channels. Optional prefill uses the visitor's available name/contact details and an exact requested amount when collected.
 - Brevo suppression webhooks, BlueBubbles inbound STOP handling, channel preference pages, and manual owner unsubscribe controls.
 - Durable send intent, worker locking, explicit uncertain-delivery states, and a UI for checking provider logs and resolving attempts before retry.
-- Remote MCP over Streamable HTTP at `/mcp`, with bearer authentication and audited writes. External AI clients generate content and call the experiment/chain tools; no embedded AI-chat subscription is required.
+- Remote MCP over Streamable HTTP at `/mcp`, with bearer authentication, a Claude Desktop-compatible custom token header, and audited writes. External AI clients generate content and call the experiment/chain tools; no embedded AI-chat subscription is required.
 
 ## Validation
 
@@ -76,4 +76,4 @@ See [integration contracts](docs/INTEGRATIONS.md), [MCP usage](docs/MCP.md), and
 
 The production domain and RoundSky's supplied hosted-link/sold-lead pixel contract are configured. Deployment, provider credentials, and a real account-side callback test remain before live traffic. The supplied pixel does not report approval, funding, or rejection; those outcomes need separately verified events. An embedded form or direct-application API would require an additional adapter.
 
-Credit-repair offers are intentionally absent. Branches can be configured later, but a missing conversion is never represented as an explicit rejection. Backend credentials are stored directly in PostgreSQL and managed in owner Settings; the dashboard reports configuration presence, not a successful live connectivity test. The MCP endpoint supports clients with configurable bearer headers; OAuth-only clients require an OAuth gateway.
+Credit-repair offers are intentionally absent. Branches can be configured later, but a missing conversion is never represented as an explicit rejection. Backend credentials are stored directly in PostgreSQL and managed in owner Settings; the dashboard reports configuration presence, not a successful live connectivity test. The MCP endpoint supports configurable bearer headers and Claude Desktop's custom `X-SpareCash-Token` header; OAuth-only clients without custom-header support require an OAuth gateway.

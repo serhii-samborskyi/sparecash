@@ -2,7 +2,8 @@
 
 Endpoint: `https://sparecash.leadtechx.com/mcp`
 Transport: Streamable HTTP, stateless JSON responses.
-Authentication: `Authorization: Bearer <MCP_TOKEN>`.
+Authentication accepts either `Authorization: Bearer <MCP_TOKEN>` or
+`X-SpareCash-Token: <MCP_TOKEN>`.
 
 Client configuration for tools that support remote HTTP servers with explicit headers:
 
@@ -19,7 +20,15 @@ Client configuration for tools that support remote HTTP servers with explicit he
 }
 ```
 
-Exact configuration names differ between clients. This server does not currently implement OAuth discovery or dynamic client registration; OAuth-only external clients need an OAuth gateway. Reveal the MCP bearer token in owner Settings, then keep it in the client's secret store. It grants owner-level CRM access.
+For Claude Desktop, open **Settings → Connectors → Add custom connector**, use the
+endpoint above, and add a custom header named `X-SpareCash-Token`. Paste the MCP
+token from owner Settings as the value without a `Bearer` prefix.
+
+Exact configuration names differ between clients. This server does not currently
+implement OAuth discovery or dynamic client registration. Clients that support
+custom headers can use either authentication method above; OAuth-only clients need
+an OAuth gateway. Keep the token in the client's secret store. It grants
+owner-level CRM access.
 
 Available tools:
 

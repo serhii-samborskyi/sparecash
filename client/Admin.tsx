@@ -1205,7 +1205,7 @@ export function Admin() {
                   </span>
                   <span>
                     <LockKeyhole size={16} />
-                    Bearer token authentication
+                    Token authentication
                   </span>
                   <span>
                     <Activity size={16} />
@@ -1213,10 +1213,10 @@ export function Admin() {
                   </span>
                 </div>
                 <p className="help">
-                  Configure your client’s Authorization header as Bearer
-                  followed by the MCP bearer token from Settings. Clients that
-                  require OAuth need an OAuth gateway. Credentials are never
-                  returned through MCP tools.
+                  Use Authorization: Bearer for standard MCP clients. In Claude
+                  Desktop, add X-SpareCash-Token as a custom header and use the
+                  MCP token from Settings as its value, without a Bearer prefix.
+                  Credentials are never returned through MCP tools.
                 </p>
               </section>
               <section className="panel">
