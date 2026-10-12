@@ -79,6 +79,7 @@ Additional tools:
 | Change traffic weights without replacing content        | `set_experiment_allocation`                    |
 | Publish or pause a landing campaign                     | `set_experiment_status`                        |
 | Inspect message sequences and pause/activate them       | `list_chains`, `get_chain`, `set_chain_status` |
+| Inspect channel readiness or change live delivery       | `subscription_readiness`, `set_live_delivery`  |
 | Match advertiser clicks and import verified costs       | `list_traffic_visits`, `record_visit_costs`    |
 | Save evidence, hypotheses, changes and next review time | `record_marketing_review`                      |
 
