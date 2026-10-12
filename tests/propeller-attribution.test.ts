@@ -18,7 +18,6 @@ describe("PropellerAds attribution", () => {
       "browser={browser}",
       "browser_version={browser_version}",
       "carrier={carrier}",
-      "propeller_click_id={clickID}",
       "connection_type={connection_type}",
       "cost={cost}",
       "country={country}",
@@ -33,6 +32,7 @@ describe("PropellerAds attribution", () => {
       expect(url).toContain(token);
     expect(url).toContain("utm_source=propellerads");
     expect(url).not.toContain("%7B");
+    expect(url).not.toContain("{clickID}");
   });
 
   it("maps target URL parameters into the visit payload", () => {
