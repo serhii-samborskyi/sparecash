@@ -1214,7 +1214,7 @@ export function Admin() {
                 </div>
                 <p className="help">
                   Use Authorization: Bearer for standard MCP clients. In Claude
-                  Desktop, add X-SpareCash-Token as a custom header and use the
+                  Desktop, add the approved x-api-key custom header and use the
                   MCP token from Settings as its value, without a Bearer prefix.
                   Credentials are never returned through MCP tools.
                 </p>
