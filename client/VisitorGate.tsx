@@ -124,9 +124,13 @@ export function VisitorGate({
           "expired-callback": () => {
             if (!disposed) updateVerified(false);
           },
-          "error-callback": () => {
+          "error-callback": (code: string) => {
             if (!disposed)
-              setError("Verification did not finish. Please retry.");
+              setError(
+                code === "110200"
+                  ? "Browser verification is not configured for this site yet."
+                  : "Verification did not finish. Please retry.",
+              );
           },
         });
       })

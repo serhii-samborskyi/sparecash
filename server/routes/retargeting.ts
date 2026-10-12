@@ -39,7 +39,12 @@ retargetingRouter.post("/verify-visit", async (req, res) => {
     .strict()
     .parse(req.body);
   const { visitId } = await boundVisit(req);
-  const result = await verifyVisitor(visitId, input.turnstileToken, req.ip);
+  const result = await verifyVisitor(
+    visitId,
+    input.turnstileToken,
+    req.ip,
+    new URL(String(req.headers.origin)).hostname,
+  );
   res.set("Cache-Control", "no-store").json(result);
 });
 retargetingRouter.post("/advertising-choice", async (req, res) => {

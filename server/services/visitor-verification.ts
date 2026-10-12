@@ -22,6 +22,7 @@ export async function verifyVisitor(
   visitId: string,
   response: string,
   remoteip?: string,
+  expectedHostname = new URL(env.APP_URL).hostname,
 ) {
   const digest = hash(response);
   let attempt;
@@ -89,7 +90,7 @@ export async function verifyVisitor(
       "error-codes"?: string[];
     };
     const matches =
-      result.hostname === new URL(env.APP_URL).hostname &&
+      result.hostname === expectedHostname &&
       result.action === "visit" &&
       result.cdata === visitId;
     state = result.success === true && matches ? "VERIFIED" : "FAILED";
