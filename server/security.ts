@@ -60,17 +60,30 @@ export async function login(password: string, res: Response) {
   });
   return true;
 }
-function allowedOrigin(origin: string | undefined) {
-  return (
-    origin === new URL(env.APP_URL).origin ||
-    (env.NODE_ENV === "development" &&
-      ["http://localhost:3000", "http://127.0.0.1:3000"].includes(origin ?? ""))
-  );
+function allowedOrigin(req: Request) {
+  const origin = req.headers.origin;
+  if (!origin) return false;
+  try {
+    const supplied = new URL(origin);
+    const requestHostname = req.hostname;
+    const sameRequestOrigin =
+      !!requestHostname && supplied.hostname === requestHostname;
+    return (
+      supplied.origin === new URL(env.APP_URL).origin ||
+      sameRequestOrigin ||
+      (env.NODE_ENV === "development" &&
+        ["http://localhost:3000", "http://127.0.0.1:3000"].includes(
+          supplied.origin,
+        ))
+    );
+  } catch {
+    return false;
+  }
 }
 export function checkOrigin(req: Request, res: Response, next: NextFunction) {
   if (
     !["GET", "HEAD", "OPTIONS"].includes(req.method) &&
-    !allowedOrigin(req.headers.origin)
+    !allowedOrigin(req)
   ) {
     res.status(403).json({ error: "Origin not allowed" });
     return;
@@ -116,7 +129,7 @@ export function requireMcp(req: Request, res: Response, next: NextFunction) {
     res.status(401).json({ error: "Valid MCP token required" });
     return;
   }
-  if (req.headers.origin && !allowedOrigin(req.headers.origin)) {
+  if (req.headers.origin && !allowedOrigin(req)) {
     res.status(403).json({ error: "Origin not allowed" });
     return;
   }

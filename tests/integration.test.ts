@@ -3320,6 +3320,7 @@ async function rtVisit(group: "TREATMENT" | "CONTROL" = "TREATMENT") {
   const verify = async (
     fields: object = {},
     challenge = `test-${visit.id}-${randomBytes(4).toString("hex")}`,
+    extra: Record<string, string> = {},
   ) => {
     vi.mocked(globalThis.fetch).mockResolvedValueOnce(
       Response.json({
@@ -3330,10 +3331,38 @@ async function rtVisit(group: "TREATMENT" | "CONTROL" = "TREATMENT") {
         ...fields,
       }),
     );
-    return send("verify-visit", { turnstileToken: challenge });
+    return send("verify-visit", { turnstileToken: challenge }, extra);
   };
   return { visit, session: created.data, experiment, headers, send, verify };
 }
+
+it("accepts a public domain alias while binding Turnstile to that request hostname", async () => {
+  await rtSetup();
+  const f = await rtVisit();
+  const alias = "sparecash.fit";
+  const verification = await f.verify(
+    { hostname: alias },
+    `alias-${f.visit.id}`,
+    {
+      Origin: `https://${alias}`,
+      "X-Forwarded-Host": alias,
+      "X-Forwarded-Proto": "https",
+    },
+  );
+  expect(verification).toMatchObject({ status: 200, data: { verified: true } });
+  expect(
+    (
+      await f.send(
+        "verify-visit",
+        { turnstileToken: `wrong-host-${f.visit.id}` },
+        {
+          Origin: `https://${alias}`,
+          "X-Forwarded-Host": "attacker.test",
+        },
+      )
+    ).status,
+  ).toBe(403);
+});
 
 it("automatically qualifies verified quiz actions without a local advertising opt-in and binds single-use proofs", async () => {
   await rtSetup();

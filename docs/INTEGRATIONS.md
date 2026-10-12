@@ -117,6 +117,12 @@ for 15 minutes; read failures keep local engagement reporting available.
 
 ## Cloudflare Turnstile
 
+Add every public landing hostname to the widget's **Hostname Management** list.
+For example, if both `sparecash.leadtechx.com` and `sparecash.fit` serve the
+application, authorize both hostnames on the same widget. The server accepts a
+public alias only when the request Origin matches the hostname that received the
+request, and it binds the Siteverify response to that hostname.
+
 Set a hostname-restricted site key and secret. All live landings start
 verification with `action=visit` and the server-issued visit ID as `cData`, even
 when the visitor never subscribes. The server checks Siteverify success,
