@@ -693,13 +693,13 @@ it("implements MCP initialization, tool discovery and authenticated tool calls",
   await client.close();
 });
 
-it("accepts the custom MCP token header used by Claude Desktop", async () => {
+it("accepts the approved API key header used by Claude Desktop", async () => {
   const client = new Client({
     name: "sparecash-claude-desktop-test",
     version: "1.0.0",
   });
   const transport = new StreamableHTTPClientTransport(new URL(`${base}/mcp`), {
-    requestInit: { headers: { "X-SpareCash-Token": env.MCP_TOKEN } },
+    requestInit: { headers: { "x-api-key": env.MCP_TOKEN } },
   });
   await client.connect(transport);
   const tools = await client.listTools();

@@ -2,8 +2,9 @@
 
 Endpoint: `https://sparecash.leadtechx.com/mcp`
 Transport: Streamable HTTP, stateless JSON responses.
-Authentication accepts either `Authorization: Bearer <MCP_TOKEN>` or
-`X-SpareCash-Token: <MCP_TOKEN>`.
+Authentication accepts `Authorization: Bearer <MCP_TOKEN>` or
+`x-api-key: <MCP_TOKEN>`. The previous `X-SpareCash-Token` header remains accepted
+for compatibility with existing clients.
 
 Client configuration for tools that support remote HTTP servers with explicit headers:
 
@@ -21,8 +22,8 @@ Client configuration for tools that support remote HTTP servers with explicit he
 ```
 
 For Claude Desktop, open **Settings → Connectors → Add custom connector**, use the
-endpoint above, and add a custom header named `X-SpareCash-Token`. Paste the MCP
-token from owner Settings as the value without a `Bearer` prefix.
+endpoint above, and add the Anthropic-approved custom header `x-api-key`. Paste the
+MCP token from owner Settings as the value without a `Bearer` prefix.
 
 Exact configuration names differ between clients. This server does not currently
 implement OAuth discovery or dynamic client registration. Clients that support
