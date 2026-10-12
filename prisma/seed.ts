@@ -1,6 +1,7 @@
 import { initializeRuntimeConfiguration } from "../server/runtime-config.js";
 import { db } from "../server/db.js";
 import { landingSchema, settingsSchema } from "../server/domain.js";
+await initializeRuntimeConfiguration();
 await db.setting.upsert({
   where: { key: "general" },
   create: { key: "general", value: settingsSchema.parse({}) },
@@ -99,5 +100,4 @@ for (const channel of ["EMAIL", "SMS", "PUSH"] as const) {
       },
     });
 }
-await initializeRuntimeConfiguration();
 await db.$disconnect();

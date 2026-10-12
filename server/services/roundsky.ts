@@ -72,6 +72,15 @@ export async function createRoundSkyApplication(input: {
       where: { id: visit.id },
     });
     const application = await tx.applicationClick.create({ data: input });
+    if (current.sourceId && current.externalClickId)
+      await tx.advertiserConversion.create({
+        data: {
+          applicationId: application.id,
+          event: "APPLICATION",
+          goal: 1,
+          externalClickId: current.externalClickId,
+        },
+      });
     await tx.visitEvent.createMany({
       data: [
         {

@@ -77,10 +77,10 @@ The native integration follows the supplied LeadTechX publisher-link and pixel i
 Landing link structure:
 
 ```text
-https://sparecash.leadtechx.com/go/us-loans?campaign_id={campaign_id}&zone_id={zone_id}&click_id=${SUBID}&banner_id={bannerid}&browser={browser}&browser_version={browser_version}&carrier={carrier}&propeller_click_id={clickID}&connection_type={connection_type}&cost={cost}&country={country}&device={device}&language={language}&os={os}&os_version={osversion}&region={region}&subzone_id={subzone_id}&advertiser_user_agent={useragent}&utm_source=propellerads&utm_medium=push&utm_campaign=us-loans&utm_content={bannerid}
+https://sparecash.leadtechx.com/go/us-loans?campaign_id={campaign_id}&zone_id={zone_id}&click_id=${SUBID}&banner_id={bannerid}&browser={browser}&browser_version={browser_version}&carrier={carrier}&connection_type={connection_type}&cost={cost}&country={country}&device={device}&language={language}&os={os}&os_version={osversion}&region={region}&subzone_id={subzone_id}&advertiser_user_agent={useragent}&utm_source=propellerads&utm_medium=push&utm_campaign=us-loans&utm_content={bannerid}
 ```
 
-This template carries every token offered for the current push CPC campaigns. The app stores the values in each visit's `adContext`; `list_traffic_visits` exposes them and Statistics can break visits down by creative, subzone, connection, carrier, language, browser version, and OS version. `${SUBID}` remains the conversion-attribution ID, while `{clickID}` is retained separately as `propellerClickId`.
+This template carries every usable token offered for the current push CPC campaigns. The app stores the values in each visit's `adContext`; `list_traffic_visits` exposes them and Statistics can break visits down by creative, subzone, connection, carrier, language, browser version, and OS version. `${SUBID}` is the conversion-attribution ID. Do not add the unsupported `{clickID}` alias; PropellerAds leaves it unresolved.
 
 URL attribution is not cryptographic proof of a paid click. The app never treats `{cost}` as booked spend and never lets token-supplied country, region, or user agent replace trusted edge/security observations. Reconcile costs and campaign totals against authenticated advertiser reporting.
 
@@ -98,22 +98,32 @@ The app does not replace the full blacklist. Rules require at least the configur
 
 Settings control evaluation; **Live source exclusions** controls whether eligible actions reach the advertiser API. The app records recommendations in observe mode and persists failures. Blocked sources are not automatically re-enabled. Use the advertiser interface to reverse an exclusion; local reconciliation/unblock tools are a future extension.
 
-Spend import, bid management, campaign creation, and advertiser conversion feedback are not part of this initial adapter. Connect PropellerAds' own MCP alongside SpareCash for campaign-level controls.
+The owner Statistics view imports authenticated spend. Campaign and bid changes remain in PropellerAds or its MCP.
+
+Copy the account S2S URL from **PropellerAds → Tracking** into **Settings → Integrations → PropellerAds S2S postback URL**. SpareCash preserves its account parameters and supplies `visitor_id`, `payout`, and the goal:
+
+- an application continuation sends the main conversion (goal 1);
+- a deduplicated RoundSky SOLD callback sends `goal=2` with the incremental commission as payout.
+
+The worker stores each conversion before delivery. A successful response is never resent. A timeout or server failure is marked uncertain for manual reconciliation because the PropellerAds conversion endpoint has no application idempotency key.
 
 Official reference: https://ssp-api.propellerads.com/v5/docs/
 Official MCP: https://propellerads.com/mcp-connector/
 
-The owner **Statistics** page also reads paginated advertiser impressions,
-clicks and spend with the saved API token. Complete UTC snapshots are cached
+The owner **Statistics** page also reads advertiser impressions, clicks and
+spend with the saved API token. Complete POST reports in UTC are cached
 for 15 minutes; read failures keep local engagement reporting available.
 [Statistics setup and metric definitions](STATISTICS.md).
 
 ## Cloudflare Turnstile
 
-Set a hostname-restricted site key and secret. All live landings run early
+Set a hostname-restricted site key and secret. All live landings start
 verification with `action=visit` and the server-issued visit ID as `cData`, even
 when the visitor never subscribes. The server checks Siteverify success,
 hostname, action and visit binding, then retains a 30-minute visit proof.
+The widget uses interaction-only appearance and is mounted with the first
+application/quiz step, so an interactive challenge appears at the action it
+protects instead of occupying the landing hero.
 Audience verification has no test-key bypass. Legacy `action=subscribe` remains
 accepted for existing clients but does not supply an audience proof.
 

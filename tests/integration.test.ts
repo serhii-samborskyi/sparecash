@@ -2884,6 +2884,43 @@ it("round-trips protected canvases through MCP, previews and visit snapshots", a
       application.id,
     );
     expect(
+      await db.advertiserConversion.findUniqueOrThrow({
+        where: {
+          applicationId_goal: { applicationId: application.id, goal: 1 },
+        },
+      }),
+    ).toMatchObject({
+      event: "APPLICATION",
+      externalClickId: "canvas-click",
+      status: "PENDING",
+    });
+    await recordPostback({
+      eventId: `canvas-sold-${application.id}`,
+      applicationId: application.id,
+      event: "SOLD",
+      revenue: 7.5,
+    });
+    expect(
+      await db.advertiserConversion.findUniqueOrThrow({
+        where: {
+          applicationId_goal: { applicationId: application.id, goal: 2 },
+        },
+      }),
+    ).toMatchObject({
+      event: "SOLD",
+      externalClickId: "canvas-click",
+      status: "PENDING",
+    });
+    expect(
+      (
+        await db.advertiserConversion.findUniqueOrThrow({
+          where: {
+            applicationId_goal: { applicationId: application.id, goal: 2 },
+          },
+        })
+      ).payout.toNumber(),
+    ).toBe(7.5);
+    expect(
       await db.visitEvent.count({
         where: {
           visitId: application.visitId!,
@@ -4046,11 +4083,17 @@ it("compares zones and locations with honest traffic quality, weighted CTR and d
         spent: 2,
       },
     ];
-    vi.mocked(globalThis.fetch).mockImplementation(async (url, init) =>
-      String(url).includes("/adv/statistics")
-        ? Response.json({ items: providerRows, total_pages: 1, total_items: 2 })
-        : provider(url, init),
-    );
+    vi.mocked(globalThis.fetch).mockImplementation(async (url, init) => {
+      if (!String(url).includes("/adv/statistics")) return provider(url, init);
+      expect(init?.method).toBe("POST");
+      expect(JSON.parse(String(init?.body))).toMatchObject({
+        group_by: ["campaign_id", "zone_id", "country_id", "date_time"],
+        campaign_id: [Number(campaignId)],
+        day_from: `${day} 00:00:00`,
+        day_to: `${day} 23:59:59`,
+      });
+      return Response.json({ result: providerRows, request_id: "stats-test" });
+    });
     const input = { campaignId, from: day, to: day };
     const report = await statisticsReport(input);
     expect(report.advertiser.status).toBe("ready");

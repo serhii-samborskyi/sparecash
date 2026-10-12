@@ -41,6 +41,7 @@ beforeEach(() => {
     BLUEBUBBLES_URL: "https://bluebubbles.example.test",
     BLUEBUBBLES_PASSWORD: "test-password",
     PROPELLER_API_TOKEN: "",
+    PROPELLER_POSTBACK_URL: "",
   };
   fetchMock = vi.fn(() => Promise.reject(new Error("Unexpected request")));
   vi.stubGlobal("fetch", fetchMock);

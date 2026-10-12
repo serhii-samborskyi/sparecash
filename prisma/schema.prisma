@@ -395,6 +395,28 @@ model ApplicationClick {
   deliveryId String?
   createdAt  DateTime   @default(now())
   postbacks  Postback[]
+  advertiserConversions AdvertiserConversion[]
+}
+
+// Durable outbound conversion feedback. Ambiguous network outcomes are held for
+// review rather than retried because advertiser postbacks are not idempotent.
+model AdvertiserConversion {
+  id              String           @id @default(cuid())
+  applicationId   String
+  application     ApplicationClick @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  event           String
+  goal            Int
+  externalClickId String
+  payout          Decimal          @default(0) @db.Decimal(12, 4)
+  status          String           @default("PENDING")
+  attempts        Int              @default(0)
+  error           String?
+  createdAt       DateTime         @default(now())
+  attemptedAt     DateTime?
+  sentAt          DateTime?
+
+  @@unique([applicationId, goal])
+  @@index([status, createdAt])
 }
 
 model Postback {

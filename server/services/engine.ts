@@ -13,6 +13,7 @@ import { deliver, ProviderError } from "./providers.js";
 import { enroll } from "./journeys.js";
 import { evaluateSources } from "./traffic.js";
 import { sendingTimezone, nextSendingTime } from "../timezones.js";
+import { processAdvertiserConversions } from "./advertiser-conversions.js";
 export async function tick() {
   return withRuntimeConfiguration(runTick);
 }
@@ -25,6 +26,7 @@ async function runTick() {
         { locked: boolean }[]
       >`SELECT pg_try_advisory_xact_lock(9241027) AS locked`;
       if (!state.locked) return { busy: true };
+      const advertiserConversions = await processAdvertiserConversions();
       await db.delivery.updateMany({
         where: {
           status: "SENDING",
@@ -241,7 +243,7 @@ async function runTick() {
         },
         update: { value: { at: new Date().toISOString(), sent } },
       });
-      return { sent, ...traffic };
+      return { sent, ...advertiserConversions, ...traffic };
     },
     { timeout: 240000, maxWait: 1000 },
   );

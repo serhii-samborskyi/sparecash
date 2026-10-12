@@ -40,6 +40,7 @@ export const secretRuntimeSchema = z
     BREVO_API_KEY: optionalSecret,
     BLUEBUBBLES_PASSWORD: optionalSecret,
     PROPELLER_API_TOKEN: optionalSecret,
+    PROPELLER_POSTBACK_URL: optionalSecret,
   })
   .strict();
 export const editableSecretsSchema = secretRuntimeSchema

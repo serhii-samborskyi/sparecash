@@ -94,6 +94,20 @@ function validate(value: RuntimeConfiguration) {
   for (const key of ["BLUEBUBBLES_URL", "PROPELLER_API_URL"] as const)
     if (value[key] && new URL(value[key]).protocol !== "https:")
       throw new Error(`${key} must use HTTPS`);
+  if (value.PROPELLER_POSTBACK_URL) {
+    const postback = new URL(value.PROPELLER_POSTBACK_URL);
+    if (
+      postback.protocol !== "https:" ||
+      postback.hostname !== "ad.propellerads.com" ||
+      postback.pathname !== "/conversion.php" ||
+      postback.username ||
+      postback.password ||
+      postback.hash
+    )
+      throw new Error(
+        "PropellerAds postback URL must be the HTTPS conversion URL copied from the Tracking page",
+      );
+  }
   if (
     env.NODE_ENV === "production" &&
     /^1x000/.test(value.TURNSTILE_SECRET_KEY)

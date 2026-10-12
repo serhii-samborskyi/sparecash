@@ -19,7 +19,15 @@ export async function recordPostback(input: {
     const application = await db.$transaction(async (tx) => {
       const app = await tx.applicationClick.findUniqueOrThrow({
         where: { id: input.applicationId },
-        include: { visit: { select: { journeyId: true } } },
+        include: {
+          visit: {
+            select: {
+              journeyId: true,
+              sourceId: true,
+              externalClickId: true,
+            },
+          },
+        },
       });
       if (input.event === "SOLD" && app.visit.journeyId) {
         await lockJourney(tx, app.visit.journeyId);
@@ -38,6 +46,24 @@ export async function recordPostback(input: {
             });
       }
       await tx.postback.create({ data: { ...input, revenue } });
+      if (
+        input.event === "SOLD" &&
+        app.visit.sourceId &&
+        app.visit.externalClickId
+      )
+        await tx.advertiserConversion.upsert({
+          where: {
+            applicationId_goal: { applicationId: app.id, goal: 2 },
+          },
+          create: {
+            applicationId: app.id,
+            event: "SOLD",
+            goal: 2,
+            externalClickId: app.visit.externalClickId,
+            payout: revenue,
+          },
+          update: {},
+        });
       if (app.leadId) {
         await tx.$queryRaw`SELECT id FROM "Lead" WHERE id=${app.leadId} FOR UPDATE`;
         const lead = await tx.lead.findUniqueOrThrow({

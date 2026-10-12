@@ -1,0 +1,94 @@
+import { env } from "../config.js";
+import { db } from "../db.js";
+
+const BATCH_SIZE = 20;
+
+function deliveryUrl(input: {
+  externalClickId: string;
+  goal: number;
+  payout: { toString(): string };
+}) {
+  const url = new URL(env.PROPELLER_POSTBACK_URL);
+  url.searchParams.set("visitor_id", input.externalClickId);
+  if (input.goal === 1) url.searchParams.delete("goal");
+  else url.searchParams.set("goal", String(input.goal));
+  url.searchParams.set("payout", input.payout.toString());
+  return url;
+}
+
+export async function processAdvertiserConversions() {
+  if (!env.PROPELLER_POSTBACK_URL)
+    return { advertiserConversionsSent: 0, advertiserConversionsPending: 0 };
+
+  await db.advertiserConversion.updateMany({
+    where: {
+      status: "SENDING",
+      attemptedAt: { lt: new Date(Date.now() - 15 * 60_000) },
+    },
+    data: {
+      status: "UNCERTAIN",
+      error: "Worker interrupted; check PropellerAds before resolving",
+    },
+  });
+  const due = await db.advertiserConversion.findMany({
+    where: { status: "PENDING" },
+    orderBy: { createdAt: "asc" },
+    take: BATCH_SIZE,
+  });
+  let sent = 0;
+  for (const conversion of due) {
+    const claimed = await db.advertiserConversion.updateMany({
+      where: { id: conversion.id, status: "PENDING" },
+      data: {
+        status: "SENDING",
+        attempts: { increment: 1 },
+        attemptedAt: new Date(),
+        error: null,
+      },
+    });
+    if (!claimed.count) continue;
+    try {
+      const response = await fetch(deliveryUrl(conversion), {
+        method: "GET",
+        redirect: "error",
+        signal: AbortSignal.timeout(15_000),
+        headers: { Accept: "text/plain, application/json" },
+      });
+      if (!response.ok) {
+        await db.advertiserConversion.update({
+          where: { id: conversion.id },
+          data: {
+            status:
+              response.status >= 400 && response.status < 500
+                ? "FAILED"
+                : "UNCERTAIN",
+            error: `PropellerAds returned HTTP ${response.status}`,
+          },
+        });
+        continue;
+      }
+      await db.advertiserConversion.update({
+        where: { id: conversion.id },
+        data: { status: "SENT", sentAt: new Date(), error: null },
+      });
+      sent++;
+    } catch {
+      // A timeout can occur after the provider accepted the request. Do not
+      // automatically retry a non-idempotent advertiser conversion.
+      await db.advertiserConversion.update({
+        where: { id: conversion.id },
+        data: {
+          status: "UNCERTAIN",
+          error:
+            "Postback outcome is uncertain; check PropellerAds before retrying",
+        },
+      });
+    }
+  }
+  return {
+    advertiserConversionsSent: sent,
+    advertiserConversionsPending: await db.advertiserConversion.count({
+      where: { status: "PENDING" },
+    }),
+  };
+}

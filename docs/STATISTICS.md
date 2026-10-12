@@ -47,10 +47,10 @@ budgets, campaign status or zone exclusions automatically.
 
 ## PropellerAds connection
 
-Use the saved **Integrations → PropellerAds** API token. The app reads
-`GET /adv/statistics` with `group_by[]=campaign_id`, `zone_id`, `country_id`,
-and `date_time`, explicit `tz=+0000`, and inclusive date/time boundaries. It
-loads every page before storing a snapshot. Country names such as
+Use the saved **Integrations → PropellerAds** API token. The app sends
+`POST /adv/statistics` with `group_by` set to campaign, zone, country, and day,
+an explicit `tz=+0000`, and inclusive date/time boundaries. It validates the
+complete returned result before storing a snapshot. Country names such as
 `United States (US)` are normalized to their country code. Provider-returned
 rows must match the requested dates/campaigns/zone/country. See the
 [official statistics API](https://ssp-api.propellerads.com/v5/docs/).
