@@ -286,6 +286,13 @@ function Landing({ preview }: { preview: boolean }) {
     question = questions[step];
   const funnel = (
     <section className="application-card" id="application" tabIndex={-1}>
+      {!preview && (
+        <VisitorGate
+          session={session}
+          onVerified={setVisitorVerified}
+          runner={pixelRunner}
+        />
+      )}
       {result ? (
         <>
           <span className="success-mark">
@@ -693,13 +700,6 @@ function Landing({ preview }: { preview: boolean }) {
         </div>
       )}
       <PublicHeader logoImage={config.logoImage} />
-      {!preview && (
-        <VisitorGate
-          session={session}
-          onVerified={setVisitorVerified}
-          runner={pixelRunner}
-        />
-      )}
       {config.design ? (
         <LandingCanvas design={config.design} funnel={funnel} />
       ) : (

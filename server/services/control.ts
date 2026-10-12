@@ -199,8 +199,9 @@ export async function integrationStatus() {
     {
       id: "propeller",
       name: "PropellerAds",
-      purpose: "Source exclusions",
+      purpose: "Statistics, source exclusions & conversion feedback",
       connected: !!env.PROPELLER_API_TOKEN,
+      conversionFeedback: !!env.PROPELLER_POSTBACK_URL,
     },
     {
       id: "roundsky",

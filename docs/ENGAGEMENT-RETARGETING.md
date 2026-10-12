@@ -11,8 +11,9 @@ created by this implementation. Production account checks remain outstanding.
 
 ## Verification and engagement
 
-Every live landing mounts Turnstile after creating its visit, before any channel
-is selected. This covers quiz participants and people who never subscribe.
+Every live landing mounts Turnstile with the first quiz/application step after
+creating its visit. The interaction-only widget stays out of the hero unless a
+visitor must complete a challenge. This covers quiz participants and people who never subscribe.
 Rendering, raw engagement and continuation to loan options remain available
 while verification is incomplete; audience enrollment does not.
 

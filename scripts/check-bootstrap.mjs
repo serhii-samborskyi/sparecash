@@ -23,9 +23,12 @@ const db = new PrismaClient({ datasourceUrl: database.toString() });
 let server;
 function run(command, args, cwd, overrides = {}) {
   return new Promise((resolve, reject) => {
+    const subprocessEnvironment = { ...childEnv, ...overrides };
+    for (const [key, value] of Object.entries(subprocessEnvironment))
+      if (value === undefined) delete subprocessEnvironment[key];
     const child = spawn(command, args, {
       cwd,
-      env: { ...childEnv, ...overrides },
+      env: subprocessEnvironment,
       stdio: ["ignore", "pipe", "pipe"],
     });
     let output = "";
@@ -71,7 +74,10 @@ function encryptedFixture(secrets, key) {
 }
 try {
   await run("npx", ["prisma", "migrate", "deploy"], root);
-  for (const missing of [undefined, "", "😀".repeat(19)]) {
+  // Prisma's generated development client loads the repository .env before the
+  // bundled configuration module. An explicit empty value remains the reliable
+  // production-equivalent missing-password check in this in-repo harness.
+  for (const missing of ["", "😀".repeat(19)]) {
     await assert.rejects(
       run(process.execPath, [resolve("dist/server/seed.js")], directory, {
         OWNER_PASSWORD: missing,

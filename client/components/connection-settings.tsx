@@ -541,10 +541,16 @@ export function ConnectionSettings({
           <h3>PropellerAds</h3>
           <div className="form-grid">
             {secret("PROPELLER_API_TOKEN", "PropellerAds API token")}
+            {secret(
+              "PROPELLER_POSTBACK_URL",
+              "PropellerAds S2S postback URL",
+              "Copy the account postback URL from PropellerAds Tracking. SpareCash supplies the click ID and conversion goal when sending.",
+            )}
             {field("PROPELLER_API_URL", "PropellerAds API URL", "url")}
           </div>
           {testButton("propellerads", "PropellerAds", [
             "PROPELLER_API_TOKEN",
+            "PROPELLER_POSTBACK_URL",
             "PROPELLER_API_URL",
           ])}
         </section>

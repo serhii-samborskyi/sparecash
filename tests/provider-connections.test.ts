@@ -34,6 +34,7 @@ beforeEach(() => {
     BLUEBUBBLES_URL: "https://bluebubbles.example.test",
     BLUEBUBBLES_PASSWORD: "test-only-password-&?=",
     PROPELLER_API_TOKEN: "test-only-propeller-token",
+    PROPELLER_POSTBACK_URL: "",
   };
   fetchMock = vi.fn(() =>
     Promise.reject(new Error("Unexpected external request")),

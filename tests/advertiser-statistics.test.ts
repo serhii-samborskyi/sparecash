@@ -41,18 +41,13 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 
-it("fetches every advertiser page in UTC and stores only a complete scoped snapshot", async () => {
-  fetchMock
-    .mockResolvedValueOnce(
-      Response.json({ items: [row], total_pages: 2, total_items: 2 }),
-    )
-    .mockResolvedValueOnce(
-      Response.json({
-        items: [{ ...row, zone_id: 789 }],
-        total_pages: 2,
-        total_items: 2,
-      }),
-    );
+it("fetches a complete advertiser report with POST and stores its scoped snapshot", async () => {
+  fetchMock.mockResolvedValue(
+    Response.json({
+      result: [row, { ...row, zone_id: 789 }],
+      request_id: "test-request",
+    }),
+  );
   const result = await run();
   expect(result.status).toBe("ready");
   expect(result.rows).toHaveLength(2);
@@ -61,19 +56,22 @@ it("fetches every advertiser page in UTC and stores only a complete scoped snaps
     spend: 0.09,
     clicks: 3,
   });
-  const url = new URL(fetchMock.mock.calls[1][0]);
-  expect(url.searchParams.get("page")).toBe("2");
-  expect(url.searchParams.get("tz")).toBe("+0000");
-  expect(url.searchParams.getAll("campaign_id[]")).toEqual(["123"]);
-  expect(url.searchParams.getAll("group_by[]")).toEqual([
-    "campaign_id",
-    "zone_id",
-    "country_id",
-    "date_time",
-  ]);
+  expect(fetchMock).toHaveBeenCalledOnce();
+  expect(fetchMock.mock.calls[0][0]).toBe(
+    "https://ssp-api.propellerads.com/v5/adv/statistics",
+  );
+  expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toMatchObject({
+    tz: "+0000",
+    campaign_id: [123],
+    group_by: ["campaign_id", "zone_id", "country_id", "date_time"],
+  });
   expect(fetchMock.mock.calls[0][1]).toMatchObject({
+    method: "POST",
     redirect: "error",
-    headers: { Authorization: "Bearer test-api-key" },
+    headers: {
+      Authorization: "Bearer test-api-key",
+      "Content-Type": "application/json",
+    },
   });
   expect(database.upsert).toHaveBeenCalledOnce();
   expect(JSON.stringify(database.upsert.mock.calls)).not.toContain(
@@ -111,12 +109,12 @@ it("uses cached reports and retains the last complete snapshot on a failed refre
 });
 
 it.each([
-  { items: [row], total_pages: 1, total_items: 2 },
-  { items: [{ ...row, campaign_id: 999 }], total_pages: 1, total_items: 1 },
-  { items: [{ ...row, spent: undefined }], total_pages: 1, total_items: 1 },
-  { items: [], total_pages: 1, total_items: 60000 },
+  { items: [row] },
+  { result: [{ ...row, campaign_id: 999 }] },
+  { result: [{ ...row, spent: undefined }] },
+  { result: [{ ...row, country: "Unknown" }] },
 ])(
-  "rejects partial, differently scoped and malformed advertiser responses",
+  "rejects differently scoped and malformed advertiser responses",
   async (data) => {
     fetchMock.mockResolvedValue(Response.json(data));
     const result = await run();

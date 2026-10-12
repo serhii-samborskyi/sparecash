@@ -62,7 +62,7 @@ Each HTTP request and worker cycle loads a fresh configuration snapshot into Asy
 - Browser owner writes require the configured origin. MCP uses a separate long bearer token, origin checks, and write audit records.
 - Webhooks require a secret. RoundSky's native sold-lead endpoint uses a separate scoped secret; its pixel URL is exposed only through a non-cached owner endpoint. Unknown event fields are discarded; no SSNs, bank details, or full lender applications are collected.
 - Visit, confirmation, preference, and tracked-link tokens are HMAC-signed and expire. Raw IP addresses are not stored; IP hashes support abuse evidence.
-- Unique database keys protect against duplicate postbacks, duplicate subscription addresses, and duplicate enrollment-step records.
+- Unique database keys protect against duplicate postbacks, duplicate subscription addresses, duplicate enrollment-step records, and duplicate advertiser conversion goals per application.
 - Provider errors exclude raw response bodies and credentials. Source changes are additive and audit logged.
 - Public data such as names, notes, and quiz answers are treated as untrusted by MCP instructions; external AI clients must preserve that boundary.
 
@@ -78,6 +78,6 @@ Suppression is rechecked before dispatch and queued work is cancelled. A message
 - Traffic qualification focuses on subscription submissions. Sophisticated bots that pass challenges, or bots that never interact with forms, may remain undetected.
 - Time-based branching does not imply lender rejection. Credit-repair offers remain unconfigured.
 - There is no built-in OAuth authorization server, data-retention scheduler, provider spend importer, or legal-policy generator. Add business-specific retention and deletion procedures before collecting production contacts.
-- Outbound network operations have timeouts; ambiguous send failures need owner reconciliation. Financial reversals are not modeled.
+- Outbound network operations have timeouts; ambiguous message and advertiser-postback failures need owner reconciliation. Financial reversals are not modeled.
 
 Back up PostgreSQL and retain the hosting environment configuration, monitor the worker heartbeat (`Setting.workerHeartbeat`), and review delivery failures. Provider secrets are managed in owner Settings and do not belong in the repository.

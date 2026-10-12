@@ -102,6 +102,7 @@ export function VisitorGate({
           sitekey: session.turnstileSiteKey,
           action: "visit",
           cData: session.visitId,
+          appearance: "interaction-only",
           callback: (turnstileToken: string) => {
             void post("/public/verify-visit", {
               visitToken: session.visitToken,
@@ -109,6 +110,7 @@ export function VisitorGate({
             })
               .then((result) => {
                 if (disposed) return;
+                setError("");
                 setExpiresAt(result.expiresAt);
                 updateVerified(result.verified);
                 if (!result.verified)
@@ -143,26 +145,25 @@ export function VisitorGate({
     retry,
     updateVerified,
   ]);
+  if (verified) return null;
   return (
-    <section className="visitor-controls" aria-label="Browser verification">
-      {!verified && <div ref={container} className="turnstile-container" />}
-      <small>
-        {verified
-          ? "Browser verification complete."
-          : "Checking your browser. You can explore the page while this finishes."}
-      </small>
+    <section
+      className="visitor-controls"
+      aria-label="Browser verification"
+      aria-live="polite"
+    >
+      <div ref={container} className="turnstile-container" />
+      <small>Secure browser check runs before you continue.</small>
       {error && (
         <p role="alert">
           {error}{" "}
-          {!verified && (
-            <button
-              type="button"
-              className="text-button"
-              onClick={() => setRetry((x) => x + 1)}
-            >
-              Retry verification
-            </button>
-          )}
+          <button
+            type="button"
+            className="text-button"
+            onClick={() => setRetry((x) => x + 1)}
+          >
+            Retry verification
+          </button>
         </p>
       )}
     </section>
