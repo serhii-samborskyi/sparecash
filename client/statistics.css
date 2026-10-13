@@ -84,7 +84,7 @@
 .statistics-status.stale {
   background: #b77524;
 }
-.statistics-status.empty {
+.statistics-status.waiting {
   background: #7c8c80;
 }
 .statistics-clarity {
