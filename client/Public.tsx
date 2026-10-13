@@ -710,13 +710,15 @@ function PublicHeader({
           <img
             className="landing-logo"
             src={logoImage.src}
-            alt={logoImage.alt}
+            alt=""
+            aria-hidden="true"
           />
         ) : (
-          <>
-            <span className="brand-logo">S</span>sparecash<span>.</span>
-          </>
+          <span className="brand-logo" aria-hidden="true">
+            S
+          </span>
         )}
+        <span className="public-brand-name">SpareCash</span>
       </a>
       <span>
         <LockKeyhole size={13} />

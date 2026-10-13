@@ -1794,11 +1794,11 @@ summary {
   font-size: 26px;
   font-weight: 800;
   letter-spacing: -1px;
+  color: var(--public, #234d3e);
   text-decoration: none;
 }
-.public-brand > span:last-child {
-  margin-left: -9px;
-  color: #92b179;
+.public-brand-name {
+  line-height: 1;
 }
 .public-header > span {
   display: flex;
@@ -3058,8 +3058,8 @@ summary {
   display: block;
   width: auto;
   height: auto;
-  max-width: min(240px, 45vw);
-  max-height: 64px;
+  max-width: min(92px, 22vw);
+  max-height: 58px;
   object-fit: contain;
 }
 .asset-picker {
