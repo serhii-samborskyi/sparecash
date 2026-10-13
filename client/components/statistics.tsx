@@ -621,7 +621,11 @@ export function Statistics() {
             <div className="statistics-clarity-heading">
               <div>
                 <span
-                  className={`statistics-status ${report.clarity.status}`}
+                  className={`statistics-status ${
+                    report.clarity.status === "empty"
+                      ? "waiting"
+                      : report.clarity.status
+                  }`}
                 />
                 <div>
                   <h3>Microsoft Clarity</h3>
