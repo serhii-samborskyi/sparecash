@@ -69,6 +69,26 @@ describe("anonymous engagement", () => {
     ])
       expect(() => engagementEvents(config, event)).toThrow();
   });
+  it("records a single selected delivery channel without contact details", () => {
+    expect(
+      engagementEvents(config, {
+        kind: "CHANNEL_SELECTED",
+        channel: "EMAIL",
+      }),
+    ).toEqual([
+      {
+        kind: "CHANNEL_SELECTED",
+        questionId: "",
+        answer: "EMAIL",
+      },
+    ]);
+    expect(() =>
+      engagementEvents(config, {
+        kind: "CHANNEL_SELECTED",
+        channel: "WHATSAPP",
+      }),
+    ).toThrow();
+  });
   it("counts visitor sessions rather than clicks or answers", () => {
     const summary = engagementCounts([
       {
@@ -78,13 +98,15 @@ describe("anonymous engagement", () => {
           { kind: "QUIZ_COMPLETED" },
         ],
       },
+      { engagementEvents: [{ kind: "CHANNEL_SELECTED" }] },
       { engagementEvents: [{ kind: "CONTINUE_WITHOUT_UPDATES" }] },
       { engagementEvents: [] },
     ]);
     expect(summary).toMatchObject({
-      engagedVisitors: 2,
+      engagedVisitors: 3,
       quizStartedVisitors: 1,
       quizCompletedVisitors: 1,
+      channelSelectedVisitors: 1,
       continuedWithoutUpdatesVisitors: 1,
     });
   });

@@ -4,17 +4,14 @@ import { propellerVisitAttribution } from "../shared/propeller-attribution";
 import { VisitorGate } from "./VisitorGate";
 import { LandingCanvas } from "./LandingCanvas";
 import { beforeApplicationNavigation } from "./retargeting";
-import { visibleQuestions } from "../server/domain";
 import {
   ArrowRight,
-  ArrowLeft,
   Check,
   Bell,
   Mail,
   MessageSquare,
   ShieldCheck,
   LockKeyhole,
-  ChevronRight,
   Wallet,
   Leaf,
 } from "lucide-react";
@@ -65,8 +62,6 @@ export function Public() {
 function Landing({ preview }: { preview: boolean }) {
   const [session, setSession] = useState<any>(null),
     [error, setError] = useState(""),
-    [step, setStep] = useState(0),
-    [answers, setAnswers] = useState<Record<string, string>>({}),
     [channels, setChannels] = useState<string[]>([]),
     [email, setEmail] = useState(""),
     [phone, setPhone] = useState(""),
@@ -89,14 +84,11 @@ function Landing({ preview }: { preview: boolean }) {
       !session.availableChannels?.length
     )
       return;
-    const visible = visibleQuestions(session.config.questions ?? [], answers);
-    if (!visible[step]) {
-      updatesRecorded.current = true;
-      trackEngagement.current(session.visitToken, preview, {
-        kind: "UPDATES_OPENED",
-      });
-    }
-  }, [session, preview, answers, step]);
+    updatesRecorded.current = true;
+    trackEngagement.current(session.visitToken, preview, {
+      kind: "UPDATES_OPENED",
+    });
+  }, [session, preview]);
   useEffect(() => () => pushAttempt.current?.abort(), []);
   useEffect(() => {
     let current = true;
@@ -128,7 +120,13 @@ function Landing({ preview }: { preview: boolean }) {
       current = false;
     };
   }, [preview]);
-  const selectChannel = (channel: string) => setChannels([channel]);
+  const selectChannel = (channel: string) => {
+    setChannels([channel]);
+    trackEngagement.current(session.visitToken, preview, {
+      kind: "CHANNEL_SELECTED",
+      channel: channel as "PUSH" | "SMS" | "EMAIL",
+    });
+  };
   async function subscribe(e: React.FormEvent) {
     e.preventDefault();
     if (preview) return;
@@ -144,7 +142,7 @@ function Landing({ preview }: { preview: boolean }) {
             return undefined;
           }
         })(),
-        answers,
+        answers: {},
         channels,
         email: channels.includes("EMAIL") ? email : undefined,
         phone: channels.includes("SMS") ? phone : undefined,
@@ -270,9 +268,7 @@ function Landing({ preview }: { preview: boolean }) {
   const config = session.config,
     availableChannels: string[] = preview
       ? ["PUSH", "EMAIL", "SMS"]
-      : (session.availableChannels ?? []),
-    questions = visibleQuestions(config.questions ?? [], answers),
-    question = questions[step];
+      : (session.availableChannels ?? []);
   const funnel = (
     <section className="application-card" id="application" tabIndex={-1}>
       {!preview && (
@@ -393,69 +389,6 @@ function Landing({ preview }: { preview: boolean }) {
             details may be used to prefill it.
           </p>
         </>
-      ) : question ? (
-        <>
-          <div className="form-progress">
-            <span>LET’S START WITH YOU</span>
-            <span>
-              {config.questions.some((q: any) => q.showWhen)
-                ? `QUESTION ${step + 1}`
-                : `${step + 1} / ${questions.length}`}
-            </span>
-          </div>
-          <div className="progress-track">
-            <span
-              style={{
-                width: `${((step + 1) / (questions.length + 1)) * 100}%`,
-              }}
-            />
-          </div>
-          <h2>{question.label}</h2>
-          <div className="quiz-options">
-            {question.options.map((option: string) => (
-              <button
-                key={option}
-                className={answers[question.id] === option ? "selected" : ""}
-                onClick={() => {
-                  const index = config.questions.findIndex(
-                    (q: any) => q.id === question.id,
-                  );
-                  const preceding = new Set(
-                    config.questions.slice(0, index).map((q: any) => q.id),
-                  );
-                  const nextAnswers = {
-                    ...Object.fromEntries(
-                      Object.entries(answers).filter(([id]) =>
-                        preceding.has(id),
-                      ),
-                    ),
-                    [question.id]: option,
-                  };
-                  trackEngagement.current(session.visitToken, preview, {
-                    kind: "QUESTION_ANSWERED",
-                    questionId: question.id,
-                    answers: nextAnswers,
-                  });
-                  setAnswers(nextAnswers);
-                  setStep(step + 1);
-                }}
-              >
-                {option}
-                <ChevronRight size={18} />
-              </button>
-            ))}
-          </div>
-          {step > 0 && (
-            <button className="text-button" onClick={() => setStep(step - 1)}>
-              <ArrowLeft size={15} />
-              Back
-            </button>
-          )}
-          <p className="fine-print">
-            <LockKeyhole size={12} />
-            No credit check to answer these questions.
-          </p>
-        </>
       ) : (
         <>
           {availableChannels.length === 0 && (
@@ -478,17 +411,8 @@ function Landing({ preview }: { preview: boolean }) {
                 <ArrowRight size={17} />
               </button>
               <p className="fine-print">
-                SpareCash is not a lender. Answering our questions does not
-                check credit or determine approval.
+                SpareCash is not a lender and does not determine approval.
               </p>
-              {questions.length > 0 && (
-                <button
-                  className="text-button back-link"
-                  onClick={() => setStep(step - 1)}
-                >
-                  <ArrowLeft size={15} /> Back to questions
-                </button>
-              )}
             </div>
           )}
           {availableChannels.length > 0 && (
@@ -600,16 +524,6 @@ function Landing({ preview }: { preview: boolean }) {
                   </button>
                 </div>
               )}
-              {questions.length > 0 && (
-                <button
-                  type="button"
-                  className="text-button back-link"
-                  onClick={() => setStep(step - 1)}
-                >
-                  <ArrowLeft size={15} />
-                  Back
-                </button>
-              )}
               <button
                 type="button"
                 className="skip-updates"
@@ -683,9 +597,7 @@ function Landing({ preview }: { preview: boolean }) {
             </div>
             {config.offerFirst && (
               <a className="landing-jump" href="#application">
-                {config.questions?.length
-                  ? "Answer two questions"
-                  : "Explore loan options"}
+                Explore loan options
                 <ArrowRight size={16} />
               </a>
             )}

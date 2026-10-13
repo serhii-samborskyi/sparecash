@@ -7,6 +7,12 @@ export const engagementSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("UPDATES_OPENED") }).strict(),
   z
     .object({
+      kind: z.literal("CHANNEL_SELECTED"),
+      channel: z.enum(["PUSH", "SMS", "EMAIL"]),
+    })
+    .strict(),
+  z
+    .object({
       kind: z.literal("QUESTION_ANSWERED"),
       questionId: z.string().min(1).max(40),
       answers: z
@@ -27,6 +33,14 @@ export function engagementEvents(
   const event = engagementSchema.parse(input);
   if (event.kind === "UPDATES_OPENED")
     return [{ kind: event.kind, questionId: "" }];
+  if (event.kind === "CHANNEL_SELECTED")
+    return [
+      {
+        kind: event.kind,
+        questionId: "",
+        answer: event.channel,
+      },
+    ];
   const config = landingSchema.parse(configInput);
   const questions = visibleQuestions(config.questions, event.answers);
   const index = questions.findIndex((q) => q.id === event.questionId);
@@ -98,6 +112,7 @@ export function engagementCounts(
     engagedVisitors: visits.filter((v) => v.engagementEvents.length > 0).length,
     quizStartedVisitors: has("QUESTION_ANSWERED"),
     quizCompletedVisitors: has("QUIZ_COMPLETED"),
+    channelSelectedVisitors: has("CHANNEL_SELECTED"),
     updatesOpenedVisitors: has("UPDATES_OPENED"),
     continuedWithoutUpdatesVisitors: has("CONTINUE_WITHOUT_UPDATES"),
   };

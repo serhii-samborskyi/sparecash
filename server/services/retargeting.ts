@@ -124,7 +124,9 @@ export async function journeyFacts(
   return {
     quiz: visits.some((v) =>
       v.engagementEvents.some(
-        (e) => e.kind === "QUESTION_ANSWERED" && !!e.verifiedAt,
+        (e) =>
+          ["QUESTION_ANSWERED", "CHANNEL_SELECTED"].includes(e.kind) &&
+          !!e.verifiedAt,
       ),
     ),
     completed: visits.some((v) =>
