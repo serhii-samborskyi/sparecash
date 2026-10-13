@@ -4089,6 +4089,40 @@ it("compares zones and locations with honest traffic quality, weighted CTR and d
   });
   const saved = await readRuntimeConfiguration();
   const provider = vi.mocked(globalThis.fetch).getMockImplementation()!;
+  const claritySnapshot = await db.claritySnapshot.create({
+    data: {
+      days: 1,
+      dimensions: ["URL", "Campaign", "Device"],
+      rowCount: 2,
+      windowStart: new Date(Date.now() - 86400000),
+      windowEnd: new Date(),
+      metrics: [
+        {
+          metricName: "Traffic",
+          information: [
+            {
+              URL: `${env.APP_URL}/go/statistics-fixture?campaign_id=${campaignId}&zone_id=111`,
+              Campaign: campaignId,
+              Device: "Desktop",
+              totalSessionCount: 10,
+              totalBotSessionCount: 2,
+              distinctUserCount: 8,
+              PagesPerSessionPercentage: 2,
+            },
+            {
+              URL: `${env.APP_URL}/go/statistics-fixture?campaign_id=${campaignId}&zone_id=222`,
+              Campaign: campaignId,
+              Device: "Mobile",
+              totalSessionCount: 5,
+              totalBotSessionCount: 4,
+              distinctUserCount: 5,
+              PagesPerSessionPercentage: 1,
+            },
+          ],
+        },
+      ],
+    },
+  });
   try {
     await saveRuntimeSettings(
       { secrets: { PROPELLER_API_TOKEN: "stats-test-token" } },
@@ -4128,6 +4162,16 @@ it("compares zones and locations with honest traffic quality, weighted CTR and d
     const input = { campaignId, from: day, to: day };
     const report = await statisticsReport(input);
     expect(report.advertiser.status).toBe("ready");
+    expect(report.clarity).toMatchObject({
+      aligned: true,
+      summary: {
+        attributedSessions: 15,
+        humanSessions: 9,
+        botSessions: 6,
+        botRate: 0.4,
+        pagesPerSession: 5 / 3,
+      },
+    });
     expect(report.summary).toMatchObject({
       visits: 4,
       verified: 1,
@@ -4153,11 +4197,18 @@ it("compares zones and locations with honest traffic quality, weighted CTR and d
       visits: 0,
       ctr: 0.01,
       subscriptionRate: null,
+      claritySessions: 5,
+      clarityBotRate: 0.8,
     });
     expect(report.rows.find((r) => r.label === "Zone 111")).toMatchObject({
       costPerSubscriber: 1,
       adContribution: 2,
       ctr: 0.1,
+      claritySessions: 10,
+      clarityHumanSessions: 8,
+      clarityBotSessions: 2,
+      clarityBotRate: 0.2,
+      clarityPagesPerSession: 2,
     });
     const cities = await statisticsReport({ ...input, groupBy: "city" });
     expect(cities.rows).toHaveLength(3);
@@ -4166,6 +4217,8 @@ it("compares zones and locations with honest traffic quality, weighted CTR and d
     );
     expect(cities.rows.find((r) => r.label === "Unknown city")?.visits).toBe(2);
     expect(cities.advertiser.status).toBe("unsupported");
+    expect(cities.clarity.aligned).toBe(false);
+    expect(cities.summary.claritySessions).toBeNull();
     expect(cities.summary.adSpend).toBeNull();
     const illinois = await statisticsReport({
       ...input,
@@ -4213,6 +4266,7 @@ it("compares zones and locations with honest traffic quality, weighted CTR and d
     ).toBe(400);
   } finally {
     vi.mocked(globalThis.fetch).mockImplementation(provider);
+    await db.claritySnapshot.delete({ where: { id: claritySnapshot.id } });
     await saveRuntimeSettings(
       { secrets: { PROPELLER_API_TOKEN: saved.PROPELLER_API_TOKEN } },
       "test",

@@ -16,7 +16,9 @@ export const clarityReportSchema = z.object({
   minimumSessions: z.number().int().min(1).max(100000).default(1),
 });
 
-class ClarityError extends Error {}
+export class ClarityError extends Error {}
+
+const STATISTICS_REFRESH_COOLDOWN_MS = 3 * 3600000;
 
 function requireConfiguration() {
   if (!env.CLARITY_PROJECT_ID || !env.CLARITY_EXPORT_TOKEN)
@@ -153,6 +155,59 @@ export async function syncClarityIfDue() {
   }
 }
 
+export async function refreshClarityForStatistics() {
+  requireConfiguration();
+  const [latest, saved] = await Promise.all([
+    db.claritySnapshot.findFirst({
+      orderBy: { fetchedAt: "desc" },
+      select: { fetchedAt: true },
+    }),
+    db.setting.findUnique({ where: { key: "claritySyncState" } }),
+  ]);
+  const state = (saved?.value ?? {}) as Record<string, unknown>;
+  const attemptedAt = Date.parse(String(state.attemptedAt ?? ""));
+  const lastRequestAt = Math.max(
+    latest?.fetchedAt.getTime() ?? 0,
+    Number.isFinite(attemptedAt) ? attemptedAt : 0,
+  );
+  const nextAt = lastRequestAt + STATISTICS_REFRESH_COOLDOWN_MS;
+  if (lastRequestAt && Date.now() < nextAt)
+    throw new ClarityError(
+      `Clarity was refreshed recently. Try again after ${new Date(nextAt).toLocaleString("en-US", { timeZone: "UTC", timeZoneName: "short" })}.`,
+    );
+  const requestedAt = new Date().toISOString();
+  await db.setting.upsert({
+    where: { key: "claritySyncState" },
+    create: {
+      key: "claritySyncState",
+      value: { ...state, status: "syncing", attemptedAt: requestedAt },
+    },
+    update: {
+      value: { ...state, status: "syncing", attemptedAt: requestedAt },
+    },
+  });
+  try {
+    return await importClarity(1, "owner");
+  } catch (error) {
+    const message =
+      error instanceof ClarityError
+        ? error.message
+        : "Clarity import could not be completed.";
+    await db.setting.update({
+      where: { key: "claritySyncState" },
+      data: {
+        value: {
+          ...state,
+          status: "error",
+          attemptedAt: requestedAt,
+          error: message,
+        },
+      },
+    });
+    throw new ClarityError(message);
+  }
+}
+
 function value(row: Record<string, unknown>, ...names: string[]) {
   const entry = Object.entries(row).find(([key]) =>
     names.some((name) => key.toLowerCase() === name.toLowerCase()),
@@ -193,6 +248,8 @@ export async function clarityReport(raw: unknown = {}) {
       configured: Boolean(env.CLARITY_PROJECT_ID && env.CLARITY_EXPORT_TOKEN),
       snapshot: null,
       zones: [],
+      unattributedSessions: 0,
+      unattributedBotSessions: 0,
       note: "No Clarity export has been imported yet.",
     };
   const metrics = clarityExportSchema.parse(snapshot.metrics);
@@ -213,11 +270,13 @@ export async function clarityReport(raw: unknown = {}) {
     }
   >();
   let unattributedSessions = 0;
+  let unattributedBotSessions = 0;
   for (const row of traffic?.information ?? []) {
     const source = sourceFromRow(row);
     const sessions = number(row, "totalSessionCount");
     if (!source.campaignId || !source.zoneId) {
       unattributedSessions += sessions;
+      unattributedBotSessions += number(row, "totalBotSessionCount");
       continue;
     }
     const key = `${source.campaignId}\u0000${source.zoneId}`;
@@ -292,6 +351,7 @@ export async function clarityReport(raw: unknown = {}) {
     },
     zones,
     unattributedSessions,
+    unattributedBotSessions,
     note: "Clarity is supporting evidence. Compare these aggregates with SpareCash verification, applications, outcomes, cost and source evidence before excluding or scaling a zone.",
   };
 }

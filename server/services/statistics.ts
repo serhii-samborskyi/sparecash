@@ -9,6 +9,7 @@ import {
   unavailableAds,
   type AdRow,
 } from "./advertiser-statistics.js";
+import { clarityReport } from "./clarity.js";
 
 const day = z
   .string()
@@ -98,6 +99,10 @@ function counts(segment: Segment) {
     adClicks: null as number | null,
     adSpend: null as number | null,
     matchedPaidVisits: 0,
+    claritySessions: null as number | null,
+    clarityHumanSessions: null as number | null,
+    clarityBotSessions: null as number | null,
+    clarityPagesPerSessionWeighted: 0,
   };
 }
 type Counts = ReturnType<typeof counts>;
@@ -110,12 +115,13 @@ function propellerContext(value: Prisma.JsonValue): PropellerAdContext {
   ) as PropellerAdContext;
 }
 function finish(row: Counts) {
+  const { clarityPagesPerSessionWeighted, ...visible } = row;
   const comparableCosts =
     row.adSpend !== null &&
     row.visits > 0 &&
     row.matchedPaidVisits === row.visits;
   return {
-    ...row,
+    ...visible,
     revenue: rounded(row.revenue),
     recordedClickCost: rounded(row.recordedClickCost),
     adSpend: row.adSpend === null ? null : rounded(row.adSpend),
@@ -145,7 +151,32 @@ function finish(row: Counts) {
       ? rounded(row.revenue - row.adSpend!)
       : null,
     returnOnAdSpend: comparableCosts ? ratio(row.revenue, row.adSpend!) : null,
+    clarityBotRate:
+      row.claritySessions === null
+        ? null
+        : ratio(row.clarityBotSessions ?? 0, row.claritySessions),
+    clarityPagesPerSession:
+      row.claritySessions === null
+        ? null
+        : ratio(clarityPagesPerSessionWeighted, row.claritySessions),
   };
+}
+
+function addClarity(
+  target: Counts,
+  row: {
+    sessions: number;
+    humanSessions: number;
+    botSessions: number;
+    pagesPerSession: number;
+  },
+) {
+  target.claritySessions = (target.claritySessions ?? 0) + row.sessions;
+  target.clarityHumanSessions =
+    (target.clarityHumanSessions ?? 0) + row.humanSessions;
+  target.clarityBotSessions =
+    (target.clarityBotSessions ?? 0) + row.botSessions;
+  target.clarityPagesPerSessionWeighted += row.pagesPerSession * row.sessions;
 }
 
 export async function statisticsReport(input: StatisticsInput = {}) {
@@ -258,17 +289,26 @@ export async function statisticsReport(input: StatisticsInput = {}) {
     !query.device &&
     !query.browser &&
     !query.os;
-  const ads = supported
-    ? await advertiserStatistics(
-        { from, to, campaignIds, zoneId: query.zoneId, country: query.country },
-        query.refreshAds,
-      )
-    : {
-        ...unavailableAds(
-          "Ad CTR and spend are available for zones, campaigns, countries and days without landing, state, city or device filters. Other views show measured landing activity.",
-        ),
-        status: "unsupported" as const,
-      };
+  const [ads, clarity] = await Promise.all([
+    supported
+      ? advertiserStatistics(
+          {
+            from,
+            to,
+            campaignIds,
+            zoneId: query.zoneId,
+            country: query.country,
+          },
+          query.refreshAds,
+        )
+      : Promise.resolve({
+          ...unavailableAds(
+            "Ad CTR and spend are available for zones, campaigns, countries and days without landing, state, city or device filters. Other views show measured landing activity.",
+          ),
+          status: "unsupported" as const,
+        }),
+    clarityReport(),
+  ]);
   const groups = new Map<string, Counts>();
   const summary = counts({
     key: "total",
@@ -490,6 +530,69 @@ export async function statisticsReport(input: StatisticsInput = {}) {
       }
     }
   }
+  const clarityAligned =
+    ["zone", "campaign"].includes(query.groupBy) &&
+    !query.variantId &&
+    !query.country &&
+    !query.region &&
+    !query.city &&
+    !query.device &&
+    !query.browser &&
+    !query.os;
+  const scopedClarityZones = clarity.zones.filter(
+    (row) =>
+      (!query.campaignId || row.campaignId === query.campaignId) &&
+      (!query.zoneId || row.zoneId === query.zoneId),
+  );
+  if (clarityAligned) {
+    for (const clarityZone of scopedClarityZones) {
+      const segment =
+        query.groupBy === "zone"
+          ? make(
+              [clarityZone.campaignId, clarityZone.zoneId],
+              `Zone ${clarityZone.zoneId}`,
+              `Campaign ${clarityZone.campaignId}`,
+              {
+                campaignId: clarityZone.campaignId,
+                zoneId: clarityZone.zoneId,
+              },
+            )
+          : make(
+              [clarityZone.campaignId],
+              `Campaign ${clarityZone.campaignId}`,
+              "",
+              { campaignId: clarityZone.campaignId },
+            );
+      addClarity(group(segment), clarityZone);
+      addClarity(summary, clarityZone);
+    }
+  }
+  const clarityAttributedSessions = clarity.zones.reduce(
+    (total, row) => total + row.sessions,
+    0,
+  );
+  const clarityBotSessions = clarity.zones.reduce(
+    (total, row) => total + row.botSessions,
+    0,
+  );
+  const clarityHumanSessions = clarity.zones.reduce(
+    (total, row) => total + row.humanSessions,
+    0,
+  );
+  const clarityPagesWeighted = clarity.zones.reduce(
+    (total, row) => total + row.pagesPerSession * row.sessions,
+    0,
+  );
+  const clarityStatus = !clarity.configured
+    ? "unavailable"
+    : !clarity.snapshot || clarity.snapshot.rowCount === 0
+      ? "empty"
+      : Date.now() - clarity.snapshot.fetchedAt.getTime() > 26 * 3600000
+        ? "stale"
+        : "ready";
+  const nextClarityRefreshAt = clarity.snapshot
+    ? new Date(clarity.snapshot.fetchedAt.getTime() + 3 * 3600000).toISOString()
+    : null;
   const variants = [
     ...new Map(
       allVisits.map((v) => [
@@ -518,6 +621,35 @@ export async function statisticsReport(input: StatisticsInput = {}) {
       message: ads.message,
       fetchedAt: ads.fetchedAt,
       campaignIds,
+    },
+    clarity: {
+      status: clarityStatus,
+      message:
+        clarityStatus === "unavailable"
+          ? "Connect Microsoft Clarity in Integrations to add session quality evidence."
+          : clarityStatus === "empty"
+            ? "Clarity is connected and waiting for processed sessions."
+            : clarityStatus === "stale"
+              ? "The latest Clarity import is older than 26 hours."
+              : "Latest Microsoft Clarity session quality export.",
+      snapshot: clarity.snapshot,
+      summary: {
+        attributedSessions: clarityAttributedSessions,
+        humanSessions: clarityHumanSessions,
+        botSessions: clarityBotSessions,
+        botRate: ratio(clarityBotSessions, clarityAttributedSessions),
+        pagesPerSession: ratio(clarityPagesWeighted, clarityAttributedSessions),
+        unattributedSessions: clarity.unattributedSessions,
+      },
+      aligned: clarityAligned,
+      alignmentMessage: clarityAligned
+        ? "Clarity rows are matched by the campaign_id and zone_id captured in landing URLs."
+        : "Choose Campaign or Zone without landing, location, device, browser or OS filters to compare Clarity by source.",
+      refreshAvailable:
+        clarity.configured &&
+        (!nextClarityRefreshAt ||
+          Date.now() >= Date.parse(nextClarityRefreshAt)),
+      nextRefreshAt: nextClarityRefreshAt,
     },
     location: {
       configured: !!env.CLOUDFLARE_GEO_TOKEN,
@@ -561,6 +693,8 @@ export async function statisticsReport(input: StatisticsInput = {}) {
         "Creative, subzone, carrier, connection, language and version breakdowns use URL tokens supplied by PropellerAds. They are attribution metadata, not security evidence. URL-declared cost is retained for reconciliation but never booked as trusted spend.",
       window:
         "Visits and advertiser impressions/clicks use the selected UTC dates. Subscription and sale outcomes are observed through report time. Recent visits have had less time to convert; current-day advertiser totals can change.",
+      clarity:
+        "Microsoft Clarity reports a separate rolling export window. Human and bot session estimates are supporting evidence, not proof. Clarity columns are only aligned for unfiltered campaign and zone views; empty values mean unavailable, not zero.",
     },
   };
 }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDown,
   ArrowUp,
@@ -170,6 +170,17 @@ const columns: Record<string, Column[]> = {
       hint: "Separate cost source; never added to ad spend",
     },
   ],
+  clarity: [
+    { key: "claritySessions", label: "Clarity sessions" },
+    { key: "clarityHumanSessions", label: "Estimated human" },
+    { key: "clarityBotSessions", label: "Estimated bots" },
+    { key: "clarityBotRate", label: "Estimated bot rate", type: "rate" },
+    {
+      key: "clarityPagesPerSession",
+      label: "Pages / session",
+      type: "multiple",
+    },
+  ],
 };
 function dates(days: number): Pick<StatisticsInput, "from" | "to"> {
   const now = new Date();
@@ -202,6 +213,9 @@ export function Statistics() {
     [error, setError] = useState("");
   const [revision, setRevision] = useState(0),
     [advanced, setAdvanced] = useState(false);
+  const refreshAds = useRef(false);
+  const [claritySyncing, setClaritySyncing] = useState(false),
+    [clarityNotice, setClarityNotice] = useState("");
   const [view, setView] = useState("performance"),
     [search, setSearch] = useState(""),
     [minimum, setMinimum] = useState(0);
@@ -212,12 +226,14 @@ export function Statistics() {
   const [page, setPage] = useState(1);
   useEffect(() => {
     const controller = new AbortController();
+    const forceAds = refreshAds.current;
+    refreshAds.current = false;
     setLoading(true);
     setError("");
     setReport(null);
     void api<StatisticsReport>("/admin/statistics/report", {
       method: "POST",
-      body: JSON.stringify({ ...filters, refreshAds: revision > 0 }),
+      body: JSON.stringify({ ...filters, refreshAds: forceAds }),
       signal: controller.signal,
     })
       .then((data) => {
@@ -253,7 +269,16 @@ export function Statistics() {
   );
   const pages = Math.max(1, Math.ceil(rows.length / 50));
   const visible = rows.slice((page - 1) * 50, page * 50);
-  const activeColumns = columns[view];
+  const columnGroups = Object.entries(columns).filter(
+    ([key]) => key !== "clarity" || report?.clarity.aligned,
+  );
+  const activeColumns = columns[view] ?? columns.performance;
+  useEffect(() => {
+    if (report && view === "clarity" && !report.clarity.aligned) {
+      setView("performance");
+      setSort({ key: "visits", direction: "desc" });
+    }
+  }, [report, view]);
   const apply = (next: StatisticsInput) => {
     setRevision(0);
     setFilters(next);
@@ -284,6 +309,21 @@ export function Statistics() {
     link.download = `sparecash-${filters.groupBy}-${filters.from}-${filters.to}.csv`;
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+  const refreshClarity = async () => {
+    setClaritySyncing(true);
+    setClarityNotice("");
+    try {
+      await api("/admin/statistics/clarity/refresh", { method: "POST" });
+      setClarityNotice("Clarity import completed.");
+      setRevision((value) => value + 1);
+    } catch (e) {
+      setClarityNotice(
+        e instanceof Error ? e.message : "Clarity refresh failed.",
+      );
+    } finally {
+      setClaritySyncing(false);
+    }
   };
   return (
     <div className="statistics-page">
@@ -347,7 +387,10 @@ export function Statistics() {
             className="button secondary"
             type="button"
             disabled={loading}
-            onClick={() => setRevision((r) => r + 1)}
+            onClick={() => {
+              refreshAds.current = true;
+              setRevision((r) => r + 1);
+            }}
           >
             <RefreshCw size={16} />
             Refresh
@@ -571,6 +614,116 @@ export function Statistics() {
               </a>
             )}
           </div>
+          <section
+            className="panel statistics-clarity"
+            aria-label="Microsoft Clarity"
+          >
+            <div className="statistics-clarity-heading">
+              <div>
+                <span
+                  className={`statistics-status ${report.clarity.status}`}
+                />
+                <div>
+                  <h3>Microsoft Clarity</h3>
+                  <p>{report.clarity.message}</p>
+                </div>
+              </div>
+              {report.clarity.status === "unavailable" ? (
+                <a className="button secondary" href="/admin/integrations">
+                  Configure
+                  <ArrowUpRight size={14} />
+                </a>
+              ) : (
+                <button
+                  className="button secondary"
+                  type="button"
+                  disabled={claritySyncing || !report.clarity.refreshAvailable}
+                  onClick={refreshClarity}
+                >
+                  <RefreshCw
+                    size={15}
+                    className={claritySyncing ? "spin" : ""}
+                  />
+                  {claritySyncing ? "Importing…" : "Import latest"}
+                </button>
+              )}
+            </div>
+            {report.clarity.status === "empty" ? (
+              <div className="statistics-clarity-empty">
+                No processed Clarity rows yet. This does not mean zero bots or
+                zero sessions.
+              </div>
+            ) : report.clarity.snapshot ? (
+              <div className="statistics-clarity-metrics">
+                <div>
+                  <span>Attributed sessions</span>
+                  <strong>
+                    {number(report.clarity.summary.attributedSessions)}
+                  </strong>
+                </div>
+                <div>
+                  <span>Estimated human</span>
+                  <strong>
+                    {number(report.clarity.summary.humanSessions)}
+                  </strong>
+                </div>
+                <div>
+                  <span>Estimated bots</span>
+                  <strong>{number(report.clarity.summary.botSessions)}</strong>
+                </div>
+                <div>
+                  <span>Estimated bot rate</span>
+                  <strong>{pct(report.clarity.summary.botRate)}</strong>
+                </div>
+                <div>
+                  <span>Pages / session</span>
+                  <strong>
+                    {report.clarity.summary.pagesPerSession === null
+                      ? "—"
+                      : `${report.clarity.summary.pagesPerSession.toFixed(2)}×`}
+                  </strong>
+                </div>
+                <div>
+                  <span>Unattributed sessions</span>
+                  <strong>
+                    {number(report.clarity.summary.unattributedSessions)}
+                  </strong>
+                </div>
+              </div>
+            ) : null}
+            <div className="statistics-clarity-meta">
+              <span>
+                {report.clarity.snapshot ? (
+                  <>
+                    Rolling window:{" "}
+                    {new Date(
+                      report.clarity.snapshot.windowStart,
+                    ).toLocaleString()}{" "}
+                    –{" "}
+                    {new Date(
+                      report.clarity.snapshot.windowEnd,
+                    ).toLocaleString()}{" "}
+                    · imported{" "}
+                    {new Date(
+                      report.clarity.snapshot.fetchedAt,
+                    ).toLocaleString()}
+                  </>
+                ) : (
+                  "No Clarity export has been imported yet."
+                )}
+              </span>
+              <span>{report.clarity.alignmentMessage}</span>
+              {!report.clarity.refreshAvailable &&
+                report.clarity.nextRefreshAt && (
+                  <span>
+                    Next manual import after{" "}
+                    {new Date(report.clarity.nextRefreshAt).toLocaleString()}.
+                    Clarity allows 10 exports per day.
+                  </span>
+                )}
+              {clarityNotice && <span role="status">{clarityNotice}</span>}
+            </div>
+          </section>
           <div className="stats-grid statistics-summary">
             <div className="metric">
               <div>
@@ -700,7 +853,7 @@ export function Statistics() {
               </button>
             </div>
             <div className="statistics-tabs" aria-label="Metrics">
-              {Object.keys(columns).map((key) => (
+              {columnGroups.map(([key]) => (
                 <button
                   key={key}
                   className={view === key ? "active" : ""}
@@ -826,7 +979,8 @@ export function Statistics() {
                             <td
                               key={c.key}
                               className={
-                                c.key === "botRate" && (row.botRate ?? 0) > 0.3
+                                ["botRate", "clarityBotRate"].includes(c.key) &&
+                                (row[c.key] ?? 0) > 0.3
                                   ? "statistics-warning"
                                   : undefined
                               }
