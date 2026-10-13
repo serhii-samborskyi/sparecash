@@ -35,6 +35,7 @@ import {
 } from "../services/control.js";
 import { sources, blockSource } from "../services/traffic.js";
 import { statisticsReport } from "../services/statistics.js";
+import { refreshClarityForStatistics } from "../services/clarity.js";
 import { tick } from "../services/engine.js";
 import {
   unsubscribe,
@@ -129,6 +130,20 @@ adminRouter.post(
   }),
   async (req, res) => {
     res.set("Cache-Control", "no-store").json(await statisticsReport(req.body));
+  },
+);
+adminRouter.post(
+  "/statistics/clarity/refresh",
+  rateLimit({
+    windowMs: 3 * 3600000,
+    limit: 1,
+    standardHeaders: "draft-8",
+    legacyHeaders: false,
+  }),
+  async (_req, res) => {
+    res
+      .set("Cache-Control", "no-store")
+      .json(await refreshClarityForStatistics());
   },
 );
 adminRouter.get("/experiments/:id", async (req, res) => {
