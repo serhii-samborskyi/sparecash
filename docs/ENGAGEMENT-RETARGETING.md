@@ -42,6 +42,9 @@ classified as bot traffic.
   immutable visit configuration. Stores the first answer per question.
 - `QUIZ_COMPLETED`: derived by the server when that prefix completes a quiz path.
 - `UPDATES_OPENED`: optional updates were displayed; not qualifying engagement.
+- `CHANNEL_SELECTED`: the visitor chose one available update channel. It stores
+  only `PUSH`, `SMS`, or `EMAIL`, never the address or telephone number. A
+  verified selection qualifies the same re-engagement stage as quiz participation.
 - `CONTINUE_WITHOUT_UPDATES`: recorded by `/continue` for its optional-updates CTA.
 - `APPLICATION_CONTINUED`: recorded when the server creates an application click,
   for both the primary application path and the skip-updates path.

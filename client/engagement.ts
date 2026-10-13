@@ -1,6 +1,10 @@
 type EngagementEvent =
   | { kind: "UPDATES_OPENED" }
   | {
+      kind: "CHANNEL_SELECTED";
+      channel: "PUSH" | "SMS" | "EMAIL";
+    }
+  | {
       kind: "QUESTION_ANSWERED";
       questionId: string;
       answers: Record<string, string>;
