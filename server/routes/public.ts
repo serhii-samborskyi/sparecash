@@ -16,6 +16,7 @@ import {
   normalizePhone,
   nextLeadStatus,
   propellerAdContextSchema,
+  visibleQuestions,
 } from "../domain.js";
 import {
   hash,
@@ -360,7 +361,12 @@ publicRouter.post(
         ? visit.configSnapshot
         : visit.variant.config,
     );
-    const questions: (typeof config.questions)[number][] = [];
+    const questions = visibleQuestions(config.questions, input.answers);
+    for (const q of questions)
+      if (!q.options.includes(input.answers[q.id])) {
+        res.status(400).json({ error: `Choose an answer for: ${q.label}` });
+        return;
+      }
     const phone = input.phone ? normalizePhone(input.phone) : null;
     if (
       (input.channels.includes("EMAIL") && !input.email) ||
