@@ -2026,22 +2026,6 @@ summary {
   font-size: 8px;
   color: #a3ad98;
 }
-.channel-check {
-  position: absolute;
-  top: 7px;
-  right: 7px;
-  width: 13px;
-  height: 13px;
-  border: 1px solid #d9e1ce;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  color: white;
-}
-.selected .channel-check {
-  background: var(--public);
-  border-color: var(--public);
-}
 .application-card .field > span {
   color: #7c8e6c;
   font-size: 10px;
@@ -2061,22 +2045,25 @@ summary {
   color: var(--public);
   border-color: #d6e0c9;
 }
-.consent-check {
-  display: flex;
-  align-items: flex-start;
-  gap: 9px;
-  margin: 15px 0;
-  color: #a0aa94;
-  line-height: 1.7;
-  font-size: 9px;
+.click-consent {
+  margin: 16px 0;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--public-light) 55%, white);
 }
-.consent-check input {
-  accent-color: var(--public);
-  flex-shrink: 0;
-  margin: 3px 0 0;
+.click-consent p {
+  margin: 0;
+  color: #52654e;
+  font-size: 10px;
+  line-height: 1.6;
 }
-.consent-check a {
-  color: #6b8555;
+.click-consent p + p {
+  margin-top: 8px;
+}
+.click-consent a {
+  color: var(--public);
+  font-weight: 600;
+  text-underline-offset: 2px;
 }
 .turnstile-container {
   margin: 0;
@@ -2120,9 +2107,6 @@ summary {
 }
 .channel-choices small {
   color: #63735c;
-}
-.opt-in-details .consent-check {
-  color: #52654e;
 }
 .public-footer {
   max-width: 1180px;
@@ -2662,7 +2646,7 @@ summary {
   .utility-card h1 {
     font-size: 25px;
   }
-  .consent-check {
+  .click-consent p {
     font-size: 10px;
   }
   .fine-print {
@@ -2923,9 +2907,9 @@ summary {
 .application-card p {
   color: #7a8b6e;
 }
-.consent-check {
+.click-consent p {
   font-size: 11px;
-  color: #728466;
+  color: #52654e;
 }
 .application-card .field > span {
   font-size: 12px;
@@ -3274,7 +3258,7 @@ summary {
 
 /* Public form text must remain readable alongside the authored landing canvas. */
 .public-page .application-card p,
-.public-page .consent-check,
+.public-page .click-consent p,
 .public-page .application-card .field > span,
 .public-page .channel-choices button,
 .public-page .channel-choices small,
