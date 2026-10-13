@@ -188,6 +188,25 @@ publicRouter.post("/visit", async (req, res) => {
     ),
     turnstileSiteKey: env.TURNSTILE_SITE_KEY,
     oneSignalAppId: env.ONESIGNAL_APP_ID,
+    analytics: {
+      projectId: env.CLARITY_PROJECT_ID,
+      tags: {
+        experiment_id: experiment.id,
+        experiment_slug: experiment.slug,
+        variant_id: selected.id,
+        campaign_id:
+          visit.retargetingCampaignId ??
+          priorSource?.campaignId ??
+          input.campaignId,
+        zone_id: priorSource?.zoneId ?? input.zoneId,
+        creative_id:
+          typeof (visit.adContext as Record<string, unknown>)?.bannerId ===
+          "string"
+            ? String((visit.adContext as Record<string, unknown>).bannerId)
+            : input.adContext.bannerId,
+        visitor_verified: hasVisitorProof(visit) ? "true" : "false",
+      },
+    },
     deliveryEnabled: env.LIVE_DELIVERY === "true",
     availableChannels: (await subscriptionAvailability()).availableChannels,
     advertising: {

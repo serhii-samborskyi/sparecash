@@ -191,6 +191,13 @@ export async function saveChain(input: unknown, actor: string) {
 export async function integrationStatus() {
   return [
     {
+      id: "clarity",
+      name: "Microsoft Clarity",
+      purpose: "Behavior analytics & aggregate bot evidence",
+      connected: !!env.CLARITY_PROJECT_ID,
+      dataExport: !!env.CLARITY_EXPORT_TOKEN,
+    },
+    {
       id: "turnstile",
       name: "Cloudflare Turnstile",
       purpose: "Verify visitors",

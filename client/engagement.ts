@@ -1,3 +1,5 @@
+import { clarityEvent, clarityTag } from "./clarity";
+
 type EngagementEvent =
   | { kind: "UPDATES_OPENED" }
   | {
@@ -19,6 +21,9 @@ export function createEngagementTracker() {
     event: EngagementEvent,
   ) => {
     if (preview || !visitToken) return;
+    clarityEvent(event.kind.toLowerCase());
+    if (event.kind === "CHANNEL_SELECTED")
+      clarityTag("selected_channel", event.channel.toLowerCase());
     void fetch("/api/public/engagement", {
       method: "POST",
       credentials: "same-origin",

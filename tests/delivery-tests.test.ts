@@ -33,6 +33,7 @@ beforeEach(() => {
     ROUNDSKY_WEBHOOK_TOKEN: "test-roundsky",
     CLOUDFLARE_GEO_TOKEN: "",
     TURNSTILE_SECRET_KEY: "",
+    CLARITY_EXPORT_TOKEN: "",
     ONESIGNAL_APP_ID: "test-app",
     ONESIGNAL_API_KEY: "test-key",
     BREVO_API_KEY: "test-brevo",

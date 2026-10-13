@@ -3,6 +3,7 @@ import { env } from "../config.js";
 import { settings } from "./control.js";
 
 export const testProviderSchema = z.enum([
+  "clarity",
   "onesignal",
   "brevo",
   "bluebubbles",
@@ -78,7 +79,30 @@ export async function testProviderConnection(provider: Provider) {
   function requireValue(value: unknown, message: string) {
     if (!value) throw new CheckError(message);
   }
-  if (provider === "onesignal") {
+  if (provider === "clarity") {
+    await check("Data Export access", async () => {
+      requireValue(
+        env.CLARITY_PROJECT_ID && env.CLARITY_EXPORT_TOKEN,
+        "Save your Clarity project ID and Data Export token first.",
+      );
+      const url = new URL(
+        "https://www.clarity.ms/export-data/api/v1/project-live-insights",
+      );
+      url.searchParams.set("numOfDays", "1");
+      url.searchParams.set("dimension1", "URL");
+      await getJson(
+        url,
+        { Authorization: `Bearer ${env.CLARITY_EXPORT_TOKEN}` },
+        z.array(
+          z.object({
+            metricName: z.string(),
+            information: z.array(z.unknown()),
+          }),
+        ),
+      );
+      return "Project tracking and Data Export access confirmed. This check used one export request.";
+    });
+  } else if (provider === "onesignal") {
     await check("App access", async () => {
       requireValue(
         env.ONESIGNAL_APP_ID && env.ONESIGNAL_API_KEY,
@@ -210,7 +234,7 @@ export async function testProviderConnection(provider: Provider) {
         );
         return "The reply URL is registered for new-message. Send a real reply to verify incoming delivery.";
       });
-  } else {
+  } else if (provider === "propellerads") {
     await check("Account access", async () => {
       requireValue(
         env.PROPELLER_API_TOKEN,

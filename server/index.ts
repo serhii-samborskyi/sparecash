@@ -36,10 +36,12 @@ app.use(
                 "https://cdn.onesignal.com",
                 // The Web SDK loads its app configuration through a JSONP script.
                 "https://api.onesignal.com",
+                "https://www.clarity.ms",
               ],
               styleSrc: ["'self'", "'unsafe-inline'"],
               frameSrc: [
                 "https://challenges.cloudflare.com",
+                "https://*.clarity.ms",
                 "https://*.onesignal.com",
               ],
               connectSrc: [
@@ -53,6 +55,8 @@ app.use(
                 "data:",
                 "https://*.onesignal.com",
                 "https://my.rtmark.net",
+                "https://www.clarity.ms",
+                "https://*.clarity.ms",
               ],
               workerSrc: ["'self'", "blob:"],
               upgradeInsecureRequests: [],

@@ -10,6 +10,9 @@ export const publicRuntimeSchema = z
     LIVE_DELIVERY: z.enum(["true", "false"]).default("false"),
     LIVE_SOURCE_BLOCKING: z.enum(["true", "false"]).default("false"),
     TURNSTILE_SITE_KEY: z.string().max(500).default(""),
+    CLARITY_PROJECT_ID: z
+      .union([z.literal(""), z.string().regex(/^[a-z0-9]{6,64}$/i)])
+      .default(""),
     ONESIGNAL_APP_ID: z.string().max(200).default(""),
     BREVO_SENDER_EMAIL: z
       .union([z.literal(""), z.string().email()])
@@ -36,6 +39,7 @@ export const secretRuntimeSchema = z
       .union([z.literal(""), z.string().min(32).max(500)])
       .default(""),
     TURNSTILE_SECRET_KEY: optionalSecret,
+    CLARITY_EXPORT_TOKEN: optionalSecret,
     ONESIGNAL_API_KEY: optionalSecret,
     BREVO_API_KEY: optionalSecret,
     BLUEBUBBLES_PASSWORD: optionalSecret,

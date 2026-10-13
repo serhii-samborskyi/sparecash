@@ -4,14 +4,27 @@ All provider values and credentials below are configured in the owner **Settings
 
 ## Connection tests
 
-Settings auto-save when you leave a field; switches and selects save immediately. Wait for **All changes saved**, then use **Test connection** under OneSignal, Brevo, BlueBubbles, or PropellerAds. Tests work with live delivery and source exclusions disabled. Each result distinguishes credential access from incomplete setup; edits invalidate results and require saving before another test. Provider response bodies, credentials, and account data are not returned or included in the audit entry.
+Settings auto-save when you leave a field; switches and selects save immediately. Wait for **All changes saved**, then use **Test connection** under Microsoft Clarity, OneSignal, Brevo, BlueBubbles, or PropellerAds. Tests work with live delivery and source exclusions disabled. Each result distinguishes credential access from incomplete setup; edits invalidate results and require saving before another test. Provider response bodies, credentials, and account data are not returned or included in the audit entry.
 
+- **Microsoft Clarity:** reads one day of aggregate dashboard data to verify the Data Export token. The check consumes one of the project's ten daily export requests and does not import or return the rows. [Data Export reference](https://learn.microsoft.com/en-us/clarity/setup-and-installation/clarity-data-export-api).
 - **OneSignal:** reads one message listing using the app API key. This checks app access, not browser subscription or push delivery. [API reference](https://documentation.onesignal.com/reference/view-messages).
 - **Brevo:** checks account access, the saved sender's active status, the contact-list folder, and the app's business mailing address. Folder ID `0` is unconfigured. No campaign or email is created. [Senders](https://developers.brevo.com/reference/get-senders), [folders](https://developers.brevo.com/reference/get-folder).
 - **BlueBubbles:** reads server information and registered webhooks, checking that the current reply URL is registered for `new-message`. It does not verify SMS forwarding or actual incoming delivery; test those with your own phone. [Server API](https://docs.bluebubbles.app/server/developer-guides/rest-api-and-webhooks).
 - **PropellerAds:** reads the advertiser balance endpoint to verify API access, discarding the balance. This does not test exclusion write permissions or change campaigns. [API reference](https://ssp-api.propellerads.com/v5/docs/).
 
-Tests use authenticated owner-only `POST /api/admin/integrations/{provider}/test` endpoints (`onesignal`, `brevo`, `bluebubbles`, `propellerads`). Only saved settings are used. Requests time out after 12 seconds each and do not follow redirects.
+Tests use authenticated owner-only `POST /api/admin/integrations/{provider}/test` endpoints (`clarity`, `onesignal`, `brevo`, `bluebubbles`, `propellerads`). Only saved settings are used. Requests time out after 12 seconds each and do not follow redirects.
+
+## Microsoft Clarity
+
+Save the public project ID and the project's Data Export token in **Settings → Provider connections → Microsoft Clarity**. The token is stored with the other provider credentials, remains server-side, and is never returned through public routes, the admin configuration response, or MCP. Published landing visits load Clarity; owner previews, admin pages, legal pages, confirmation pages, and preferences pages do not.
+
+Before Clarity loads, the landing removes click IDs and other high-cardinality provider parameters from the visible URL. It retains only campaign, zone, and UTM attribution. The client sends non-personal session tags for experiment, variant, campaign, zone, creative, and verification state, plus events for quiz/update engagement, application continuation, subscription submission, and channel confirmation. It never sends names, email addresses, phone numbers, lead IDs, visit IDs, application IDs, or provider click IDs as custom tags. Contact controls are explicitly covered by `data-clarity-mask`; Clarity also masks input content in every masking mode. A saved advertising opt-out or Global Privacy Control prevents the Clarity script from loading.
+
+The worker imports one aggregate one-day dashboard snapshot when at least 20 hours have passed since its last attempt. Snapshots use the `URL`, `Campaign`, and `Device` dimensions, are retained for 90 days, and contain no recordings or submitted form values. Clarity limits exports to the last one to three days, 1,000 rows, three dimensions, and ten requests per project per day. The test button and manual `sync_clarity` calls also consume requests.
+
+Use `clarity_status` to inspect configuration and sync health, `sync_clarity` for an intentional manual import, and `clarity_report` for campaign/zone session, device, and estimated bot-session aggregates. Clarity estimates are supporting evidence only. Compare them with SpareCash verification, engagement and outcomes plus authenticated PropellerAds cost and source data. Clarity never changes source state, advertiser targeting, or the automatic exclusion rules.
+
+The site's Privacy Policy must disclose Microsoft Clarity analytics and link to Microsoft's privacy information. Review the Clarity project's masking and retention settings before launch. References: [Clarity client API and masking](https://learn.microsoft.com/en-us/clarity/setup-and-installation/clarity-api), [Clarity Data Export API](https://learn.microsoft.com/en-us/clarity/setup-and-installation/clarity-data-export-api), and [Microsoft Privacy Statement](https://privacy.microsoft.com/privacystatement).
 
 ## Confirm actual delivery
 
