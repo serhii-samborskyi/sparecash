@@ -49,6 +49,8 @@ app.use(
                 "https://*.onesignal.com",
                 "https://onesignal.com",
                 "https://challenges.cloudflare.com",
+                "https://www.clarity.ms",
+                "https://*.clarity.ms",
               ],
               imgSrc: [
                 "'self'",
