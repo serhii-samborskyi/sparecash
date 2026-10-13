@@ -120,12 +120,19 @@ function Landing({ preview }: { preview: boolean }) {
       current = false;
     };
   }, [preview]);
-  const selectChannel = (channel: string) => {
-    setChannels([channel]);
-    trackEngagement.current(session.visitToken, preview, {
-      kind: "CHANNEL_SELECTED",
-      channel: channel as "PUSH" | "SMS" | "EMAIL",
-    });
+  const toggleChannel = (channel: string) => {
+    const selected = channels.includes(channel);
+    setChannels((current) =>
+      current.includes(channel)
+        ? current.filter((item) => item !== channel)
+        : [...current, channel],
+    );
+    if (!selected) {
+      trackEngagement.current(session.visitToken, preview, {
+        kind: "CHANNEL_SELECTED",
+        channel: channel as "PUSH" | "SMS" | "EMAIL",
+      });
+    }
   };
   async function subscribe(e: React.FormEvent) {
     e.preventDefault();
@@ -426,7 +433,10 @@ function Landing({ preview }: { preview: boolean }) {
                 <span>YOUR CHOICE</span>
               </div>
               <h2>How would you like to get loan options?</h2>
-              <p>Choose one way to receive helpful updates, then continue.</p>
+              <p>
+                Choose one or more ways to receive helpful updates, then
+                continue.
+              </p>
               <div className="channel-choices">
                 {[
                   ["PUSH", "Browser notifications", "On this device", Bell],
@@ -442,8 +452,11 @@ function Landing({ preview }: { preview: boolean }) {
                       key={channel}
                       aria-pressed={channels.includes(channel)}
                       className={channels.includes(channel) ? "selected" : ""}
-                      onClick={() => selectChannel(channel)}
+                      onClick={() => toggleChannel(channel)}
                     >
+                      <span className="channel-check" aria-hidden="true">
+                        {channels.includes(channel) ? <Check size={12} /> : null}
+                      </span>
                       <Icon size={21} />
                       <b>{label}</b>
                       <small>{description}</small>
@@ -500,17 +513,19 @@ function Landing({ preview }: { preview: boolean }) {
                       </a>
                       .
                     </p>
-                    <p>
-                      {
-                        config[
-                          channels[0] === "EMAIL"
-                            ? "emailConsent"
-                            : channels[0] === "SMS"
-                              ? "smsConsent"
-                              : "pushConsent"
-                        ]
-                      }
-                    </p>
+                    {channels.map((channel) => (
+                      <p key={channel}>
+                        {
+                          config[
+                            channel === "EMAIL"
+                              ? "emailConsent"
+                              : channel === "SMS"
+                                ? "smsConsent"
+                                : "pushConsent"
+                          ]
+                        }
+                      </p>
+                    ))}
                   </div>
                   <button
                     className="button full"
