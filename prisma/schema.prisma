@@ -173,6 +173,20 @@ model AdStatisticsSnapshot {
   fetchedAt DateTime @default(now())
 }
 
+// Aggregate dashboard exports only. No recordings, contact fields or raw form data.
+model ClaritySnapshot {
+  id          String   @id @default(cuid())
+  days        Int
+  dimensions  String[]
+  metrics     Json
+  rowCount    Int
+  windowStart DateTime
+  windowEnd   DateTime
+  fetchedAt   DateTime @default(now())
+
+  @@index([fetchedAt])
+}
+
 // Browser journeys are deliberately not fingerprints or cross-device identities.
 model VisitorJourney {
   id                String                    @id @default(uuid())

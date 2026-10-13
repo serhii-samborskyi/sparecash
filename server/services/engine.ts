@@ -14,6 +14,7 @@ import { enroll } from "./journeys.js";
 import { evaluateSources } from "./traffic.js";
 import { sendingTimezone, nextSendingTime } from "../timezones.js";
 import { processAdvertiserConversions } from "./advertiser-conversions.js";
+import { syncClarityIfDue } from "./clarity.js";
 export async function tick() {
   return withRuntimeConfiguration(runTick);
 }
@@ -27,6 +28,7 @@ async function runTick() {
       >`SELECT pg_try_advisory_xact_lock(9241027) AS locked`;
       if (!state.locked) return { busy: true };
       const advertiserConversions = await processAdvertiserConversions();
+      const clarity = await syncClarityIfDue();
       await db.delivery.updateMany({
         where: {
           status: "SENDING",
@@ -243,7 +245,7 @@ async function runTick() {
         },
         update: { value: { at: new Date().toISOString(), sent } },
       });
-      return { sent, ...advertiserConversions, ...traffic };
+      return { sent, clarity, ...advertiserConversions, ...traffic };
     },
     { timeout: 240000, maxWait: 1000 },
   );

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { createEngagementTracker } from "./engagement";
+import { clarityEvent, clarityTag, initializeClarity } from "./clarity";
 import { propellerVisitAttribution } from "../shared/propeller-attribution";
 import { VisitorGate } from "./VisitorGate";
 import { LandingCanvas } from "./LandingCanvas";
@@ -76,6 +77,14 @@ function Landing({ preview }: { preview: boolean }) {
   const pushAttempt = useRef<AbortController | null>(null);
   const trackEngagement = useRef(createEngagementTracker());
   const updatesRecorded = useRef(false);
+  useEffect(() => {
+    if (!session || preview) return;
+    const gpc =
+      (navigator as Navigator & { globalPrivacyControl?: boolean })
+        .globalPrivacyControl === true;
+    if (gpc || session.advertising?.privacy === "DENIED") return;
+    initializeClarity(session.analytics ?? {});
+  }, [session, preview]);
   useEffect(() => {
     if (
       !session ||
@@ -158,6 +167,11 @@ function Landing({ preview }: { preview: boolean }) {
         company,
       });
       setResult(r);
+      clarityTag(
+        "submitted_channels",
+        channels.map((channel) => channel.toLowerCase()),
+      );
+      clarityEvent("subscription_submitted");
       void pixelRunner.current?.();
     } catch (e) {
       setError((e as Error).message);
@@ -220,6 +234,7 @@ function Landing({ preview }: { preview: boolean }) {
       );
       await confirmPushSubscription(result.leadToken, id, attempt.signal);
       setPushStatus("confirmed");
+      clarityEvent("push_subscription_confirmed");
       void pixelRunner.current?.();
     } catch (e) {
       if (!attempt.signal.aborted) {
@@ -238,6 +253,11 @@ function Landing({ preview }: { preview: boolean }) {
     if (preview) return;
     setBusy(true);
     try {
+      clarityEvent(
+        entryPoint === "optional_updates"
+          ? "continue_without_updates"
+          : "application_click",
+      );
       const r = result
         ? await post("/public/application", { leadToken: result.leadToken })
         : await post("/public/continue", {
@@ -324,6 +344,7 @@ function Landing({ preview }: { preview: boolean }) {
                           code,
                         });
                         setSmsConfirmed(true);
+                        clarityEvent("sms_subscription_confirmed");
                       } catch (e) {
                         setError((e as Error).message);
                       } finally {
@@ -455,7 +476,9 @@ function Landing({ preview }: { preview: boolean }) {
                       onClick={() => toggleChannel(channel)}
                     >
                       <span className="channel-check" aria-hidden="true">
-                        {channels.includes(channel) ? <Check size={12} /> : null}
+                        {channels.includes(channel) ? (
+                          <Check size={12} />
+                        ) : null}
                       </span>
                       <Icon size={21} />
                       <b>{label}</b>
@@ -464,7 +487,7 @@ function Landing({ preview }: { preview: boolean }) {
                   ))}
               </div>
               {channels.length > 0 && (
-                <div className="opt-in-details">
+                <div className="opt-in-details" data-clarity-mask="true">
                   {channels.includes("EMAIL") && (
                     <Field label="Email address">
                       <input

@@ -50,6 +50,7 @@ import {
 import { recordPostback } from "../server/services/postbacks";
 import { statisticsReport } from "../server/services/statistics";
 import { landingDesignExamples } from "../server/landing-design-guide";
+import { clarityReport } from "../server/services/clarity";
 let server: Server,
   base: string,
   cookie: string,
@@ -4253,5 +4254,73 @@ it("captures trusted arrival geography and does not fabricate locations from bro
       { secrets: { CLOUDFLARE_GEO_TOKEN: saved.CLOUDFLARE_GEO_TOKEN } },
       "test",
     );
+  }
+});
+
+it("summarizes Clarity exports by paid campaign and zone without exposing URLs", async () => {
+  const snapshot = await db.claritySnapshot.create({
+    data: {
+      days: 1,
+      dimensions: ["URL", "Campaign", "Device"],
+      rowCount: 3,
+      windowStart: new Date(Date.now() - 86400000),
+      windowEnd: new Date(),
+      metrics: [
+        {
+          metricName: "Traffic",
+          information: [
+            {
+              URL: `${env.APP_URL}/go/test?campaign_id=701&zone_id=801&click_id=must-not-return`,
+              Campaign: "ignored",
+              Device: "Mobile",
+              totalSessionCount: "10",
+              totalBotSessionCount: "2",
+              distantUserCount: "8",
+              PagesPerSessionPercentage: 2,
+            },
+            {
+              URL: `${env.APP_URL}/go/test?campaign_id=701&zone_id=801`,
+              Device: "Tablet",
+              totalSessionCount: "5",
+              totalBotSessionCount: "1",
+              distantUserCount: "4",
+              PagesPerSessionPercentage: 3,
+            },
+            {
+              URL: `${env.APP_URL}/go/direct`,
+              Device: "Desktop",
+              totalSessionCount: "7",
+              totalBotSessionCount: "0",
+              distantUserCount: "7",
+              PagesPerSessionPercentage: 1,
+            },
+          ],
+        },
+      ],
+    },
+  });
+  try {
+    const report = await clarityReport({
+      snapshotId: snapshot.id,
+      minimumSessions: 1,
+    });
+    expect(report.zones).toEqual([
+      expect.objectContaining({
+        campaignId: "701",
+        zoneId: "801",
+        sessions: 15,
+        botSessions: 3,
+        humanSessions: 12,
+        botRate: 0.2,
+        distinctUsers: 12,
+        pagesPerSession: 7 / 3,
+        devices: ["Mobile", "Tablet"],
+        urlCount: 2,
+      }),
+    ]);
+    expect(report.unattributedSessions).toBe(7);
+    expect(JSON.stringify(report)).not.toContain("must-not-return");
+  } finally {
+    await db.claritySnapshot.delete({ where: { id: snapshot.id } });
   }
 });

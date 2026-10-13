@@ -71,6 +71,12 @@ import {
   transitionLead,
   enrollExisting,
 } from "./services/journeys.js";
+import {
+  clarityReport,
+  clarityReportSchema,
+  clarityStatus,
+  importClarity,
+} from "./services/clarity.js";
 function makeServer() {
   const server = new McpServer(
     { name: "sparecash", version: "0.1.0" },
@@ -216,6 +222,26 @@ function makeServer() {
     statisticsSchema.shape,
     statisticsReport,
     true,
+  );
+  register(
+    "clarity_status",
+    "Read whether Clarity tracking and Data Export are configured, the last aggregate import, worker sync state, and whether automatic source blocking is enabled. Never returns the export token.",
+    {},
+    clarityStatus,
+    true,
+  );
+  register(
+    "clarity_report",
+    "Read the latest imported Clarity Traffic aggregates by PropellerAds campaign and zone. Includes Clarity bot and human session estimates, device coverage and the local source state. Treat as supporting evidence and compare with traffic_report, cost and verified outcomes before changing traffic.",
+    clarityReportSchema.shape,
+    clarityReport,
+    true,
+  );
+  register(
+    "sync_clarity",
+    "Fetch and store one aggregate Clarity Data Export window. This consumes one of Clarity's limited daily export requests. It never downloads recordings or contact/form values and does not change advertiser targeting.",
+    { days: z.union([z.literal(1), z.literal(2), z.literal(3)]).default(1) },
+    async ({ days }) => importClarity(days, "mcp"),
   );
   register(
     "followup_report",

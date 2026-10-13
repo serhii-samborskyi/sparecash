@@ -451,6 +451,19 @@ export function ConnectionSettings({
               "Match the x-sparecash-geo-token header in your Cloudflare rule.",
             )}
           </div>
+          <h3>Microsoft Clarity</h3>
+          <p className="help">
+            Tracks public landing behavior with masked form fields. The export
+            token stays server-side and powers daily aggregate zone reports.
+          </p>
+          <div className="form-grid">
+            {field("CLARITY_PROJECT_ID", "Clarity project ID")}
+            {secret("CLARITY_EXPORT_TOKEN", "Clarity Data Export token")}
+          </div>
+          {testButton("clarity", "Microsoft Clarity", [
+            "CLARITY_PROJECT_ID",
+            "CLARITY_EXPORT_TOKEN",
+          ])}
           <h3>OneSignal</h3>
           <div className="form-grid">
             {field("ONESIGNAL_APP_ID", "OneSignal app ID")}

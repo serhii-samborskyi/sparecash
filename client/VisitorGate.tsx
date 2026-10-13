@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { post } from "./api";
 import { createPixelRunner } from "./retargeting";
+import { clarityEvent, clarityTag } from "./clarity";
 
 let turnstileScript: Promise<void> | undefined;
 function loadVerification() {
@@ -113,6 +114,10 @@ export function VisitorGate({
                 setError("");
                 setExpiresAt(result.expiresAt);
                 updateVerified(result.verified);
+                if (result.verified) {
+                  clarityTag("visitor_verified", "true");
+                  clarityEvent("visitor_verified");
+                }
                 if (!result.verified)
                   setError("Verification did not finish. Please retry.");
               })

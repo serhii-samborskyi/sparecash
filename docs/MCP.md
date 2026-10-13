@@ -34,6 +34,7 @@ owner-level CRM access.
 Available tools:
 
 - `dashboard`, `integration_status`, `subscription_readiness`, `test_provider_connection`, `audit_log`
+- `clarity_status`, `clarity_report`, `sync_clarity`
 - `list_leads`, `get_lead`, `set_lead_timezone`, `update_lead_notes`, `record_decline`, `unsubscribe`
 - `save_experiment`, `experiment_results`
 - `landing_design_guide`, `validate_landing_design`
@@ -70,7 +71,9 @@ Live sends and paid-source exclusions require their live switches to be enabled 
 
 Before offering subscriptions, call `subscription_readiness`. Live visitors see a channel only when live delivery is enabled, its provider configuration is complete, and a `SUBSCRIBED` chain for that channel is active. When none qualify, the landing keeps its direct application action and hides the optional subscription form. The server also rejects unavailable channels before storing contact details or requesting confirmation. Owner previews continue to show all channels for content review.
 
-`test_provider_connection` accepts `onesignal`, `brevo`, `bluebubbles`, or `propellerads`. It uses read-only provider requests and returns sanitized checks; it never sends messages or returns credentials. Configuration readiness is not proof of delivery: check provider access, the persistent worker heartbeat, and an authorized delivery test separately before activating a follow-up sequence.
+`test_provider_connection` accepts `clarity`, `onesignal`, `brevo`, `bluebubbles`, or `propellerads`. It uses read-only provider requests and returns sanitized checks; it never sends messages or returns credentials. The Clarity test consumes one Data Export request but does not persist its rows. Configuration readiness is not proof of delivery: check provider access, the persistent worker heartbeat, and an authorized delivery test separately before activating a follow-up sequence.
+
+`clarity_status` reports whether landing tracking and Data Export are configured plus the latest import state. `sync_clarity` intentionally consumes one of Clarity's ten daily export requests and saves an aggregate one-to-three-day snapshot. `clarity_report` groups the latest snapshot by PropellerAds campaign and zone and joins the local source state. It exposes no recordings, form values, contact details, click IDs, or source URLs. Clarity bot-session estimates are supporting evidence; these tools never block zones or modify advertiser campaigns.
 
 Protocol reference: https://ts.sdk.modelcontextprotocol.io/server
 

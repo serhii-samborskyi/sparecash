@@ -26,6 +26,8 @@ beforeEach(() => {
     ROUNDSKY_WEBHOOK_TOKEN: "test-only-roundsky-secret",
     CLOUDFLARE_GEO_TOKEN: "",
     TURNSTILE_SECRET_KEY: "",
+    CLARITY_PROJECT_ID: "testproject",
+    CLARITY_EXPORT_TOKEN: "test-only-clarity-export-token",
     ONESIGNAL_APP_ID: "test-app-id",
     ONESIGNAL_API_KEY: "test-only-onesignal-key",
     BREVO_API_KEY: "test-only-brevo-key",
@@ -58,18 +60,40 @@ it("checks OneSignal with an app key through the read-only messages endpoint", a
   expect(options.body).toBeUndefined();
 });
 
-it.each(["onesignal", "brevo", "bluebubbles", "propellerads"] as const)(
+it.each([
+  "clarity",
+  "onesignal",
+  "brevo",
+  "bluebubbles",
+  "propellerads",
+] as const)(
   "reports missing %s credentials without an external request",
   async (provider) => {
     config.ONESIGNAL_API_KEY =
       config.BREVO_API_KEY =
       config.BLUEBUBBLES_PASSWORD =
       config.PROPELLER_API_TOKEN =
+      config.CLARITY_EXPORT_TOKEN =
         "";
     expect((await run(provider)).status).toBe("error");
     expect(fetchMock).not.toHaveBeenCalled();
   },
 );
+
+it("checks Clarity Data Export without exposing its token or importing data", async () => {
+  fetchMock.mockResolvedValue(
+    Response.json([{ metricName: "Traffic", information: [] }]),
+  );
+  const result = await run("clarity");
+  expect(result.status).toBe("success");
+  const [url, options] = fetchMock.mock.calls[0];
+  expect(String(url)).toContain("project-live-insights");
+  expect(new URL(url).searchParams.get("numOfDays")).toBe("1");
+  expect(options.headers.Authorization).toBe(
+    `Bearer ${config.CLARITY_EXPORT_TOKEN}`,
+  );
+  expect(JSON.stringify(result)).not.toContain(config.CLARITY_EXPORT_TOKEN);
+});
 
 it("warns about Brevo folder zero even with a valid API key and active sender", async () => {
   config.BREVO_FOLDER_ID = 0;
