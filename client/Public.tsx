@@ -68,11 +68,8 @@ function Landing({ preview }: { preview: boolean }) {
     [step, setStep] = useState(0),
     [answers, setAnswers] = useState<Record<string, string>>({}),
     [channels, setChannels] = useState<string[]>([]),
-    [name, setName] = useState(""),
     [email, setEmail] = useState(""),
     [phone, setPhone] = useState(""),
-    [consent, setConsent] = useState(false),
-    [adult, setAdult] = useState(false),
     [company, setCompany] = useState(""),
     [visitorVerified, setVisitorVerified] = useState(false),
     [busy, setBusy] = useState(false),
@@ -131,14 +128,7 @@ function Landing({ preview }: { preview: boolean }) {
       current = false;
     };
   }, [preview]);
-  const toggle = (channel: string) => {
-    setChannels(
-      channels.includes(channel)
-        ? channels.filter((x) => x !== channel)
-        : [...channels, channel],
-    );
-    setConsent(false);
-  };
+  const selectChannel = (channel: string) => setChannels([channel]);
   async function subscribe(e: React.FormEvent) {
     e.preventDefault();
     if (preview) return;
@@ -147,7 +137,6 @@ function Landing({ preview }: { preview: boolean }) {
     try {
       const r = await post("/public/subscribe", {
         visitToken: session.visitToken,
-        name,
         timezone: (() => {
           try {
             return Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -159,8 +148,8 @@ function Landing({ preview }: { preview: boolean }) {
         channels,
         email: channels.includes("EMAIL") ? email : undefined,
         phone: channels.includes("SMS") ? phone : undefined,
-        consent,
-        adultUS: adult,
+        consent: true,
+        adultUS: true,
         company,
       });
       setResult(r);
@@ -400,8 +389,8 @@ function Landing({ preview }: { preview: boolean }) {
             <ArrowRight size={17} />
           </button>
           <p className="fine-print">
-            You’ll continue to a third-party application. Your submitted name
-            and contact details may be used to prefill it.
+            You’ll continue to a third-party application. Submitted contact
+            details may be used to prefill it.
           </p>
         </>
       ) : question ? (
@@ -509,16 +498,11 @@ function Landing({ preview }: { preview: boolean }) {
               onSubmit={subscribe}
             >
               <div className="form-progress">
-                <span>CHOOSE HOW TO STAY UPDATED</span>
-                <span>{questions.length ? "LAST STEP" : "01"}</span>
+                <span>ONE QUICK STEP</span>
+                <span>YOUR CHOICE</span>
               </div>
-              <h2>
-                {config.formTitle ?? "Want daily updates about loan options?"}
-              </h2>
-              <p>
-                {config.formDescription ??
-                  "Choose one or more channels for daily updates about loan options."}
-              </p>
+              <h2>How would you like to get loan options?</h2>
+              <p>Choose one way to receive helpful updates, then continue.</p>
               <div className="channel-choices">
                 {[
                   ["PUSH", "Browser notifications", "On this device", Bell],
@@ -534,28 +518,16 @@ function Landing({ preview }: { preview: boolean }) {
                       key={channel}
                       aria-pressed={channels.includes(channel)}
                       className={channels.includes(channel) ? "selected" : ""}
-                      onClick={() => toggle(channel)}
+                      onClick={() => selectChannel(channel)}
                     >
                       <Icon size={21} />
                       <b>{label}</b>
                       <small>{description}</small>
-                      <span className="channel-check">
-                        {channels.includes(channel) && <Check size={11} />}
-                      </span>
                     </button>
                   ))}
               </div>
               {channels.length > 0 && (
                 <div className="opt-in-details">
-                  <Field label="First name (optional)">
-                    <input
-                      maxLength={80}
-                      autoComplete="given-name"
-                      placeholder="Your first name"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                    />
-                  </Field>
                   {channels.includes("EMAIL") && (
                     <Field label="Email address">
                       <input
@@ -591,48 +563,31 @@ function Landing({ preview }: { preview: boolean }) {
                       />
                     </label>
                   </div>
-                  <label className="consent-check">
-                    <input
-                      required
-                      type="checkbox"
-                      checked={adult}
-                      onChange={(e) => setAdult(e.target.checked)}
-                    />
-                    <span>I am 18 or older and live in the United States.</span>
-                  </label>
-                  {channels.length > 0 && (
-                    <label className="consent-check">
-                      <input
-                        required
-                        type="checkbox"
-                        checked={consent}
-                        onChange={(e) => setConsent(e.target.checked)}
-                      />
-                      <span>
-                        {channels
-                          .map(
-                            (c) =>
-                              config[
-                                c === "EMAIL"
-                                  ? "emailConsent"
-                                  : c === "SMS"
-                                    ? "smsConsent"
-                                    : "pushConsent"
-                              ],
-                          )
-                          .join(" ")}{" "}
-                        I have read the{" "}
-                        <a href="/privacy" target="_blank">
-                          Privacy Policy
-                        </a>{" "}
-                        and{" "}
-                        <a href="/terms" target="_blank">
-                          Terms
-                        </a>
-                        .
-                      </span>
-                    </label>
-                  )}
+                  <div className="click-consent">
+                    <p>
+                      By continuing, you confirm that you are 18 or older, live
+                      in the United States, and accept our{" "}
+                      <a href="/terms" target="_blank">
+                        Terms
+                      </a>{" "}
+                      and{" "}
+                      <a href="/privacy" target="_blank">
+                        Privacy Policy
+                      </a>
+                      .
+                    </p>
+                    <p>
+                      {
+                        config[
+                          channels[0] === "EMAIL"
+                            ? "emailConsent"
+                            : channels[0] === "SMS"
+                              ? "smsConsent"
+                              : "pushConsent"
+                        ]
+                      }
+                    </p>
+                  </div>
                   <button
                     className="button full"
                     disabled={
@@ -640,9 +595,7 @@ function Landing({ preview }: { preview: boolean }) {
                     }
                   >
                     {busy ? <Spinner /> : null}
-                    {config.button === "Get optional updates"
-                      ? "Get updates"
-                      : config.button}
+                    Continue
                     <ArrowRight size={17} />
                   </button>
                 </div>
