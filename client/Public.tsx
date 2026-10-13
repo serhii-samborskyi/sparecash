@@ -563,7 +563,7 @@ function Landing({ preview }: { preview: boolean }) {
     >
       {preview && (
         <div className="preview-banner">
-          Preview · Try the quiz and channel choices. Submissions are disabled.
+          Preview · Try the channel choice. Submissions are disabled.
         </div>
       )}
       <PublicHeader logoImage={config.logoImage} />
