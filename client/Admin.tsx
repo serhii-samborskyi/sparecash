@@ -591,7 +591,27 @@ export function Admin() {
                     </Badge>
                   </div>
                   <h2>{exp.name}</h2>
-                  <p className="muted">/go/{exp.slug}</p>
+                  <div className="experiment-url-row">
+                    <p className="muted">/go/{exp.slug}</p>
+                    <button
+                      className="url-copy-button"
+                      aria-label={`Copy full URL for ${exp.name}`}
+                      title={`${data.appUrl}/go/${exp.slug}`}
+                      onClick={async () => {
+                        try {
+                          await navigator.clipboard.writeText(
+                            `${data.appUrl}/go/${exp.slug}`,
+                          );
+                          notify("Landing URL copied");
+                        } catch {
+                          notify("Could not copy the landing URL");
+                        }
+                      }}
+                    >
+                      <Copy size={14} />
+                      Copy URL
+                    </button>
+                  </div>
                   <div className="variant-miniatures">
                     {exp.variants.slice(0, 4).map((variant: any, i: number) => (
                       <a
