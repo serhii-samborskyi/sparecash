@@ -48,7 +48,10 @@ import {
   retargetingReport,
 } from "../server/services/retargeting-report";
 import { recordPostback } from "../server/services/postbacks";
-import { statisticsReport } from "../server/services/statistics";
+import {
+  statisticsReport,
+  statisticsVisits,
+} from "../server/services/statistics";
 import { landingDesignExamples } from "../server/landing-design-guide";
 import { clarityReport } from "../server/services/clarity";
 import { recordPreQuizActivity } from "../server/services/engagement";
@@ -4124,8 +4127,18 @@ it("compares zones and locations with honest traffic quality, weighted CTR and d
   await create({ verificationState: "FAILED" });
   await db.visitEvent.createMany({
     data: [
-      { visitId: human.id, kind: "QUESTION_ANSWERED", questionId: "a" },
-      { visitId: human.id, kind: "QUESTION_ANSWERED", questionId: "b" },
+      {
+        visitId: human.id,
+        kind: "QUESTION_ANSWERED",
+        questionId: "a",
+        answer: "W2 employee",
+      },
+      {
+        visitId: human.id,
+        kind: "QUESTION_ANSWERED",
+        questionId: "b",
+        answer: "$5,000–$10,000",
+      },
       { visitId: human.id, kind: "QUIZ_COMPLETED" },
     ],
   });
@@ -4323,6 +4336,62 @@ it("compares zones and locations with honest traffic quality, weighted CTR and d
         (row) => row.label === "Creative 27516444",
       )?.visits,
     ).toBe(1);
+    const campaignVisits = await statisticsVisits({
+      ...input,
+      groupBy: "campaign",
+      segmentKey: JSON.stringify([campaignId]),
+      page: 1,
+      pageSize: 10,
+    });
+    expect(campaignVisits.total).toBe(4);
+    expect(campaignVisits.items).toHaveLength(4);
+    expect(
+      campaignVisits.items.find((visit) => visit.id === human.id),
+    ).toMatchObject({
+      source: { campaignId, zoneId: "111" },
+      adContext: { bannerId: "27516444", carrier: "Verizon" },
+      browserContext: { device: "Desktop", browser: "Chrome", os: "Windows" },
+      verification: { verified: true, state: "VERIFIED", botScore: 0 },
+      preQuiz: { activeSeconds: 30, clicks: 2, scrolls: 1 },
+      events: [
+        { kind: "QUESTION_ANSWERED", questionId: "a", answer: "W2 employee" },
+        {
+          kind: "QUESTION_ANSWERED",
+          questionId: "b",
+          answer: "$5,000–$10,000",
+        },
+        { kind: "QUIZ_COMPLETED" },
+      ],
+      leads: [
+        {
+          status: "NEW",
+          subscriptions: expect.arrayContaining([
+            expect.objectContaining({ channel: "EMAIL", status: "ACTIVE" }),
+            expect.objectContaining({ channel: "PUSH", status: "ACTIVE" }),
+          ]),
+        },
+      ],
+      applications: [
+        {
+          postbacks: expect.arrayContaining([
+            expect.objectContaining({ event: "SOLD", revenue: 3 }),
+          ]),
+        },
+      ],
+    });
+    expect(JSON.stringify(campaignVisits)).not.toContain("stats-EMAIL");
+    expect(JSON.stringify(campaignVisits)).not.toContain("statistics-test");
+    expect(
+      (
+        await statisticsVisits({
+          ...input,
+          groupBy: "creative",
+          segmentKey: JSON.stringify(["27516444"]),
+          page: 1,
+          pageSize: 10,
+        })
+      ).total,
+    ).toBe(1);
     const unauthorized = await request(
       "/api/admin/statistics/report",
       "POST",
@@ -4338,6 +4407,29 @@ it("compares zones and locations with honest traffic quality, weighted CTR and d
     expect(authorized.status).toBe(200);
     expect(authorized.data.summary.visits).toBe(4);
     expect(JSON.stringify(authorized.data)).not.toContain("stats-test-token");
+    const authorizedVisits = await request(
+      "/api/admin/statistics/visits",
+      "POST",
+      {
+        ...input,
+        groupBy: "campaign",
+        segmentKey: JSON.stringify([campaignId]),
+        page: 1,
+        pageSize: 10,
+      },
+      true,
+    );
+    expect(authorizedVisits.status).toBe(200);
+    expect(authorizedVisits.data.total).toBe(4);
+    expect(
+      (
+        await request("/api/admin/statistics/visits", "POST", {
+          ...input,
+          groupBy: "campaign",
+          segmentKey: JSON.stringify([campaignId]),
+        })
+      ).status,
+    ).toBe(401);
     expect(
       (
         await request(

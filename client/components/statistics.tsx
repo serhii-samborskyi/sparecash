@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { api, money, number } from "../api";
 import { Empty, Field, Spinner } from "./ui";
+import { StatisticsVisitsModal } from "./statistics-visits";
 import {
   orderStatistics,
   statisticsCsv,
@@ -261,6 +262,7 @@ export function Statistics() {
     direction: "asc" | "desc";
   }>({ key: "visits", direction: "desc" });
   const [page, setPage] = useState(1);
+  const [visitsRow, setVisitsRow] = useState<StatisticsRow | null>(null);
   useEffect(() => {
     const controller = new AbortController();
     const forceAds = refreshAds.current;
@@ -1047,6 +1049,20 @@ export function Statistics() {
                                     {number(row.preQuizMeasuredVisits)} measured
                                   </small>
                                 </>
+                              ) : c.key === "visits" ? (
+                                <button
+                                  className="statistics-visits-link"
+                                  disabled={!row.visits}
+                                  title={
+                                    row.visits
+                                      ? `Open ${number(row.visits)} individual visit records`
+                                      : "No tracked visits"
+                                  }
+                                  onClick={() => setVisitsRow(row)}
+                                >
+                                  <b>{display(row[c.key], c.type)}</b>
+                                  {!!row.visits && <ArrowUpRight size={13} />}
+                                </button>
                               ) : (
                                 <b>{display(row[c.key], c.type)}</b>
                               )}
@@ -1111,6 +1127,13 @@ export function Statistics() {
             </p>
           </details>
         </>
+      )}
+      {visitsRow && (
+        <StatisticsVisitsModal
+          filters={filters}
+          row={visitsRow}
+          onClose={() => setVisitsRow(null)}
+        />
       )}
     </div>
   );

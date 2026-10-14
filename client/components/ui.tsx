@@ -40,11 +40,13 @@ export function Modal({
   children,
   onClose,
   wide = false,
+  className = "",
 }: {
   title: string;
   children: ReactNode;
   onClose: () => void;
   wide?: boolean;
+  className?: string;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   useEffect(() => {
@@ -61,7 +63,12 @@ export function Modal({
     };
   }, [onClose]);
   return (
-    <dialog className={wide ? "modal wide" : "modal"} ref={dialog}>
+    <dialog
+      className={["modal", wide ? "wide" : "", className]
+        .filter(Boolean)
+        .join(" ")}
+      ref={dialog}
+    >
       <div className="modal-heading">
         <h2>{title}</h2>
         <button

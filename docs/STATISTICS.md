@@ -14,6 +14,15 @@ include country and state so identically named cities are not combined.
 Filters can combine dates, campaign, zone, landing, country, state, city,
 device, browser and operating system. Unknown dimensions remain visible.
 
+Select a nonzero **Visits** value to open the matching visit records. The
+paginated explorer preserves the current date range, report filters and exact
+row key, including unattributed and provider-macro breakdowns. Its collapsed
+rows show arrival time, traffic source, landing, visitor context, quality,
+pre-quiz activity and furthest outcome. Expand one to inspect stored
+attribution macros, verification evidence and attempts, the event/answer
+timeline, subscription states, application postbacks, advertiser conversion
+feedback and retargeting activity.
+
 ## Metrics
 
 | Metric                           | Definition                                                                                                                                                                                     |
@@ -102,11 +111,18 @@ client claims and do not increase a visit's verification or bot score.
 ## API, deployment and limits
 
 Owner-only `POST /api/admin/statistics/report` and MCP `statistics_report` accept
-the same filters. Date strings are `YYYY-MM-DD`; MCP defaults to 30 days and the
-app supplies its selected dates. Both use the same calculation service. The
-owner endpoint retains authentication, origin checks and a 20 requests/minute
-limit. No contact addresses, names, raw user agents or verification tokens are
-returned.
+the same aggregate filters. Date strings are `YYYY-MM-DD`; MCP defaults to 30
+days and the app supplies its selected dates. Both use the same calculation
+service. The aggregate owner endpoint retains authentication, origin checks and
+a 20 requests/minute limit.
+
+The owner-only `POST /api/admin/statistics/visits` endpoint powers the click
+explorer. It additionally requires the selected group and exact segment key,
+returns up to 50 visits per page in the interface, and is limited to 30
+requests/minute. It can return lead names and raw user agents needed for owner
+diagnosis. It deliberately excludes IP hashes, verification token hashes and
+subscription addresses. The service scans at most 50,000 candidate visits so
+macro, device and unknown-value rows match the aggregate report exactly.
 
 Deploy migrations `202610110003_traffic_statistics` and
 `202610130002_prequiz_activity` with the web and worker release; the standard

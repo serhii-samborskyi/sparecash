@@ -34,7 +34,7 @@ import {
   audit,
 } from "../services/control.js";
 import { sources, blockSource } from "../services/traffic.js";
-import { statisticsReport } from "../services/statistics.js";
+import { statisticsReport, statisticsVisits } from "../services/statistics.js";
 import { refreshClarityForStatistics } from "../services/clarity.js";
 import { tick } from "../services/engine.js";
 import {
@@ -130,6 +130,18 @@ adminRouter.post(
   }),
   async (req, res) => {
     res.set("Cache-Control", "no-store").json(await statisticsReport(req.body));
+  },
+);
+adminRouter.post(
+  "/statistics/visits",
+  rateLimit({
+    windowMs: 60000,
+    limit: 30,
+    standardHeaders: "draft-8",
+    legacyHeaders: false,
+  }),
+  async (req, res) => {
+    res.set("Cache-Control", "no-store").json(await statisticsVisits(req.body));
   },
 );
 adminRouter.post(

@@ -60,6 +60,15 @@ export const statisticsSchema = z
   })
   .strict();
 export type StatisticsInput = z.input<typeof statisticsSchema>;
+export const statisticsVisitsSchema = statisticsSchema
+  .omit({ refreshAds: true })
+  .extend({
+    segmentKey: z.string().min(1).max(500),
+    page: z.number().int().min(1).default(1),
+    pageSize: z.number().int().min(10).max(100).default(50),
+  })
+  .strict();
+export type StatisticsVisitsInput = z.input<typeof statisticsVisitsSchema>;
 type Segment = {
   key: string;
   label: string;
@@ -118,6 +127,82 @@ function propellerContext(value: Prisma.JsonValue): PropellerAdContext {
       (entry): entry is [string, string] => typeof entry[1] === "string",
     ),
   ) as PropellerAdContext;
+}
+
+function visitSegmentKey(
+  visit: {
+    createdAt: Date;
+    country: string | null;
+    region: string | null;
+    city: string | null;
+    userAgent: string;
+    adContext: Prisma.JsonValue;
+    variantId: string;
+    source: { campaignId: string; zoneId: string } | null;
+  },
+  groupBy: z.output<typeof statisticsSchema>["groupBy"],
+) {
+  const context = browserContext(visit.userAgent);
+  const propeller = propellerContext(visit.adContext);
+  const campaign = visit.source?.campaignId;
+  const zone = visit.source?.zoneId;
+  switch (groupBy) {
+    case "zone":
+      return JSON.stringify([campaign, zone]);
+    case "campaign":
+      return JSON.stringify([campaign]);
+    case "landing":
+      return JSON.stringify([visit.variantId]);
+    case "country":
+      return JSON.stringify([visit.country]);
+    case "state":
+      return JSON.stringify([visit.country, visit.region]);
+    case "city":
+      return JSON.stringify([visit.country, visit.region, visit.city]);
+    case "day":
+      return JSON.stringify([visit.createdAt.toISOString().slice(0, 10)]);
+    case "creative":
+      return JSON.stringify([propeller.bannerId]);
+    case "subzone":
+      return JSON.stringify([propeller.subzoneId]);
+    case "connection":
+      return JSON.stringify([propeller.connectionType]);
+    case "carrier":
+      return JSON.stringify([propeller.carrier]);
+    case "language":
+      return JSON.stringify([propeller.language]);
+    case "browserVersion":
+      return JSON.stringify([propeller.browser, propeller.browserVersion]);
+    case "osVersion":
+      return JSON.stringify([propeller.os, propeller.osVersion]);
+    default:
+      return JSON.stringify([context[groupBy]]);
+  }
+}
+
+function statisticsWindow(query: { from?: string; to?: string }) {
+  const observedAt = new Date();
+  const today = observedAt.toISOString().slice(0, 10);
+  const to = query.to ?? today;
+  const from =
+    query.from ??
+    new Date(new Date(to).getTime() - 29 * 86400000).toISOString().slice(0, 10);
+  if (
+    from > to ||
+    to > today ||
+    new Date(to).getTime() - new Date(from).getTime() > 92 * 86400000
+  )
+    throw new Error(
+      "Choose a reporting period of up to 93 days ending today or earlier.",
+    );
+  return {
+    observedAt,
+    from,
+    to,
+    end: new Date(
+      Math.min(new Date(to).getTime() + 86400000, observedAt.getTime()),
+    ),
+  };
 }
 function finish(row: Counts) {
   const { clarityPagesPerSessionWeighted, preQuizActiveMs, ...visible } = row;
@@ -192,23 +277,7 @@ function addClarity(
 
 export async function statisticsReport(input: StatisticsInput = {}) {
   const query = statisticsSchema.parse(input);
-  const observedAt = new Date();
-  const today = observedAt.toISOString().slice(0, 10);
-  const to = query.to ?? today;
-  const from =
-    query.from ??
-    new Date(new Date(to).getTime() - 29 * 86400000).toISOString().slice(0, 10);
-  if (
-    from > to ||
-    to > today ||
-    new Date(to).getTime() - new Date(from).getTime() > 92 * 86400000
-  )
-    throw new Error(
-      "Choose a reporting period of up to 93 days ending today or earlier.",
-    );
-  const end = new Date(
-    Math.min(new Date(to).getTime() + 86400000, observedAt.getTime()),
-  );
+  const { observedAt, from, to, end } = statisticsWindow(query);
   const where: Prisma.VisitWhereInput = {
     createdAt: { gte: new Date(from), lt: end },
     ...(query.campaignId || query.zoneId
@@ -735,3 +804,307 @@ export async function statisticsReport(input: StatisticsInput = {}) {
   };
 }
 export type StatisticsReport = Awaited<ReturnType<typeof statisticsReport>>;
+
+export async function statisticsVisits(input: StatisticsVisitsInput) {
+  const query = statisticsVisitsSchema.parse(input);
+  const { from, to, end } = statisticsWindow(query);
+  const where: Prisma.VisitWhereInput = {
+    createdAt: { gte: new Date(from), lt: end },
+    ...(query.campaignId || query.zoneId
+      ? { source: { campaignId: query.campaignId, zoneId: query.zoneId } }
+      : {}),
+    ...(query.variantId ? { variantId: query.variantId } : {}),
+    ...(query.country ? { country: query.country } : {}),
+    ...(query.region ? { region: query.region } : {}),
+    ...(query.city ? { city: query.city } : {}),
+  };
+  const candidates = await db.visit.findMany({
+    where,
+    take: 50001,
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    select: {
+      id: true,
+      createdAt: true,
+      country: true,
+      region: true,
+      city: true,
+      userAgent: true,
+      adContext: true,
+      variantId: true,
+      source: { select: { campaignId: true, zoneId: true } },
+    },
+  });
+  if (candidates.length > 50000)
+    throw new Error(
+      "More than 50,000 visits match this view. Narrow the dates or filters before opening click details.",
+    );
+  const matching = candidates.filter((visit) => {
+    const context = browserContext(visit.userAgent);
+    return (
+      (!query.device || context.device === query.device) &&
+      (!query.browser || context.browser === query.browser) &&
+      (!query.os || context.os === query.os) &&
+      visitSegmentKey(visit, query.groupBy) === query.segmentKey
+    );
+  });
+  const start = (query.page - 1) * query.pageSize;
+  const pageIds = matching
+    .slice(start, start + query.pageSize)
+    .map((visit) => visit.id);
+  if (!pageIds.length)
+    return {
+      window: { from, to, timezone: "UTC" },
+      page: query.page,
+      pageSize: query.pageSize,
+      total: matching.length,
+      pages: Math.max(1, Math.ceil(matching.length / query.pageSize)),
+      items: [],
+    };
+  const [visits, pixelAttempts] = await Promise.all([
+    db.visit.findMany({
+      where: { id: { in: pageIds } },
+      select: {
+        id: true,
+        journeyId: true,
+        createdAt: true,
+        experimentId: true,
+        variantId: true,
+        externalClickId: true,
+        adContext: true,
+        userAgent: true,
+        country: true,
+        region: true,
+        city: true,
+        geoSource: true,
+        verificationState: true,
+        verified: true,
+        challenged: true,
+        verifiedAt: true,
+        verificationExpiresAt: true,
+        botScore: true,
+        evidence: true,
+        cost: true,
+        costRecorded: true,
+        preQuizMeasuredAt: true,
+        preQuizEndedAt: true,
+        preQuizActiveMs: true,
+        preQuizClicks: true,
+        preQuizScrolls: true,
+        retargetingCampaignId: true,
+        retargetingAudienceId: true,
+        source: { select: { id: true, campaignId: true, zoneId: true } },
+        experiment: { select: { name: true, slug: true } },
+        variant: { select: { name: true } },
+        journey: {
+          select: {
+            group: true,
+            privacy: true,
+            privacyAt: true,
+            eligibleAt: true,
+            suppressedAt: true,
+            suppressionReason: true,
+          },
+        },
+        verifications: {
+          orderBy: { createdAt: "asc" },
+          select: { state: true, errors: true, createdAt: true },
+        },
+        engagementEvents: {
+          orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+          select: {
+            kind: true,
+            questionId: true,
+            answer: true,
+            verifiedAt: true,
+            createdAt: true,
+          },
+        },
+        leads: {
+          orderBy: { createdAt: "asc" },
+          select: {
+            id: true,
+            name: true,
+            status: true,
+            timezone: true,
+            timezoneSource: true,
+            answers: true,
+            createdAt: true,
+            subscriptions: {
+              orderBy: { consentAt: "asc" },
+              select: {
+                channel: true,
+                status: true,
+                consentVersion: true,
+                consentAt: true,
+                confirmedAt: true,
+                stoppedAt: true,
+              },
+            },
+          },
+        },
+        applications: {
+          orderBy: { createdAt: "asc" },
+          select: {
+            id: true,
+            leadId: true,
+            deliveryId: true,
+            createdAt: true,
+            postbacks: {
+              orderBy: { createdAt: "asc" },
+              select: {
+                event: true,
+                revenue: true,
+                createdAt: true,
+              },
+            },
+            advertiserConversions: {
+              orderBy: { createdAt: "asc" },
+              select: {
+                event: true,
+                goal: true,
+                payout: true,
+                status: true,
+                attempts: true,
+                error: true,
+                createdAt: true,
+                attemptedAt: true,
+                sentAt: true,
+              },
+            },
+          },
+        },
+      },
+    }),
+    db.retargetingPixelAttempt.findMany({
+      where: { visitId: { in: pageIds } },
+      orderBy: { createdAt: "asc" },
+      select: {
+        visitId: true,
+        audienceId: true,
+        action: true,
+        state: true,
+        reason: true,
+        suppressionReason: true,
+        createdAt: true,
+        reportedAt: true,
+      },
+    }),
+  ]);
+  const byId = new Map(visits.map((visit) => [visit.id, visit]));
+  const pixelsByVisit = new Map<string, typeof pixelAttempts>();
+  for (const pixel of pixelAttempts) {
+    const current = pixelsByVisit.get(pixel.visitId) ?? [];
+    current.push(pixel);
+    pixelsByVisit.set(pixel.visitId, current);
+  }
+  const iso = (value: Date | null) => value?.toISOString() ?? null;
+  return {
+    window: { from, to, timezone: "UTC" },
+    page: query.page,
+    pageSize: query.pageSize,
+    total: matching.length,
+    pages: Math.max(1, Math.ceil(matching.length / query.pageSize)),
+    items: pageIds.flatMap((visitId) => {
+      const visit = byId.get(visitId);
+      if (!visit) return [];
+      return [
+        {
+          id: visit.id,
+          journeyId: visit.journeyId,
+          createdAt: visit.createdAt.toISOString(),
+          experimentId: visit.experimentId,
+          experiment: visit.experiment,
+          variantId: visit.variantId,
+          variant: visit.variant,
+          source: visit.source,
+          externalClickId: visit.externalClickId,
+          adContext: propellerContext(visit.adContext),
+          userAgent: visit.userAgent,
+          browserContext: browserContext(visit.userAgent),
+          location: {
+            country: visit.country,
+            region: visit.region,
+            city: visit.city,
+            source: visit.geoSource,
+          },
+          verification: {
+            state: visit.verificationState,
+            verified: visit.verified,
+            challenged: visit.challenged,
+            verifiedAt: iso(visit.verifiedAt),
+            expiresAt: iso(visit.verificationExpiresAt),
+            botScore: visit.botScore,
+            evidence: visit.evidence,
+            attempts: visit.verifications.map((attempt) => ({
+              ...attempt,
+              createdAt: attempt.createdAt.toISOString(),
+            })),
+          },
+          preQuiz: {
+            measuredAt: iso(visit.preQuizMeasuredAt),
+            endedAt: iso(visit.preQuizEndedAt),
+            activeSeconds: rounded(visit.preQuizActiveMs / 1000),
+            clicks: visit.preQuizClicks,
+            scrolls: visit.preQuizScrolls,
+          },
+          events: visit.engagementEvents.map((event) => ({
+            ...event,
+            verifiedAt: iso(event.verifiedAt),
+            createdAt: event.createdAt.toISOString(),
+          })),
+          cost: {
+            amount: Number(visit.cost),
+            recorded: visit.costRecorded,
+          },
+          leads: visit.leads.map((lead) => ({
+            ...lead,
+            createdAt: lead.createdAt.toISOString(),
+            subscriptions: lead.subscriptions.map((subscription) => ({
+              ...subscription,
+              consentAt: subscription.consentAt.toISOString(),
+              confirmedAt: iso(subscription.confirmedAt),
+              stoppedAt: iso(subscription.stoppedAt),
+            })),
+          })),
+          applications: visit.applications.map((application) => ({
+            ...application,
+            createdAt: application.createdAt.toISOString(),
+            postbacks: application.postbacks.map((postback) => ({
+              ...postback,
+              revenue: Number(postback.revenue),
+              createdAt: postback.createdAt.toISOString(),
+            })),
+            advertiserConversions: application.advertiserConversions.map(
+              (conversion) => ({
+                ...conversion,
+                payout: Number(conversion.payout),
+                createdAt: conversion.createdAt.toISOString(),
+                attemptedAt: iso(conversion.attemptedAt),
+                sentAt: iso(conversion.sentAt),
+              }),
+            ),
+          })),
+          retargeting: {
+            campaignId: visit.retargetingCampaignId,
+            audienceId: visit.retargetingAudienceId,
+            journey: visit.journey
+              ? {
+                  ...visit.journey,
+                  privacyAt: iso(visit.journey.privacyAt),
+                  eligibleAt: iso(visit.journey.eligibleAt),
+                  suppressedAt: iso(visit.journey.suppressedAt),
+                }
+              : null,
+            pixels: (pixelsByVisit.get(visit.id) ?? []).map((pixel) => ({
+              ...pixel,
+              createdAt: pixel.createdAt.toISOString(),
+              reportedAt: iso(pixel.reportedAt),
+            })),
+          },
+        },
+      ];
+    }),
+  };
+}
+
+export type StatisticsVisits = Awaited<ReturnType<typeof statisticsVisits>>;
