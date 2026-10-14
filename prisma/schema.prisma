@@ -153,6 +153,11 @@ model Visit {
   evidence              String[]
   cost                  Decimal               @default(0) @db.Decimal(12, 6)
   costRecorded          Boolean               @default(false)
+  preQuizMeasuredAt     DateTime?
+  preQuizEndedAt        DateTime?
+  preQuizActiveMs       Int                   @default(0)
+  preQuizClicks         Int                   @default(0)
+  preQuizScrolls        Int                   @default(0)
   createdAt             DateTime              @default(now())
   leads                 Lead[]
   applications          ApplicationClick[]

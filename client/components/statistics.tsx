@@ -52,7 +52,7 @@ const pct = (v: number | null) =>
 type Column = {
   key: NumericMetric;
   label: string;
-  type?: "rate" | "money" | "multiple";
+  type?: "rate" | "money" | "multiple" | "duration" | "activity";
   count?: NumericMetric;
   hint?: string;
 };
@@ -77,6 +77,18 @@ const columns: Record<string, Column[]> = {
       label: "Engagement",
       type: "rate",
       count: "engaged",
+    },
+    {
+      key: "preQuizAverageSeconds",
+      label: "Pre-quiz time",
+      type: "duration",
+      hint: "Average visible time before the first quiz answer",
+    },
+    {
+      key: "preQuizInteractions",
+      label: "Pre-quiz activity",
+      type: "activity",
+      hint: "Meaningful non-quiz clicks and separate scroll gestures",
     },
     {
       key: "subscriptionRate",
@@ -127,6 +139,18 @@ const columns: Record<string, Column[]> = {
       label: "Engagement",
       type: "rate",
       count: "engaged",
+    },
+    {
+      key: "preQuizAverageSeconds",
+      label: "Pre-quiz time",
+      type: "duration",
+      hint: "Average visible time before the first quiz answer",
+    },
+    {
+      key: "preQuizInteractions",
+      label: "Pre-quiz activity",
+      type: "activity",
+      hint: "Meaningful non-quiz clicks and separate scroll gestures",
     },
     { key: "quizStarted", label: "Quiz starts" },
     { key: "quizCompleted", label: "Quiz completions" },
@@ -200,6 +224,19 @@ function display(value: number | null, type?: Column["type"]) {
       : type === "multiple"
         ? `${value.toFixed(2)}×`
         : number(value);
+}
+
+function duration(value: number | null) {
+  if (value === null) return "—";
+  const seconds = Math.max(0, Math.round(value));
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  const remainder = seconds % 60;
+  if (minutes < 60)
+    return remainder ? `${minutes}m ${remainder}s` : `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  const minuteRemainder = minutes % 60;
+  return minuteRemainder ? `${hours}h ${minuteRemainder}m` : `${hours}h`;
 }
 
 export function Statistics() {
@@ -989,12 +1026,37 @@ export function Statistics() {
                                   : undefined
                               }
                             >
-                              <b>{display(row[c.key], c.type)}</b>
-                              {c.count && (
-                                <small>
-                                  {number(row[c.count] ?? 0)} visits
-                                </small>
+                              {c.type === "duration" ? (
+                                <>
+                                  <b>
+                                    {duration(row.preQuizAverageSeconds)} avg
+                                  </b>
+                                  <small>
+                                    {duration(row.preQuizActiveSeconds)} total ·{" "}
+                                    {number(row.preQuizMeasuredVisits)} measured
+                                  </small>
+                                </>
+                              ) : c.type === "activity" ? (
+                                <>
+                                  <b>
+                                    {number(row.preQuizClicks)} clicks ·{" "}
+                                    {number(row.preQuizScrolls)} scrolls
+                                  </b>
+                                  <small>
+                                    {number(row.preQuizActivityVisits)} active /{" "}
+                                    {number(row.preQuizMeasuredVisits)} measured
+                                  </small>
+                                </>
+                              ) : (
+                                <b>{display(row[c.key], c.type)}</b>
                               )}
+                              {c.count &&
+                                c.type !== "duration" &&
+                                c.type !== "activity" && (
+                                  <small>
+                                    {number(row[c.count] ?? 0)} visits
+                                  </small>
+                                )}
                             </td>
                           ))}
                         </tr>

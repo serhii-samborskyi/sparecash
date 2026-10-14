@@ -51,6 +51,7 @@ import { recordPostback } from "../server/services/postbacks";
 import { statisticsReport } from "../server/services/statistics";
 import { landingDesignExamples } from "../server/landing-design-guide";
 import { clarityReport } from "../server/services/clarity";
+import { recordPreQuizActivity } from "../server/services/engagement";
 let server: Server,
   base: string,
   cookie: string,
@@ -2970,6 +2971,28 @@ it("records anonymous quiz engagement once per visit without subscribing or send
   const before = providerCalls.length;
   const send = (event: object, visitToken = signed) =>
     request("/api/public/engagement", "POST", { visitToken, event });
+  const activity = (data: object, visitToken = signed) =>
+    request("/api/public/pre-quiz-activity", "POST", {
+      visitToken,
+      activity: data,
+    });
+  expect(
+    (
+      await activity({
+        activeMs: 12_000,
+        clicks: 2,
+        scrolls: 1,
+        complete: false,
+      })
+    ).status,
+  ).toBe(200);
+  // Cumulative snapshots are idempotent and never reduce stored totals.
+  await recordPreQuizActivity(visit.id, {
+    activeMs: 5_000,
+    clicks: 1,
+    scrolls: 0,
+    complete: false,
+  });
   expect((await send({ kind: "UPDATES_OPENED" }, "forged")).status).toBe(400);
   expect(
     (
@@ -3003,6 +3026,49 @@ it("records anonymous quiz engagement once per visit without subscribing or send
     200, 200, 200, 200, 200,
   ]);
   expect(await db.visitEvent.count({ where: { visitId: visit.id } })).toBe(1);
+  expect(
+    await recordPreQuizActivity(visit.id, {
+      activeMs: 20_000,
+      clicks: 3,
+      scrolls: 2,
+      complete: false,
+    }),
+  ).toBe(false);
+  // The browser's final snapshot is accepted if it races behind the answer.
+  expect(
+    await recordPreQuizActivity(visit.id, {
+      activeMs: 18_000,
+      clicks: 3,
+      scrolls: 2,
+      complete: true,
+    }),
+  ).toBe(true);
+  expect(
+    await recordPreQuizActivity(visit.id, {
+      activeMs: 80_000,
+      clicks: 30,
+      scrolls: 20,
+      complete: true,
+    }),
+  ).toBe(false);
+  expect(
+    await db.visit.findUniqueOrThrow({
+      where: { id: visit.id },
+      select: {
+        preQuizMeasuredAt: true,
+        preQuizEndedAt: true,
+        preQuizActiveMs: true,
+        preQuizClicks: true,
+        preQuizScrolls: true,
+      },
+    }),
+  ).toMatchObject({
+    preQuizMeasuredAt: expect.any(Date),
+    preQuizEndedAt: expect.any(Date),
+    preQuizActiveMs: 18_000,
+    preQuizClicks: 3,
+    preQuizScrolls: 2,
+  });
   // Editing the live variant cannot invalidate the configuration this visitor saw.
   await db.variant.update({
     where: { id: exp.variants[0].id },
@@ -4024,6 +4090,10 @@ it("compares zones and locations with honest traffic quality, weighted CTR and d
     geoSource: "TRUSTED_EDGE",
     costRecorded: true,
     cost: 0.5,
+    preQuizMeasuredAt: arrived,
+    preQuizActiveMs: 30_000,
+    preQuizClicks: 2,
+    preQuizScrolls: 1,
     adContext: {
       bannerId: "27516444",
       browser: "Chrome",
@@ -4042,6 +4112,9 @@ it("compares zones and locations with honest traffic quality, weighted CTR and d
     country: "US",
     region: "Massachusetts",
     city: "Springfield",
+    preQuizMeasuredAt: arrived,
+    preQuizActiveMs: 10_000,
+    preQuizScrolls: 1,
   });
   await create({ verificationState: "ERROR" });
   await create({ verificationState: "FAILED" });
@@ -4181,6 +4254,13 @@ it("compares zones and locations with honest traffic quality, weighted CTR and d
       verificationErrors: 1,
       engaged: 1,
       engagementRate: 0.25,
+      preQuizMeasuredVisits: 2,
+      preQuizActivityVisits: 2,
+      preQuizActiveSeconds: 40,
+      preQuizAverageSeconds: 20,
+      preQuizClicks: 2,
+      preQuizScrolls: 2,
+      preQuizInteractions: 4,
       subscribers: 1,
       subscriptionRate: 0.25,
       emailSubscribers: 1,

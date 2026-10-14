@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { createEngagementTracker } from "./engagement";
+import { startPreQuizActivityTracking } from "./pre-quiz-activity";
 import { clarityEvent, clarityTag, initializeClarity } from "./clarity";
 import { propellerVisitAttribution } from "../shared/propeller-attribution";
 import { VisitorGate } from "./VisitorGate";
@@ -90,6 +91,13 @@ function Landing({ preview }: { preview: boolean }) {
     if (gpc || session.advertising?.privacy === "DENIED") return;
     initializeClarity(session.analytics ?? {});
   }, [session, preview]);
+  useEffect(() => {
+    if (!session?.visitToken || preview) return;
+    return startPreQuizActivityTracking({
+      visitToken: session.visitToken,
+      initial: session.preQuizActivity,
+    });
+  }, [session?.visitToken, preview]);
   useEffect(() => {
     if (
       !session ||
@@ -450,6 +458,7 @@ function Landing({ preview }: { preview: boolean }) {
                 key={option}
                 className={answers[question.id] === option ? "selected" : ""}
                 onClick={() => {
+                  window.dispatchEvent(new Event("sparecash-quiz-started"));
                   const index = config.questions.findIndex(
                     (q: any) => q.id === question.id,
                   );
