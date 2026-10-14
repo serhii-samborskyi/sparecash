@@ -1,0 +1,53 @@
+/* Authored HTML is sanitized server-side and authored selectors are prefixed to
+   the content wrappers. The protected funnel is an application-owned sibling. */
+.public-page.has-custom-landing {
+  --public: #234d3e;
+  --public-bg: #ffffff;
+  --public-light: #e5efdb;
+  --green: #234d3e;
+  background: #fff;
+}
+.custom-landing {
+  width: 100%;
+  flex: 1;
+  overflow: hidden;
+}
+.custom-landing-content {
+  width: 100%;
+  min-width: 0;
+}
+.custom-landing-content *,
+.custom-landing-content *::before,
+.custom-landing-content *::after {
+  box-sizing: border-box;
+}
+.custom-landing-content img,
+.custom-landing-content iframe {
+  display: block;
+  max-width: 100%;
+}
+.custom-landing-content iframe {
+  border: 0;
+}
+.custom-landing-funnel {
+  width: min(100% - 24px, 760px);
+  margin: clamp(28px, 6vw, 80px) auto;
+  color: #234d3e;
+  font:
+    16px/1.6 "Manrope",
+    system-ui,
+    sans-serif;
+}
+.custom-landing-funnel > .application-card {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .custom-landing-content * {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

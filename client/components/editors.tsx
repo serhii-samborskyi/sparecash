@@ -205,23 +205,59 @@ export function ExperimentEditor({
         <div className="question-editor">
           <Field
             label="Design system"
-            hint="A canvas lets your AI arrange sections, columns, typography and artwork around the working form."
+            hint="Use a template, a structured canvas, or an immutable custom HTML/CSS source created through MCP."
           >
             <select
-              value={v.config.design ? "canvas" : "template"}
-              onChange={(e) =>
-                config(
-                  "design",
-                  e.target.value === "canvas"
-                    ? structuredClone(landingDesignExamples[0].design)
-                    : undefined,
-                )
+              value={
+                v.config.customLanding
+                  ? "custom"
+                  : v.config.design
+                    ? "canvas"
+                    : "template"
               }
+              onChange={(e) => {
+                const mode = e.target.value;
+                setForm((current: any) => ({
+                  ...current,
+                  variants: current.variants.map((item: any, index: number) =>
+                    index === selected
+                      ? {
+                          ...item,
+                          config: {
+                            ...item.config,
+                            design:
+                              mode === "canvas"
+                                ? structuredClone(
+                                    landingDesignExamples[0].design,
+                                  )
+                                : undefined,
+                            customLanding:
+                              mode === "custom"
+                                ? item.config.customLanding
+                                : undefined,
+                          },
+                        }
+                      : item,
+                  ),
+                }));
+              }}
             >
               <option value="template">Classic template</option>
               <option value="canvas">Composable canvas</option>
+              {v.config.customLanding && (
+                <option value="custom">Custom HTML/CSS source</option>
+              )}
             </select>
           </Field>
+          {v.config.customLanding && (
+            <p className="help">
+              This variant uses immutable custom source{" "}
+              <code>{v.config.customLanding.sourceId}</code>. Create and attach
+              a new source through MCP to change its authored HTML or CSS. The
+              quiz, channels, consent and application controls below remain
+              app-owned.
+            </p>
+          )}
           {v.config.design && (
             <>
               <p className="help">
@@ -303,7 +339,7 @@ export function ExperimentEditor({
               onChange={(e) => variant("weight", Number(e.target.value))}
             />
           </Field>
-          {!v.config.design && (
+          {!v.config.design && !v.config.customLanding && (
             <Field label="Headline">
               <input
                 value={v.config.title}
@@ -311,7 +347,7 @@ export function ExperimentEditor({
               />
             </Field>
           )}
-          {!v.config.design && (
+          {!v.config.design && !v.config.customLanding && (
             <Field label="Intro label">
               <input
                 value={v.config.eyebrow}
@@ -320,7 +356,7 @@ export function ExperimentEditor({
             </Field>
           )}
         </div>
-        {!v.config.design && (
+        {!v.config.design && !v.config.customLanding && (
           <Field label="Description">
             <textarea
               rows={3}
@@ -336,7 +372,7 @@ export function ExperimentEditor({
               onChange={(e) => config("button", e.target.value)}
             />
           </Field>
-          {!v.config.design && (
+          {!v.config.design && !v.config.customLanding && (
             <Field label="Color palette">
               <select
                 value={v.config.theme}
@@ -348,7 +384,7 @@ export function ExperimentEditor({
               </select>
             </Field>
           )}
-          {!v.config.design && (
+          {!v.config.design && !v.config.customLanding && (
             <Field label="Page layout">
               <select
                 value={v.config.layout}
@@ -360,7 +396,7 @@ export function ExperimentEditor({
               </select>
             </Field>
           )}
-          {!v.config.design && (
+          {!v.config.design && !v.config.customLanding && (
             <Field label="Typography">
               <select
                 value={v.config.typography}
@@ -371,7 +407,7 @@ export function ExperimentEditor({
               </select>
             </Field>
           )}
-          {!v.config.design && (
+          {!v.config.design && !v.config.customLanding && (
             <Field
               label="Custom accent color"
               hint="Optional six-digit hex color, such as #294961."
@@ -385,7 +421,7 @@ export function ExperimentEditor({
             </Field>
           )}
           <div className="asset-picker-row">
-            {!v.config.design && (
+            {!v.config.design && !v.config.customLanding && (
               <LandingAssetPicker
                 key={`hero-${selected}`}
                 label="Landing picture"
@@ -404,7 +440,7 @@ export function ExperimentEditor({
               onChange={(image) => config("logoImage", image)}
             />
           </div>
-          {!v.config.design && (
+          {!v.config.design && !v.config.customLanding && (
             <Field label="Picture placement">
               <select
                 value={v.config.heroPosition}
@@ -424,7 +460,7 @@ export function ExperimentEditor({
               <option value="true">Continue to application first</option>
             </select>
           </Field>
-          {!v.config.design && (
+          {!v.config.design && !v.config.customLanding && (
             <Field
               label="Decorative illustration"
               hint="Used only when no landing picture is selected."
@@ -452,7 +488,7 @@ export function ExperimentEditor({
               onChange={(e) => config("formDescription", e.target.value)}
             />
           </Field>
-          {!v.config.design && (
+          {!v.config.design && !v.config.customLanding && (
             <Field label="Benefits (one per line)">
               <textarea
                 rows={4}
@@ -462,7 +498,7 @@ export function ExperimentEditor({
             </Field>
           )}
         </div>
-        {!v.config.design && (
+        {!v.config.design && !v.config.customLanding && (
           <>
             <div className="editor-divider">
               <h3>Story sections</h3>

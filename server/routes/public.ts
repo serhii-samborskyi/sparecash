@@ -38,6 +38,7 @@ import { detectTimezone } from "../timezones.js";
 import { trustedIpTimezone } from "../services/timezones.js";
 import { trustedVisitLocation } from "../services/visit-context.js";
 import { sendVerification, verifyPush } from "../services/providers.js";
+import { hydrateCustomLandingConfig } from "../services/custom-landings.js";
 import {
   activateSubscription,
   unsubscribe,
@@ -184,10 +185,12 @@ publicRouter.post("/visit", async (req, res) => {
   res.json({
     visitToken,
     visitId: visit.id,
-    config: landingSchema.parse(
-      Object.keys(visit.configSnapshot as object).length
-        ? visit.configSnapshot
-        : selected.config,
+    config: await hydrateCustomLandingConfig(
+      landingSchema.parse(
+        Object.keys(visit.configSnapshot as object).length
+          ? visit.configSnapshot
+          : selected.config,
+      ),
     ),
     turnstileSiteKey: env.TURNSTILE_SITE_KEY,
     oneSignalAppId: env.ONESIGNAL_APP_ID,
