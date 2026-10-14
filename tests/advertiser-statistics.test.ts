@@ -79,6 +79,20 @@ it("fetches a complete advertiser report with POST and stores its scoped snapsho
   );
 });
 
+it("does not reject valid statistics when unused request metadata changes type", async () => {
+  fetchMock.mockResolvedValue(
+    Response.json({ result: [row], request_id: 174291 }),
+  );
+  const result = await run(true);
+  expect(result.status).toBe("ready");
+  expect(result.rows).toHaveLength(1);
+  expect(result.rows[0]).toMatchObject({
+    campaignId: "123",
+    zoneId: "456",
+    spend: 0.09,
+  });
+});
+
 it("uses cached reports and retains the last complete snapshot on a failed refresh", async () => {
   const cached = {
     fetchedAt: new Date(),

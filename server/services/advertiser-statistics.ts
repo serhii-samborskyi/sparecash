@@ -12,12 +12,19 @@ const id = z
 const rowSchema = z.object({
   campaign_id: id,
   zone_id: id,
-  campaign_name: z.string().optional(),
+  campaign_name: z.string().nullish(),
   country: z.string(),
   date_time: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   impressions: numeric.pipe(z.number().int()),
   clicks: numeric.pipe(z.number().int()),
   spent: numeric,
+});
+const reportSchema = z.object({
+  result: z.array(rowSchema).max(50_000),
+  // This provider metadata has changed type across API gateways and is not
+  // needed to reconcile advertiser totals. Do not reject valid rows because
+  // of an unused request identifier.
+  request_id: z.unknown().optional(),
 });
 export type AdRow = {
   campaignId: string;
@@ -147,12 +154,7 @@ async function load(
       throw new Error(
         `PropellerAds statistics returned HTTP ${response.status}.`,
       );
-    const data = z
-      .object({
-        result: z.array(rowSchema).max(50_000),
-        request_id: z.string().optional(),
-      })
-      .parse(await response.json());
+    const data = reportSchema.parse(await response.json());
     for (const item of data.result) {
       const country = item.country.match(/(?:^|\()([A-Z]{2})\)?$/)?.[1];
       if (
@@ -188,9 +190,16 @@ async function load(
       rows,
     };
   } catch (error) {
+    const oversized =
+      error instanceof z.ZodError &&
+      error.issues.some(
+        (issue) => issue.code === "too_big" && issue.path[0] === "result",
+      );
     const message =
       error instanceof z.ZodError
-        ? "PropellerAds returned an unsupported or oversized report. Narrow the date range or campaign."
+        ? oversized
+          ? "PropellerAds returned too many statistics rows. Narrow the date range or campaign."
+          : "PropellerAds returned an incompatible statistics response. Check the configured advertiser API endpoint."
         : error instanceof Error && error.message.startsWith("PropellerAds")
           ? error.message
           : "PropellerAds statistics could not be refreshed. Try again shortly.";
