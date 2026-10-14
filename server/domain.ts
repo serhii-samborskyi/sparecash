@@ -28,6 +28,16 @@ export const landingSchema = z
     eyebrow: z.string().max(80).default("A little breathing room"),
     title: z.string().min(3).max(120),
     description: z.string().min(10).max(400),
+    cityFallback: z
+      .string()
+      .trim()
+      .min(2)
+      .max(80)
+      .regex(/^[\p{L}\p{M} .'-]+$/u)
+      .optional()
+      .describe(
+        "Optional city used in {{city}} landing copy when trusted edge geolocation is unavailable, such as a city-targeted campaign preview.",
+      ),
     button: z.string().min(2).max(50).default("Explore my options"),
     theme: z.enum(["forest", "blue", "plum"]).default("forest"),
     layout: z.enum(["split", "centered", "editorial"]).default("split"),
@@ -185,6 +195,7 @@ export const propellerAdContextSchema = z
     connectionType: attributionText(),
     declaredCost: attributionText(50),
     country: attributionText(),
+    city: attributionText(100),
     device: attributionText(),
     language: attributionText(),
     os: attributionText(),

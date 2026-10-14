@@ -591,17 +591,27 @@ export async function getExperiment(id: string) {
     where: { id },
     include: { variants: true },
   });
+  const configs = experiment.variants.map((variant) =>
+    landingSchema.parse(variant.config),
+  );
+  const cityFallbacks = [
+    ...new Set(configs.map((config) => config.cityFallback).filter(Boolean)),
+  ];
+  const campaignCity =
+    cityFallbacks.length === 1 ? cityFallbacks[0] : undefined;
   return {
     ...experiment,
     url: `${env.APP_URL}/go/${experiment.slug}`,
     propellerUrl: propellerTargetUrl(
       `${env.APP_URL}/go/${experiment.slug}`,
       experiment.slug,
+      "push",
+      campaignCity,
     ),
     variants: await Promise.all(
-      experiment.variants.map(async (v) => ({
+      experiment.variants.map(async (v, index) => ({
         ...v,
-        config: await hydrateCustomLandingConfig(landingSchema.parse(v.config)),
+        config: await hydrateCustomLandingConfig(configs[index]),
         previewUrl: `${env.APP_URL}/preview/${experiment.id}?variant=${v.id}`,
       })),
     ),

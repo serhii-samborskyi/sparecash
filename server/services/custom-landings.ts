@@ -443,27 +443,73 @@ export type CustomLandingRuntime = {
   css: string;
 };
 
+const cityPattern = /^[\p{L}\p{M} .'-]{2,80}$/u;
+
+function landingCity(value: unknown, fallback: unknown) {
+  for (const candidate of [value, fallback, "your area"]) {
+    if (typeof candidate !== "string") continue;
+    const clean = candidate.trim();
+    if (cityPattern.test(clean)) return clean;
+  }
+  return "your area";
+}
+
+function replaceCityTokens(value: unknown, city: string): unknown {
+  if (typeof value === "string") return value.replaceAll("{{city}}", city);
+  if (Array.isArray(value))
+    return value.map((item) => replaceCityTokens(item, city));
+  if (value && typeof value === "object")
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [
+        key,
+        replaceCityTokens(item, city),
+      ]),
+    );
+  return value;
+}
+
+function escapeHtml(value: string) {
+  return value.replace(
+    /[&<>'"]/g,
+    (character) =>
+      ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        "'": "&#39;",
+        '"': "&quot;",
+      })[character]!,
+  );
+}
+
 export async function hydrateCustomLandingConfig<
   T extends {
     customLanding?: { sourceId: string };
+    cityFallback?: string;
   },
 >(
   config: T,
+  personalization: { city?: string | null } = {},
 ): Promise<
   Omit<T, "customLanding"> & { customLanding?: CustomLandingRuntime }
 > {
   const { customLanding, ...base } = config;
-  if (!customLanding) return base;
+  const city = landingCity(personalization.city, config.cityFallback);
+  const personalized = replaceCityTokens(base, city) as Omit<
+    T,
+    "customLanding"
+  >;
+  if (!customLanding) return personalized;
   const source = await db.landingSource.findUniqueOrThrow({
     where: { id: customLanding.sourceId },
   });
   return {
-    ...base,
+    ...personalized,
     customLanding: {
       sourceId: source.id,
       name: source.name,
-      htmlBefore: source.htmlBefore,
-      htmlAfter: source.htmlAfter,
+      htmlBefore: source.htmlBefore.replaceAll("{{city}}", escapeHtml(city)),
+      htmlAfter: source.htmlAfter.replaceAll("{{city}}", escapeHtml(city)),
       css: source.css,
     },
   };
