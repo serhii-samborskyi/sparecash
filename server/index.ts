@@ -63,6 +63,7 @@ app.use(
                 "https://my.rtmark.net",
                 "https://www.clarity.ms",
                 "https://*.clarity.ms",
+                "https://c.bing.com",
               ],
               workerSrc: ["'self'", "blob:"],
               upgradeInsecureRequests: [],
