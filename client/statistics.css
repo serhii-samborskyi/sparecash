@@ -336,6 +336,29 @@
   color: #718073;
   margin-top: 4px;
 }
+.statistics-visits-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+  min-width: 34px;
+  margin: -7px -9px -7px auto;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--green);
+  font: inherit;
+}
+.statistics-visits-link:not(:disabled):hover {
+  background: var(--soft);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.statistics-visits-link:disabled {
+  color: inherit;
+  cursor: default;
+}
 .statistics-segment {
   display: flex;
   align-items: center;
@@ -402,6 +425,230 @@
   line-height: 1.65;
   font-size: 12px;
 }
+.modal.statistics-visits-modal {
+  width: min(1360px, calc(100vw - 30px));
+}
+.statistics-visits-body {
+  display: grid;
+  gap: 18px;
+  padding: 22px;
+}
+.statistics-visits-intro {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+.statistics-visits-intro > div {
+  display: grid;
+  gap: 3px;
+  flex-shrink: 0;
+}
+.statistics-visits-intro strong {
+  font-size: 18px;
+}
+.statistics-visits-intro span,
+.statistics-visits-intro p {
+  color: #68766b;
+  font-size: 11px;
+  line-height: 1.55;
+}
+.statistics-visits-intro p {
+  max-width: 690px;
+  margin: 0;
+}
+.statistics-visits-loading {
+  min-height: 260px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: #68766b;
+  font-size: 12px;
+}
+.statistics-visit-list {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+}
+.statistics-visit-head,
+.statistics-visit > summary {
+  display: grid;
+  grid-template-columns:
+    minmax(125px, 0.9fr) minmax(135px, 0.95fr) minmax(155px, 1.15fr)
+    minmax(165px, 1.2fr) minmax(105px, 0.75fr) minmax(110px, 0.8fr)
+    minmax(120px, 0.85fr) 20px;
+  gap: 14px;
+  align-items: center;
+}
+.statistics-visit-head {
+  padding: 10px 16px;
+  background: #f5f7f1;
+  color: #647264;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.statistics-visit {
+  border-top: 1px solid var(--line);
+  background: #fff;
+}
+.statistics-visit:first-of-type {
+  border-top: 0;
+}
+.statistics-visit > summary {
+  position: relative;
+  padding: 15px 16px;
+  list-style: none;
+  cursor: pointer;
+}
+.statistics-visit > summary::-webkit-details-marker {
+  display: none;
+}
+.statistics-visit > summary:hover {
+  background: #fafbf7;
+}
+.statistics-visit > summary:focus-visible {
+  outline: 2px solid #689377;
+  outline-offset: -2px;
+}
+.statistics-visit > summary > span {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.statistics-visit > summary b {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.statistics-visit > summary small {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  overflow: hidden;
+  color: #738075;
+  font-size: 9px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.visit-quality.verified b {
+  color: #316749;
+}
+.visit-quality.bot b {
+  color: #a3562f;
+}
+.visit-quality.unknown b {
+  color: #68766b;
+}
+.visit-chevron {
+  color: #778578;
+  transition: transform 150ms ease;
+}
+.statistics-visit[open] .visit-chevron {
+  transform: rotate(180deg);
+}
+.visit-detail-body {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  padding: 1px;
+  border-top: 1px solid var(--line);
+  background: var(--line);
+}
+.visit-detail-body > section {
+  min-width: 0;
+  padding: 20px;
+  background: #fbfcf8;
+}
+.visit-detail-body h4 {
+  margin: 0 0 14px;
+  color: var(--green);
+  font-size: 12px;
+}
+.visit-key-values {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 11px 20px;
+  margin: 0;
+}
+.visit-key-values > div {
+  min-width: 0;
+}
+.visit-key-values dt {
+  margin-bottom: 3px;
+  color: #7a877b;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.visit-key-values dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: #31483b;
+  font-size: 11px;
+  line-height: 1.5;
+}
+.visit-timeline {
+  display: grid;
+  gap: 0;
+}
+.visit-timeline > div {
+  display: grid;
+  grid-template-columns: 118px minmax(120px, 0.7fr) minmax(0, 1.4fr);
+  gap: 12px;
+  padding: 9px 0;
+  border-top: 1px solid var(--line);
+  font-size: 10px;
+  line-height: 1.5;
+}
+.visit-timeline > div:first-child {
+  border-top: 0;
+}
+.visit-timeline time,
+.visit-timeline span {
+  color: #6c796e;
+}
+.visit-timeline.compact {
+  margin-top: 16px;
+}
+.visit-outcome-card {
+  padding: 13px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #fff;
+}
+.visit-outcome-card + .visit-outcome-card {
+  margin-top: 10px;
+}
+.visit-outcome-card p,
+.visit-pixel,
+.visit-empty-detail {
+  margin: 9px 0 0;
+  color: #677469;
+  font-size: 10px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.visit-outcome-card p:first-child,
+.visit-pixel:first-of-type {
+  margin-top: 0;
+}
+.statistics-visits-footer > div {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
 @media (max-width: 1000px) {
   .statistics-quality {
     grid-template-columns: 1fr;
@@ -411,6 +658,15 @@
   }
   .statistics-clarity-metrics {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .statistics-visit-head {
+    display: none;
+  }
+  .statistics-visit > summary {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) 20px;
+  }
+  .statistics-visit > summary > span:nth-of-type(4) {
+    grid-column: 1 / 3;
   }
 }
 @media (max-width: 700px) {
@@ -446,5 +702,29 @@
   }
   .statistics-pagination {
     flex-wrap: wrap;
+  }
+  .statistics-visits-intro,
+  .statistics-visits-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .statistics-visit > summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) 18px;
+    gap: 13px 9px;
+  }
+  .statistics-visit > summary > span:nth-of-type(4) {
+    grid-column: auto;
+  }
+  .visit-chevron {
+    grid-column: 3;
+    grid-row: 1;
+  }
+  .visit-detail-body,
+  .visit-key-values {
+    grid-template-columns: 1fr;
+  }
+  .visit-timeline > div {
+    grid-template-columns: 1fr;
+    gap: 2px;
   }
 }
