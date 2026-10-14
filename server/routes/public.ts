@@ -198,6 +198,12 @@ publicRouter.post("/visit", async (req, res) => {
           "string"
             ? String((visit.adContext as Record<string, unknown>).city)
             : input.adContext.city),
+        region:
+          visit.region ??
+          (typeof (visit.adContext as Record<string, unknown>)?.region ===
+          "string"
+            ? String((visit.adContext as Record<string, unknown>).region)
+            : input.adContext.region),
       },
     ),
     turnstileSiteKey: env.TURNSTILE_SITE_KEY,
@@ -224,6 +230,12 @@ publicRouter.post("/visit", async (req, res) => {
           "string"
             ? String((visit.adContext as Record<string, unknown>).city)
             : input.adContext.city),
+        landing_region:
+          visit.region ??
+          (typeof (visit.adContext as Record<string, unknown>)?.region ===
+          "string"
+            ? String((visit.adContext as Record<string, unknown>).region)
+            : input.adContext.region),
         visitor_verified: hasVisitorProof(visit) ? "true" : "false",
       },
     },

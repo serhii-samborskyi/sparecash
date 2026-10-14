@@ -445,24 +445,33 @@ export type CustomLandingRuntime = {
 
 const cityPattern = /^[\p{L}\p{M} .'-]{2,80}$/u;
 
-function landingCity(value: unknown, fallback: unknown) {
-  for (const candidate of [value, fallback, "your area"]) {
+function landingLocation(
+  value: unknown,
+  fallback: unknown,
+  defaultValue: string,
+) {
+  for (const candidate of [value, fallback, defaultValue]) {
     if (typeof candidate !== "string") continue;
     const clean = candidate.trim();
     if (cityPattern.test(clean)) return clean;
   }
-  return "your area";
+  return defaultValue;
 }
 
-function replaceCityTokens(value: unknown, city: string): unknown {
-  if (typeof value === "string") return value.replaceAll("{{city}}", city);
+function replaceLocationTokens(
+  value: unknown,
+  city: string,
+  region: string,
+): unknown {
+  if (typeof value === "string")
+    return value.replaceAll("{{city}}", city).replaceAll("{{region}}", region);
   if (Array.isArray(value))
-    return value.map((item) => replaceCityTokens(item, city));
+    return value.map((item) => replaceLocationTokens(item, city, region));
   if (value && typeof value === "object")
     return Object.fromEntries(
       Object.entries(value).map(([key, item]) => [
         key,
-        replaceCityTokens(item, city),
+        replaceLocationTokens(item, city, region),
       ]),
     );
   return value;
@@ -486,16 +495,26 @@ export async function hydrateCustomLandingConfig<
   T extends {
     customLanding?: { sourceId: string };
     cityFallback?: string;
+    regionFallback?: string;
   },
 >(
   config: T,
-  personalization: { city?: string | null } = {},
+  personalization: { city?: string | null; region?: string | null } = {},
 ): Promise<
   Omit<T, "customLanding"> & { customLanding?: CustomLandingRuntime }
 > {
   const { customLanding, ...base } = config;
-  const city = landingCity(personalization.city, config.cityFallback);
-  const personalized = replaceCityTokens(base, city) as Omit<
+  const city = landingLocation(
+    personalization.city,
+    config.cityFallback,
+    "your area",
+  );
+  const region = landingLocation(
+    personalization.region,
+    config.regionFallback,
+    "your state",
+  );
+  const personalized = replaceLocationTokens(base, city, region) as Omit<
     T,
     "customLanding"
   >;
@@ -508,8 +527,12 @@ export async function hydrateCustomLandingConfig<
     customLanding: {
       sourceId: source.id,
       name: source.name,
-      htmlBefore: source.htmlBefore.replaceAll("{{city}}", escapeHtml(city)),
-      htmlAfter: source.htmlAfter.replaceAll("{{city}}", escapeHtml(city)),
+      htmlBefore: source.htmlBefore
+        .replaceAll("{{city}}", escapeHtml(city))
+        .replaceAll("{{region}}", escapeHtml(region)),
+      htmlAfter: source.htmlAfter
+        .replaceAll("{{city}}", escapeHtml(city))
+        .replaceAll("{{region}}", escapeHtml(region)),
       css: source.css,
     },
   };

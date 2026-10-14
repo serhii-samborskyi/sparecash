@@ -155,6 +155,21 @@ describe("conditional landing quizzes", () => {
       }).success,
     ).toBe(false);
   });
+  it("accepts a plain-text region fallback and rejects markup", () => {
+    const base = {
+      title: "Explore options in {{region}}",
+      description: "Find your next step with optional updates.",
+    };
+    expect(
+      landingSchema.parse({ ...base, regionFallback: "Texas" }).regionFallback,
+    ).toBe("Texas");
+    expect(
+      landingSchema.safeParse({
+        ...base,
+        regionFallback: "<strong>Texas</strong>",
+      }).success,
+    ).toBe(false);
+  });
 });
 describe("journey rules", () => {
   it("never downgrades funded or approved outcomes with late postbacks", () => {
