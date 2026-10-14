@@ -88,6 +88,10 @@ import {
   clarityStatus,
   importClarity,
 } from "./services/clarity.js";
+import {
+  resetMarketingWorkspace,
+  workspaceResetConfirmation,
+} from "./services/workspace-reset.js";
 function makeServer() {
   const server = new McpServer(
     { name: "sparecash", version: "0.1.0" },
@@ -142,6 +146,14 @@ function makeServer() {
     {},
     marketingContext,
     true,
+  );
+  register(
+    "reset_marketing_workspace",
+    "Permanently delete every experiment, landing variant and asset; all visits, engagement, contacts, subscriptions, application events, postbacks, advertiser/Clarity statistics, retargeting data and follow-up chains. Preserves app settings, integration credentials and owner sessions. This cannot be undone. Requires the exact confirmation phrase.",
+    {
+      confirmation: z.literal(workspaceResetConfirmation),
+    },
+    async ({ confirmation }) => resetMarketingWorkspace(confirmation, "mcp"),
   );
   register(
     "subscription_readiness",

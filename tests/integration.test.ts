@@ -52,6 +52,10 @@ import { statisticsReport } from "../server/services/statistics";
 import { landingDesignExamples } from "../server/landing-design-guide";
 import { clarityReport } from "../server/services/clarity";
 import { recordPreQuizActivity } from "../server/services/engagement";
+import {
+  resetMarketingWorkspace,
+  workspaceResetConfirmation,
+} from "../server/services/workspace-reset";
 let server: Server,
   base: string,
   cookie: string,
@@ -4457,4 +4461,34 @@ it("summarizes Clarity exports by paid campaign and zone without exposing URLs",
   } finally {
     await db.claritySnapshot.delete({ where: { id: snapshot.id } });
   }
+});
+
+it("resets marketing content and statistics while preserving configuration", async () => {
+  const configuration = await readRuntimeConfiguration();
+  const generalSettings = await settings();
+
+  await expect(
+    resetMarketingWorkspace("wrong confirmation", "test"),
+  ).rejects.toThrow("Confirmation must exactly match");
+
+  const result = await resetMarketingWorkspace(
+    workspaceResetConfirmation,
+    "test",
+  );
+  expect(result.ok).toBe(true);
+  expect(result.deleted.experiments).toBeGreaterThan(0);
+  expect(await db.experiment.count()).toBe(0);
+  expect(await db.variant.count()).toBe(0);
+  expect(await db.visit.count()).toBe(0);
+  expect(await db.lead.count()).toBe(0);
+  expect(await db.chain.count()).toBe(0);
+  expect(await db.claritySnapshot.count()).toBe(0);
+  expect(await settings()).toEqual(generalSettings);
+  expect(await readRuntimeConfiguration()).toEqual(configuration);
+  expect(await db.auditLog.findMany()).toEqual([
+    expect.objectContaining({
+      actor: "test",
+      action: "workspace.marketing_reset",
+    }),
+  ]);
 });
