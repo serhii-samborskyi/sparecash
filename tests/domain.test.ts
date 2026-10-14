@@ -113,6 +113,33 @@ describe("conditional landing quizzes", () => {
       }).success,
     ).toBe(false);
   });
+  it("accepts a bounded post-quiz preparation stage", () => {
+    const base = {
+      title: "Explore options",
+      description: "Find your next step with optional updates.",
+    };
+    expect(
+      landingSchema.parse({
+        ...base,
+        searchTransition: {
+          durationMs: 7000,
+          steps: ["Reviewing your answers", "Your next step is ready"],
+        },
+      }).searchTransition,
+    ).toEqual({
+      durationMs: 7000,
+      steps: ["Reviewing your answers", "Your next step is ready"],
+    });
+    expect(
+      landingSchema.safeParse({
+        ...base,
+        searchTransition: {
+          durationMs: 3000,
+          steps: ["Reviewing your answers", "Your next step is ready"],
+        },
+      }).success,
+    ).toBe(false);
+  });
 });
 describe("journey rules", () => {
   it("never downgrades funded or approved outcomes with late postbacks", () => {

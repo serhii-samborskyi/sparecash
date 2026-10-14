@@ -81,6 +81,24 @@ export const landingSchema = z
         "Choose one or more channels for daily updates about loan options.",
       ),
     questions: z.array(questionSchema).max(8).default([]),
+    searchTransition: z
+      .object({
+        durationMs: z.number().int().min(4000).max(10000).default(7000),
+        steps: z
+          .array(z.string().min(3).max(100))
+          .min(2)
+          .max(4)
+          .default([
+            "Reviewing your answers",
+            "Preparing your lender-network request",
+            "Your next step is ready",
+          ]),
+      })
+      .strict()
+      .optional()
+      .describe(
+        "Optional honest preparation stage shown after the quiz and before channel choice. It must not claim approval, matching or lender results.",
+      ),
     consentVersion: z.string().min(1).max(40).default("v1"),
     emailConsent: z
       .string()

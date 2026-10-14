@@ -5,6 +5,8 @@ import { hasVisitorProof } from "./visitor-verification.js";
 
 export const engagementSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("UPDATES_OPENED") }).strict(),
+  z.object({ kind: z.literal("SEARCH_STARTED") }).strict(),
+  z.object({ kind: z.literal("SEARCH_COMPLETED") }).strict(),
   z
     .object({
       kind: z.literal("CHANNEL_SELECTED"),
@@ -40,7 +42,11 @@ export function engagementEvents(
   input: unknown,
 ): Event[] {
   const event = engagementSchema.parse(input);
-  if (event.kind === "UPDATES_OPENED")
+  if (
+    event.kind === "UPDATES_OPENED" ||
+    event.kind === "SEARCH_STARTED" ||
+    event.kind === "SEARCH_COMPLETED"
+  )
     return [{ kind: event.kind, questionId: "" }];
   if (event.kind === "CHANNEL_SELECTED")
     return [
@@ -150,6 +156,8 @@ export function engagementCounts(
     engagedVisitors: visits.filter((v) => v.engagementEvents.length > 0).length,
     quizStartedVisitors: has("QUESTION_ANSWERED"),
     quizCompletedVisitors: has("QUIZ_COMPLETED"),
+    searchStartedVisitors: has("SEARCH_STARTED"),
+    searchCompletedVisitors: has("SEARCH_COMPLETED"),
     channelSelectedVisitors: has("CHANNEL_SELECTED"),
     updatesOpenedVisitors: has("UPDATES_OPENED"),
     continuedWithoutUpdatesVisitors: has("CONTINUE_WITHOUT_UPDATES"),

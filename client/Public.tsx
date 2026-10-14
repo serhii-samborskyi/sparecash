@@ -75,6 +75,8 @@ function Landing({ preview }: { preview: boolean }) {
     [phone, setPhone] = useState(""),
     [company, setCompany] = useState(""),
     [visitorVerified, setVisitorVerified] = useState(false),
+    [searchStep, setSearchStep] = useState(-1),
+    [searchFinished, setSearchFinished] = useState(false),
     [busy, setBusy] = useState(false),
     [result, setResult] = useState<any>(null),
     [code, setCode] = useState(""),
@@ -84,6 +86,7 @@ function Landing({ preview }: { preview: boolean }) {
   const pushAttempt = useRef<AbortController | null>(null);
   const trackEngagement = useRef(createEngagementTracker());
   const updatesRecorded = useRef(false);
+  const searchStarted = useRef(false);
   useEffect(() => {
     if (!session || preview) return;
     const gpc =
@@ -109,11 +112,51 @@ function Landing({ preview }: { preview: boolean }) {
       return;
     const visible = visibleQuestions(session.config.questions ?? [], answers);
     if (visible[step]) return;
+    if (
+      session.config.searchTransition &&
+      visible.length > 0 &&
+      !searchFinished
+    )
+      return;
     updatesRecorded.current = true;
     trackEngagement.current(session.visitToken, preview, {
       kind: "UPDATES_OPENED",
     });
-  }, [session, preview, answers, step]);
+  }, [session, preview, answers, step, searchFinished]);
+  useEffect(() => {
+    if (!session || searchFinished || searchStarted.current) return;
+    const questions = visibleQuestions(session.config.questions ?? [], answers);
+    if (questions[step]) return;
+    const transition = session.config.searchTransition;
+    if (!transition || questions.length === 0) {
+      setSearchFinished(true);
+      return;
+    }
+    searchStarted.current = true;
+    setSearchStep(0);
+    trackEngagement.current(session.visitToken, preview, {
+      kind: "SEARCH_STARTED",
+    });
+    const timers = transition.steps
+      .slice(1)
+      .map((_: string, index: number) =>
+        window.setTimeout(
+          () => setSearchStep(index + 1),
+          Math.round(
+            (transition.durationMs * (index + 1)) / transition.steps.length,
+          ),
+        ),
+      );
+    timers.push(
+      window.setTimeout(() => {
+        trackEngagement.current(session.visitToken, preview, {
+          kind: "SEARCH_COMPLETED",
+        });
+        setSearchFinished(true);
+      }, transition.durationMs),
+    );
+    return () => timers.forEach((timer: number) => window.clearTimeout(timer));
+  }, [session, preview, answers, step, searchFinished]);
   useEffect(() => () => pushAttempt.current?.abort(), []);
   useEffect(() => {
     let current = true;
@@ -499,6 +542,42 @@ function Landing({ preview }: { preview: boolean }) {
             No credit check to answer these questions.
           </p>
         </>
+      ) : config.searchTransition && questions.length > 0 && !searchFinished ? (
+        <div className="search-transition" role="status" aria-live="polite">
+          <div className="form-progress">
+            <span>PREPARING YOUR NEXT STEP</span>
+            <span>JUST A MOMENT</span>
+          </div>
+          <div className="search-orbit" aria-hidden="true">
+            <span />
+            <ShieldCheck size={27} />
+          </div>
+          <h2>{config.searchTransition.steps[Math.max(searchStep, 0)]}</h2>
+          <p>
+            We’re organizing your answers before you continue to the lender
+            network. This does not determine approval or available terms.
+          </p>
+          <div className="search-progress" aria-hidden="true">
+            <span
+              style={{
+                animationDuration: `${config.searchTransition.durationMs}ms`,
+              }}
+            />
+          </div>
+          <div className="search-step-list" aria-hidden="true">
+            {config.searchTransition.steps.map(
+              (label: string, index: number) => (
+                <span
+                  key={label}
+                  className={index <= searchStep ? "active" : ""}
+                >
+                  <i>{index < searchStep ? <Check size={11} /> : index + 1}</i>
+                  {label}
+                </span>
+              ),
+            )}
+          </div>
+        </div>
       ) : (
         <>
           {availableChannels.length === 0 && (

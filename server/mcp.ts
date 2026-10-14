@@ -388,6 +388,8 @@ function makeServer() {
         .enum([
           "QUESTION_ANSWERED",
           "QUIZ_COMPLETED",
+          "SEARCH_STARTED",
+          "SEARCH_COMPLETED",
           "UPDATES_OPENED",
           "CONTINUE_WITHOUT_UPDATES",
         ])
