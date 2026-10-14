@@ -131,6 +131,36 @@ it("does not turn missing credentials into zero advertiser spend", async () => {
   expect(fetchMock).not.toHaveBeenCalled();
 });
 
+it("removes invalid campaign IDs before requesting advertiser spend", async () => {
+  fetchMock.mockResolvedValue(
+    Response.json({ result: [row], request_id: "test-request" }),
+  );
+  const result = await runtimeContext.run(config, () =>
+    advertiserStatistics(
+      {
+        ...query,
+        campaignIds: ["0", "123", "123", "9007199254740992"],
+      },
+      true,
+    ),
+  );
+  expect(result.status).toBe("ready");
+  expect(JSON.parse(fetchMock.mock.calls[0][1].body).campaign_id).toEqual([
+    123,
+  ]);
+});
+
+it("does not call PropellerAds when no valid campaign IDs remain", async () => {
+  const result = await runtimeContext.run(config, () =>
+    advertiserStatistics(
+      { ...query, campaignIds: ["0", "9007199254740992"] },
+      true,
+    ),
+  );
+  expect(result.status).toBe("unavailable");
+  expect(fetchMock).not.toHaveBeenCalled();
+});
+
 it("requires a trusted edge secret and a valid country before storing geography", () => {
   const headers = {
     "cf-ipcountry": "US",

@@ -279,7 +279,14 @@ export async function statisticsReport(input: StatisticsInput = {}) {
     ? [query.campaignId]
     : trackedCampaigns
         .map((s) => s.campaignId)
-        .filter((s) => /^\d+$/.test(s))
+        .filter((s) => {
+          const campaignId = Number(s);
+          return (
+            /^\d+$/.test(s) &&
+            Number.isSafeInteger(campaignId) &&
+            campaignId > 0
+          );
+        })
         .sort();
   const supported =
     ["zone", "campaign", "country", "day"].includes(query.groupBy) &&
