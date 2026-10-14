@@ -61,24 +61,35 @@ export function advertiserStatistics(
         "Connect your PropellerAds API token in Integrations to see impressions, clicks, CTR and spend.",
       ),
     );
-  if (!query.campaignIds.length)
+  const campaignIds = [
+    ...new Set(
+      query.campaignIds.filter((value) => {
+        const campaignId = Number(value);
+        return Number.isSafeInteger(campaignId) && campaignId > 0;
+      }),
+    ),
+  ];
+  if (!campaignIds.length)
     return Promise.resolve(
       unavailableAds(
         "No attributed campaigns yet. Enter a campaign ID to read its advertiser statistics.",
       ),
     );
+  const scopedQuery = { ...query, campaignIds };
   // Token changes invalidate snapshots without storing or returning credentials.
   const key = hash(
     JSON.stringify({
-      version: 2,
-      ...query,
+      version: 3,
+      ...scopedQuery,
       api: env.PROPELLER_API_URL,
       token: env.PROPELLER_API_TOKEN,
     }),
   );
   const existing = pending.get(key);
   if (existing) return existing;
-  const promise = load(key, query, refresh).finally(() => pending.delete(key));
+  const promise = load(key, scopedQuery, refresh).finally(() =>
+    pending.delete(key),
+  );
   pending.set(key, promise);
   return promise;
 }
