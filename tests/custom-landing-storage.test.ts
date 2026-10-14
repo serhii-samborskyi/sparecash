@@ -16,7 +16,7 @@ describe("custom landing storage", () => {
     const source = await createCustomLandingSource(
       {
         name: `Storage test ${marker}`,
-        html: `<main><h1>Storage test ${marker} in {{city}}</h1></main><sparecash-funnel></sparecash-funnel><section><h2>Details</h2></section>`,
+        html: `<main><h1>Storage test ${marker} in {{city}}, {{region}}</h1></main><sparecash-funnel></sparecash-funnel><section><h2>Details</h2></section>`,
         css: "main,section{max-width:60rem;margin:0 auto}",
       },
       "test",
@@ -38,6 +38,7 @@ describe("custom landing storage", () => {
                 description:
                   "A fallback description used when the custom source is unavailable.",
                 cityFallback: "Houston",
+                regionFallback: "Texas",
                 customLanding: { sourceId: source.id },
                 questions: [
                   {
@@ -71,17 +72,19 @@ describe("custom landing storage", () => {
       );
       expect(hydrated.variants[0].config.title).toContain("Houston");
       expect(hydrated.variants[0].config.customLanding?.htmlBefore).toContain(
-        "in Houston",
+        "in Houston, Texas",
       );
       expect(
         hydrated.variants[0].config.customLanding?.htmlBefore,
       ).not.toContain("{{city}}");
       const personalized = await hydrateCustomLandingConfig(
         landingSchema.parse(experiment.variants[0].config),
-        { city: "St. Louis" },
+        { city: "St. Louis", region: "Missouri" },
       );
       expect(personalized.title).toContain("St. Louis");
-      expect(personalized.customLanding?.htmlBefore).toContain("in St. Louis");
+      expect(personalized.customLanding?.htmlBefore).toContain(
+        "in St. Louis, Missouri",
+      );
       expect(hydrated.variants[0].config.questions).toHaveLength(1);
       const reusable = await getCustomLandingSource(source.id);
       expect(reusable.html).toContain("<sparecash-funnel></sparecash-funnel>");

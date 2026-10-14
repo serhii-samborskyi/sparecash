@@ -38,6 +38,16 @@ export const landingSchema = z
       .describe(
         "Optional city used in {{city}} landing copy when trusted edge geolocation is unavailable, such as a city-targeted campaign preview.",
       ),
+    regionFallback: z
+      .string()
+      .trim()
+      .min(2)
+      .max(80)
+      .regex(/^[\p{L}\p{M} .'-]+$/u)
+      .optional()
+      .describe(
+        "Optional state, province or administrative region used in {{region}} landing copy when trusted edge or advertiser region data is unavailable.",
+      ),
     button: z.string().min(2).max(50).default("Explore my options"),
     theme: z.enum(["forest", "blue", "plum"]).default("forest"),
     layout: z.enum(["split", "centered", "editorial"]).default("split"),
