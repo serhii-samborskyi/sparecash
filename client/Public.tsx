@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { api, post } from "./api";
 import { Field, Spinner } from "./components/ui";
+import { BrandMark } from "./components/brand-mark";
 import {
   waitForPushSubscription,
   confirmPushSubscription,
@@ -923,9 +924,7 @@ function PublicHeader({
             aria-hidden="true"
           />
         ) : (
-          <span className="brand-logo" aria-hidden="true">
-            S
-          </span>
+          <BrandMark />
         )}
         <span className="public-brand-name">SpareCash</span>
       </a>

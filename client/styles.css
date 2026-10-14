@@ -206,18 +206,10 @@ p {
   color: #f5f7ec;
 }
 .brand-logo {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: 33px;
-  width: 33px;
-  background: #bce2a7;
-  color: #173c33;
-  border-radius: 10px;
-  font-family: "Manrope", sans-serif;
-  font-size: 25px;
-  font-weight: 800;
-  letter-spacing: -2px;
+  display: block;
+  height: 38px;
+  width: 38px;
+  object-fit: contain;
   flex-shrink: 0;
 }
 .brand-dot {
@@ -1800,6 +1792,10 @@ summary {
 .public-brand-name {
   line-height: 1;
 }
+.public-brand .brand-logo {
+  width: 48px;
+  height: 48px;
+}
 .public-header > span {
   display: flex;
   align-items: center;
@@ -2706,6 +2702,10 @@ summary {
   }
   .public-brand {
     font-size: 23px;
+  }
+  .public-brand .brand-logo {
+    width: 42px;
+    height: 42px;
   }
   .public-header > span {
     font-size: 9px;
