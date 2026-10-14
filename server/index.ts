@@ -37,6 +37,7 @@ app.use(
                 // The Web SDK loads its app configuration through a JSONP script.
                 "https://api.onesignal.com",
                 "https://www.clarity.ms",
+                "https://*.clarity.ms",
               ],
               styleSrc: ["'self'", "'unsafe-inline'"],
               frameSrc: [
@@ -53,6 +54,7 @@ app.use(
                 "https://challenges.cloudflare.com",
                 "https://www.clarity.ms",
                 "https://*.clarity.ms",
+                "https://c.bing.com",
               ],
               imgSrc: [
                 "'self'",
