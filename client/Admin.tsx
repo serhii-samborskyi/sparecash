@@ -39,6 +39,7 @@ import { ExperimentEditor, ChainEditor } from "./components/editors";
 import { SettingsView } from "./components/settings";
 import { TimezoneSelect } from "./components/timezone-select";
 import { Statistics } from "./components/statistics";
+import { BrandMark } from "./components/brand-mark";
 const nav: [string, string, LucideIcon][] = [
   ["overview", "Overview", LayoutDashboard],
   ["statistics", "Statistics", Activity],
@@ -156,7 +157,7 @@ export function Admin() {
   if (!data)
     return (
       <div className="startup">
-        <div className="brand-logo">S</div>
+        <BrandMark />
         <h2>SpareCash</h2>
         {error ? (
           <>
@@ -184,7 +185,7 @@ export function Admin() {
             go("overview");
           }}
         >
-          <span className="brand-logo">S</span>
+          <BrandMark />
           <span>
             sparecash<span className="brand-dot">.</span>
           </span>
@@ -1463,7 +1464,7 @@ function Login({ onLogin }: { onLogin: () => void }) {
   return (
     <div className="login-page">
       <div className="login-brand">
-        <span className="brand-logo">S</span>
+        <BrandMark />
         <span>sparecash.</span>
       </div>
       <form
