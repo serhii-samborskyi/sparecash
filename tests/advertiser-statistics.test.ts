@@ -93,6 +93,19 @@ it("does not reject valid statistics when unused request metadata changes type",
   });
 });
 
+it("accepts the direct advertiser API's bare row array", async () => {
+  fetchMock.mockResolvedValue(Response.json([row]));
+  const result = await run(true);
+  expect(result.status).toBe("ready");
+  expect(result.rows).toHaveLength(1);
+  expect(result.rows[0]).toMatchObject({
+    campaignId: "123",
+    zoneId: "456",
+    clicks: 3,
+    spend: 0.09,
+  });
+});
+
 it("uses cached reports and retains the last complete snapshot on a failed refresh", async () => {
   const cached = {
     fetchedAt: new Date(),
@@ -143,7 +156,7 @@ it("reports a safe field path for incompatible provider responses", async () => 
     Response.json({ result: [{ ...row, spent: undefined }] }),
   );
   const result = await run(true);
-  expect(result.message).toContain("result.0.spent: invalid_union");
+  expect(result.message).toContain("result.0.spent: invalid_type");
   expect(result.message).not.toContain(JSON.stringify(row));
 });
 

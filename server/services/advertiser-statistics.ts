@@ -19,13 +19,28 @@ const rowSchema = z.object({
   clicks: numeric.pipe(z.number().int()),
   spent: numeric,
 });
-const reportSchema = z.object({
-  result: z.array(rowSchema).max(50_000),
-  // This provider metadata has changed type across API gateways and is not
-  // needed to reconcile advertiser totals. Do not reject valid rows because
-  // of an unused request identifier.
-  request_id: z.unknown().optional(),
-});
+const reportRowsSchema = z.array(rowSchema).max(50_000);
+const reportSchema = z
+  .union([
+    z.object({
+      result: reportRowsSchema,
+      // This provider metadata has changed type across API gateways and is not
+      // needed to reconcile advertiser totals. Do not reject valid rows because
+      // of an unused request identifier.
+      request_id: z.unknown().optional(),
+    }),
+    // The direct advertiser endpoint returns its rows as a bare array while
+    // the MCP gateway wraps the same data in `result`.
+    reportRowsSchema.transform((result) => ({ result })),
+  ])
+  .transform((report) => ({ result: report.result }));
+function leafIssues(issues: z.ZodIssue[]): z.ZodIssue[] {
+  return issues.flatMap((issue) =>
+    issue.code === "invalid_union"
+      ? issue.unionErrors.flatMap((error) => leafIssues(error.issues))
+      : [issue],
+  );
+}
 export type AdRow = {
   campaignId: string;
   campaignName: string;
@@ -190,15 +205,14 @@ async function load(
       rows,
     };
   } catch (error) {
-    const oversized =
-      error instanceof z.ZodError &&
-      error.issues.some(
-        (issue) => issue.code === "too_big" && issue.path[0] === "result",
-      );
+    const issues = error instanceof z.ZodError ? leafIssues(error.issues) : [];
+    const oversized = issues.some(
+      (issue) => issue.code === "too_big" && issue.path[0] === "result",
+    );
     const firstIssue =
       error instanceof z.ZodError
-        ? error.issues[0]
-          ? `${error.issues[0].path.join(".") || "response"}: ${error.issues[0].code}`
+        ? issues.sort((a, b) => b.path.length - a.path.length)[0]
+          ? `${issues[0].path.join(".") || "response"}: ${issues[0].code}`
           : "response: invalid"
         : null;
     const message =
