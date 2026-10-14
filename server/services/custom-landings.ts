@@ -463,8 +463,12 @@ function replaceLocationTokens(
   city: string,
   region: string,
 ): unknown {
+  const regionPhrase = region ? ` in ${region}` : "";
   if (typeof value === "string")
-    return value.replaceAll("{{city}}", city).replaceAll("{{region}}", region);
+    return value
+      .replaceAll("{{city}}", city)
+      .replaceAll("{{region}}", region)
+      .replaceAll("{{region_phrase}}", regionPhrase);
   if (Array.isArray(value))
     return value.map((item) => replaceLocationTokens(item, city, region));
   if (value && typeof value === "object")
@@ -512,7 +516,7 @@ export async function hydrateCustomLandingConfig<
   const region = landingLocation(
     personalization.region,
     config.regionFallback,
-    "your state",
+    "",
   );
   const personalized = replaceLocationTokens(base, city, region) as Omit<
     T,
@@ -529,10 +533,18 @@ export async function hydrateCustomLandingConfig<
       name: source.name,
       htmlBefore: source.htmlBefore
         .replaceAll("{{city}}", escapeHtml(city))
-        .replaceAll("{{region}}", escapeHtml(region)),
+        .replaceAll("{{region}}", escapeHtml(region))
+        .replaceAll(
+          "{{region_phrase}}",
+          region ? ` in ${escapeHtml(region)}` : "",
+        ),
       htmlAfter: source.htmlAfter
         .replaceAll("{{city}}", escapeHtml(city))
-        .replaceAll("{{region}}", escapeHtml(region)),
+        .replaceAll("{{region}}", escapeHtml(region))
+        .replaceAll(
+          "{{region_phrase}}",
+          region ? ` in ${escapeHtml(region)}` : "",
+        ),
       css: source.css,
     },
   };

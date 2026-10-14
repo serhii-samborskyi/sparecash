@@ -16,7 +16,7 @@ describe("custom landing storage", () => {
     const source = await createCustomLandingSource(
       {
         name: `Storage test ${marker}`,
-        html: `<main><h1>Storage test ${marker} in {{city}}, {{region}}</h1></main><sparecash-funnel></sparecash-funnel><section><h2>Details</h2></section>`,
+        html: `<main><h1>Storage test ${marker} in {{city}}{{region_phrase}}</h1></main><sparecash-funnel></sparecash-funnel><section><h2>Details</h2></section>`,
         css: "main,section{max-width:60rem;margin:0 auto}",
       },
       "test",
@@ -34,7 +34,8 @@ describe("custom landing storage", () => {
               name: "Custom page",
               weight: 100,
               config: {
-                title: "Custom source storage test in {{city}}",
+                title:
+                  "Custom source storage test in {{city}}{{region_phrase}}",
                 description:
                   "A fallback description used when the custom source is unavailable.",
                 cityFallback: "Houston",
@@ -70,9 +71,11 @@ describe("custom landing storage", () => {
       expect(hydrated.variants[0].config.customLanding?.htmlBefore).toContain(
         marker,
       );
-      expect(hydrated.variants[0].config.title).toContain("Houston");
+      expect(hydrated.variants[0].config.title).toContain(
+        "in Houston in Texas",
+      );
       expect(hydrated.variants[0].config.customLanding?.htmlBefore).toContain(
-        "in Houston, Texas",
+        "in Houston in Texas",
       );
       expect(
         hydrated.variants[0].config.customLanding?.htmlBefore,
@@ -83,8 +86,15 @@ describe("custom landing storage", () => {
       );
       expect(personalized.title).toContain("St. Louis");
       expect(personalized.customLanding?.htmlBefore).toContain(
-        "in St. Louis, Missouri",
+        "in St. Louis in Missouri",
       );
+      const generic = await hydrateCustomLandingConfig(
+        landingSchema.parse({
+          title: "Explore loan options{{region_phrase}}",
+          description: "Compare a possible next step without location copy.",
+        }),
+      );
+      expect(generic.title).toBe("Explore loan options");
       expect(hydrated.variants[0].config.questions).toHaveLength(1);
       const reusable = await getCustomLandingSource(source.id);
       expect(reusable.html).toContain("<sparecash-funnel></sparecash-funnel>");
