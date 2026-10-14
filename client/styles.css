@@ -2177,6 +2177,127 @@ summary {
   background: #b7cfa1;
   height: 100%;
 }
+.search-transition {
+  min-height: 385px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  text-align: center;
+}
+.search-transition .form-progress {
+  width: 100%;
+}
+.search-orbit {
+  width: 74px;
+  height: 74px;
+  margin: 2px auto 22px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  position: relative;
+  background: color-mix(in srgb, var(--public-light) 72%, white);
+  color: var(--public);
+}
+.search-orbit::before {
+  content: "";
+  position: absolute;
+  inset: -7px;
+  border: 1px solid color-mix(in srgb, var(--public) 20%, transparent);
+  border-radius: inherit;
+}
+.search-orbit > span {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  top: -6px;
+  left: calc(50% - 5px);
+  border-radius: 50%;
+  background: var(--public);
+  transform-origin: 5px 48px;
+  animation: search-orbit 1.35s linear infinite;
+}
+.search-transition h2 {
+  margin-inline: auto;
+  max-width: 360px;
+}
+.search-transition > p {
+  max-width: 410px;
+  margin: 0 auto;
+}
+.search-progress {
+  width: min(100%, 390px);
+  height: 5px;
+  margin: 25px auto 18px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #edf1e7;
+}
+.search-progress > span {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #b9d29f, var(--public));
+  transform-origin: left;
+  animation-name: search-progress;
+  animation-timing-function: linear;
+  animation-fill-mode: both;
+}
+.search-step-list {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+.search-step-list > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 9px;
+  color: #899681;
+  transition: color 180ms ease;
+}
+.search-step-list > span.active {
+  color: var(--public);
+}
+.search-step-list i {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid #d8e2ce;
+  display: grid;
+  place-items: center;
+  font-style: normal;
+  font-size: 8px;
+  background: #fff;
+}
+.search-step-list > span.active i {
+  border-color: #a8c28c;
+  background: var(--public-light);
+}
+@keyframes search-orbit {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes search-progress {
+  from {
+    transform: scaleX(0.03);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .search-orbit > span {
+    animation: none;
+    transform: translateY(48px);
+  }
+  .search-progress > span {
+    animation: none;
+    transform: scaleX(0.68);
+  }
+}
 .preview-banner {
   text-align: center;
   font-size: 11px;

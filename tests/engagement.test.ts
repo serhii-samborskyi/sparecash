@@ -89,6 +89,20 @@ describe("anonymous engagement", () => {
       }),
     ).toThrow();
   });
+  it("records the bounded preparation stage without visitor data", () => {
+    expect(engagementEvents(config, { kind: "SEARCH_STARTED" })).toEqual([
+      { kind: "SEARCH_STARTED", questionId: "" },
+    ]);
+    expect(engagementEvents(config, { kind: "SEARCH_COMPLETED" })).toEqual([
+      { kind: "SEARCH_COMPLETED", questionId: "" },
+    ]);
+    expect(() =>
+      engagementEvents(config, {
+        kind: "SEARCH_STARTED",
+        answer: "private data",
+      }),
+    ).toThrow();
+  });
   it("counts visitor sessions rather than clicks or answers", () => {
     const summary = engagementCounts([
       {
@@ -96,6 +110,8 @@ describe("anonymous engagement", () => {
           { kind: "QUESTION_ANSWERED" },
           { kind: "QUESTION_ANSWERED" },
           { kind: "QUIZ_COMPLETED" },
+          { kind: "SEARCH_STARTED" },
+          { kind: "SEARCH_COMPLETED" },
         ],
       },
       { engagementEvents: [{ kind: "CHANNEL_SELECTED" }] },
@@ -106,6 +122,8 @@ describe("anonymous engagement", () => {
       engagedVisitors: 3,
       quizStartedVisitors: 1,
       quizCompletedVisitors: 1,
+      searchStartedVisitors: 1,
+      searchCompletedVisitors: 1,
       channelSelectedVisitors: 1,
       continuedWithoutUpdatesVisitors: 1,
     });

@@ -2,6 +2,8 @@ import { clarityEvent, clarityTag } from "./clarity";
 
 type EngagementEvent =
   | { kind: "UPDATES_OPENED" }
+  | { kind: "SEARCH_STARTED" }
+  | { kind: "SEARCH_COMPLETED" }
   | {
       kind: "CHANNEL_SELECTED";
       channel: "PUSH" | "SMS" | "EMAIL";
