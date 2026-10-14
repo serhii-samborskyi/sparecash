@@ -140,6 +140,21 @@ describe("conditional landing quizzes", () => {
       }).success,
     ).toBe(false);
   });
+  it("accepts a plain-text city fallback and rejects markup", () => {
+    const base = {
+      title: "Explore options in {{city}}",
+      description: "Find your next step with optional updates.",
+    };
+    expect(
+      landingSchema.parse({ ...base, cityFallback: "St. Louis" }).cityFallback,
+    ).toBe("St. Louis");
+    expect(
+      landingSchema.safeParse({
+        ...base,
+        cityFallback: "<strong>Houston</strong>",
+      }).success,
+    ).toBe(false);
+  });
 });
 describe("journey rules", () => {
   it("never downgrades funded or approved outcomes with late postbacks", () => {

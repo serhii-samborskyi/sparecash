@@ -7,6 +7,7 @@ export const propellerContextParameters = {
   connectionType: "connection_type",
   declaredCost: "cost",
   country: "country",
+  city: "city",
   device: "device",
   language: "language",
   os: "os",
@@ -64,6 +65,7 @@ export function propellerTargetUrl(
   baseUrl: string,
   campaign: string,
   medium = "push",
+  city?: string,
 ) {
   const separator = baseUrl.includes("?") ? "&" : "?";
   const parameters = [
@@ -72,6 +74,7 @@ export function propellerTargetUrl(
     ["utm_medium", medium],
     ["utm_campaign", encodeURIComponent(campaign)],
     ["utm_content", "{bannerid}"],
+    ...(city ? ([["city", encodeURIComponent(city)]] as const) : []),
   ];
   return `${baseUrl}${separator}${parameters
     .map(([name, value]) => `${name}=${value}`)

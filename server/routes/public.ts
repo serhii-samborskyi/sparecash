@@ -191,6 +191,14 @@ publicRouter.post("/visit", async (req, res) => {
           ? visit.configSnapshot
           : selected.config,
       ),
+      {
+        city:
+          visit.city ??
+          (typeof (visit.adContext as Record<string, unknown>)?.city ===
+          "string"
+            ? String((visit.adContext as Record<string, unknown>).city)
+            : input.adContext.city),
+      },
     ),
     turnstileSiteKey: env.TURNSTILE_SITE_KEY,
     oneSignalAppId: env.ONESIGNAL_APP_ID,
@@ -210,6 +218,12 @@ publicRouter.post("/visit", async (req, res) => {
           "string"
             ? String((visit.adContext as Record<string, unknown>).bannerId)
             : input.adContext.bannerId,
+        landing_city:
+          visit.city ??
+          (typeof (visit.adContext as Record<string, unknown>)?.city ===
+          "string"
+            ? String((visit.adContext as Record<string, unknown>).city)
+            : input.adContext.city),
         visitor_verified: hasVisitorProof(visit) ? "true" : "false",
       },
     },

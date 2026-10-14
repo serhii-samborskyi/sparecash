@@ -9,6 +9,8 @@ describe("PropellerAds attribution", () => {
     const url = propellerTargetUrl(
       "https://sparecash.example/go/loan-checklist",
       "loan-checklist",
+      "push",
+      "Houston",
     );
     for (const token of [
       "campaign_id={campaign_id}",
@@ -28,6 +30,7 @@ describe("PropellerAds attribution", () => {
       "region={region}",
       "subzone_id={subzone_id}",
       "advertiser_user_agent={useragent}",
+      "city=Houston",
     ])
       expect(url).toContain(token);
     expect(url).toContain("utm_source=propellerads");
@@ -42,7 +45,7 @@ describe("PropellerAds attribution", () => {
           "&banner_id=27516444&browser=Chrome&browser_version=130" +
           "&carrier=Verizon&propeller_click_id=click-id&connection_type=cellular" +
           "&cost=0.031&country=US&device=Mobile&language=en&os=Android" +
-          "&os_version=15&region=Illinois&subzone_id=7" +
+          "&os_version=15&region=Illinois&city=Chicago&subzone_id=7" +
           "&advertiser_user_agent=Mozilla%2F5.0&utm_source=propellerads" +
           "&utm_medium=push&utm_campaign=loan-checklist&utm_content=27516444",
       ),
@@ -59,6 +62,7 @@ describe("PropellerAds attribution", () => {
         connectionType: "cellular",
         declaredCost: "0.031",
         country: "US",
+        city: "Chicago",
         device: "Mobile",
         language: "en",
         os: "Android",
