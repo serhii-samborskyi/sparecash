@@ -43,6 +43,8 @@ app.use(
                 "https://challenges.cloudflare.com",
                 "https://*.clarity.ms",
                 "https://*.onesignal.com",
+                "https://www.youtube-nocookie.com",
+                "https://player.vimeo.com",
               ],
               connectSrc: [
                 "'self'",

@@ -38,6 +38,7 @@ Available tools:
 - `list_leads`, `get_lead`, `set_lead_timezone`, `update_lead_notes`, `record_decline`, `unsubscribe`
 - `save_experiment`, `experiment_results`
 - `landing_design_guide`, `validate_landing_design`
+- `custom_landing_guide`, `validate_custom_landing_source`, `create_custom_landing_source`, `list_custom_landing_sources`, `get_custom_landing_source`
 - `list_landing_images`, `list_landing_assets`, `create_landing_asset_upload`, `upload_landing_asset`
 - `save_chain`, `enroll_existing`, `list_deliveries`
 - `list_sources`, `block_source`
@@ -59,7 +60,7 @@ Examples of owner requests:
 
 > Change this contact's time zone to America/Phoenix and show the effective sending window.
 
-`save_experiment` creates the supported landing/quiz funnel: variant → optional quiz → channel subscription/confirmation → tracked RoundSky application. `save_chain` creates separate channel sequences and event branches. The current version does not provide arbitrary HTML pages, a general-purpose funnel graph, or per-experiment sequence routing; active chains are selected by channel and trigger across the workspace.
+`save_experiment` creates the supported landing/quiz funnel: variant → optional quiz → channel subscription/confirmation → tracked RoundSky application. Presentation may use a classic template, composable canvas, or sanitized custom HTML/CSS source around one protected funnel slot. `save_chain` creates separate channel sequences and event branches. The current version does not provide custom JavaScript, replacement forms, a general-purpose funnel graph, or per-experiment sequence routing; active chains are selected by channel and trigger across the workspace.
 
 For scheduling, read `get_settings` and preserve its other fields when using `save_settings`. `followupTimezoneMode` is `RECIPIENT` (default) or `WORKSPACE`. `workspaceTimezone` is an IANA zone such as `America/Chicago`, used as fallback or for all contacts in workspace mode. `timezoneDetection` is `BROWSER_FIRST` (default) or `IP_FIRST`, applied to new subscriptions. IP detection requires the Cloudflare setup in [integration instructions](INTEGRATIONS.md#lead-time-zones). `set_lead_timezone` writes an audited manual override; `get_lead` returns its source and effective `timing` window. Workspace mode takes precedence over lead overrides.
 
@@ -214,11 +215,23 @@ Minimal example for `config.design`:
 }
 ```
 
-The app owns the form implementation, server-validated Turnstile, advertising opt-out enforcement, channel consent, optional continuation, application tracking, non-lender disclosure, and privacy/terms links. The funnel node cannot accept authored styles or children. Actions focus/scroll to it rather than opening an arbitrary URL or submitting a replacement form. Required controls cannot be placed inside an FAQ, hidden, clipped or covered by authored CSS. The form uses a separate palette and typography so ancestor styles cannot make consent unreadable. Content is rendered as escaped text; arbitrary HTML/CSS/JavaScript, external fonts, tracking code and external image URLs are not accepted.
+The app owns the form implementation, server-validated Turnstile, advertising opt-out enforcement, channel consent, optional continuation, application tracking, non-lender disclosure, and privacy/terms links. The funnel node cannot accept authored styles or children. Actions focus/scroll to it rather than opening an arbitrary URL or submitting a replacement form. Required controls cannot be placed inside an FAQ, hidden, clipped or covered by authored CSS. The form uses a separate palette and typography so ancestor styles cannot make consent unreadable. Canvas text is escaped; use the isolated custom-source mode below when semantic HTML/CSS is required.
 
 Workflow: use client skills → upload artwork → compose `config.design` → `validate_landing_design` with the complete config → `save_experiment` as DRAFT → `get_experiment` for preview URLs → inspect desktop/mobile and exercise the quiz → publish according to the owner's instructions. Validation returns `{valid, issues}` with field paths, and checks uploaded/bundled image references as well as structure and contrast. It does not certify marketing claims, provider delivery or every accessibility requirement. Draft previews keep submissions disabled.
 
 The CRM editor can switch design mode, select a starting point, inspect the canvas JSON, and edit the shared logo, quiz and form fields. Detailed canvas composition is authored through MCP. Saving a visited variant's canvas is rejected just like other content changes; duplicate the variant to preserve historical results. No new environment variables or database migrations are needed for canvas designs.
+
+### Custom HTML/CSS landing sources
+
+`custom_landing_guide` describes the independent page-source mode for advertorials, comparison guides, long-form articles, visual stories and privacy-enhanced embedded video pages. Submit page-body HTML with exactly one level-one heading and one top-level `<sparecash-funnel></sparecash-funnel>` token. Content before and after the token renders in separate `.custom-landing-content` sections, while the app renders its working quiz, opt-in, verification and application flow between them.
+
+Custom CSS is parsed and every selector is scoped to the authored sections. It cannot reach the protected funnel, header, footer or document root. Imports, network `url()` values, external fonts, executable values, fixed/sticky/absolute overlays and high z-index values are rejected. HTML sanitization blocks scripts, event handlers, inline styles, forms and form controls, metadata, SVG, arbitrary embeds and protected ids/classes. Images must reference bundled or uploaded landing assets. Iframes are limited to privacy-enhanced YouTube and Vimeo player URLs; the production CSP allows only those player hosts.
+
+Call `validate_custom_landing_source` with `{name, html, css}`, then call `create_custom_landing_source`. The result contains `reference: {sourceId}`. Attach it to a variant as `config.customLanding: {sourceId}` and keep `title`/`description` as fallback metadata. `design` and `customLanding` are mutually exclusive. Questions, conditional branches, `offerFirst`, logo, form copy and consent remain normal config fields.
+
+Sources are sanitized, content-addressed, stored in PostgreSQL and immutable. Repeating identical content reuses its source. Changes create a new source and, after a variant has traffic, a new variant. `list_custom_landing_sources` returns names, ids, hashes and sizes; `get_custom_landing_source` returns one source's sanitized HTML and scoped CSS for inspection or deriving a new version. Live visits keep the source id in their config snapshot, and previews/live responses resolve that immutable record. Creating a source alone does not attach or publish it.
+
+Custom CTAs can use `<a href="#application">` or `<button type="button" data-sc-action="open-funnel">`. Both move focus to the protected funnel. Draft previews disable submissions, as they do for template and canvas variants. Custom JavaScript, analytics tags, pixels and replacement submission endpoints are intentionally unsupported; SpareCash continues to provide Clarity, attribution, quiz events, consent evidence, retargeting controls and the tracked application redirect.
 
 Example owner request:
 

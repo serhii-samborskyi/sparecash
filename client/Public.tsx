@@ -5,6 +5,7 @@ import { clarityEvent, clarityTag, initializeClarity } from "./clarity";
 import { propellerVisitAttribution } from "../shared/propeller-attribution";
 import { VisitorGate } from "./VisitorGate";
 import { LandingCanvas } from "./LandingCanvas";
+import { CustomLanding } from "./CustomLanding";
 import { beforeApplicationNavigation } from "./retargeting";
 import { visibleQuestions } from "../server/domain";
 import {
@@ -689,12 +690,14 @@ function Landing({ preview }: { preview: boolean }) {
   return (
     <div
       className={
-        config.design
-          ? "public-page has-canvas"
-          : `public-page theme-${config.theme} layout-${config.layout ?? "split"} typography-${config.typography ?? "sans"}`
+        config.customLanding
+          ? "public-page has-custom-landing"
+          : config.design
+            ? "public-page has-canvas"
+            : `public-page theme-${config.theme} layout-${config.layout ?? "split"} typography-${config.typography ?? "sans"}`
       }
       style={
-        !config.design && config.accentColor
+        !config.design && !config.customLanding && config.accentColor
           ? ({ "--public": config.accentColor } as CSSProperties)
           : undefined
       }
@@ -705,7 +708,9 @@ function Landing({ preview }: { preview: boolean }) {
         </div>
       )}
       <PublicHeader logoImage={config.logoImage} />
-      {config.design ? (
+      {config.customLanding ? (
+        <CustomLanding source={config.customLanding} funnel={funnel} />
+      ) : config.design ? (
         <LandingCanvas design={config.design} funnel={funnel} />
       ) : (
         <main className="landing-layout">
@@ -794,7 +799,7 @@ function Landing({ preview }: { preview: boolean }) {
           {funnel}
         </main>
       )}
-      {config.design && (
+      {(config.design || config.customLanding) && (
         <p className="canvas-disclosure">
           SpareCash connects you with third-party loan options. We are not a
           lender. Approval, amounts, rates, and timing depend on the lender and

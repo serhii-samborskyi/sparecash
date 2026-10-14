@@ -86,6 +86,21 @@ model LandingAssetUpload {
   @@index([expiresAt])
 }
 
+// Sanitized custom page sources are content-addressed and never edited in
+// place. Experiments reference their id from Variant.config so historical
+// visit snapshots keep rendering the same authored page.
+model LandingSource {
+  id         String   @id @default(cuid())
+  name       String
+  htmlBefore String
+  htmlAfter  String
+  css        String
+  sha256     String   @unique
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt, id])
+}
+
 model Experiment {
   id        String    @id @default(cuid())
   name      String

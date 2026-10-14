@@ -3,6 +3,7 @@ import { ROUND_SKY_OFFER_URL } from "./roundsky-contract.js";
 import { timezoneSchema } from "./timezones.js";
 import { landingImageSchema } from "./landing-image-schema.js";
 import { landingDesignSchema } from "./landing-design.js";
+import { customLandingReferenceSchema } from "./custom-landing-schema.js";
 export { landingImageSchema } from "./landing-image-schema.js";
 export { withinSendingHours } from "./timezones.js";
 export const channelSchema = z.enum(["EMAIL", "SMS", "PUSH"]);
@@ -43,6 +44,11 @@ export const landingSchema = z
       .optional()
       .describe(
         "Optional composable canvas. Replaces the legacy story/layout. Keep quiz, consent, form and image/logo settings at config level. Read landing_design_guide first.",
+      ),
+    customLanding: customLandingReferenceSchema
+      .optional()
+      .describe(
+        "Optional immutable custom HTML/CSS source. Mutually exclusive with design and the classic template story. The app still owns the quiz, opt-in and application funnel.",
       ),
     offerFirst: z.boolean().default(false),
     benefits: z
@@ -99,6 +105,12 @@ export const landingSchema = z
       ),
   })
   .superRefine((config, context) => {
+    if (config.design && config.customLanding)
+      context.addIssue({
+        code: "custom",
+        path: ["customLanding"],
+        message: "Choose either a composable canvas or a custom HTML source",
+      });
     const prior = new Map<string, z.infer<typeof questionSchema>>();
     for (const [index, question] of config.questions.entries()) {
       if (prior.has(question.id))

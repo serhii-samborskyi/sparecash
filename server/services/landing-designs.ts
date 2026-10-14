@@ -2,6 +2,7 @@ import { z } from "zod";
 import { db } from "../db.js";
 import { landingSchema } from "../domain.js";
 import { landingImages } from "../landing-images.js";
+import { assertCustomLandingSources } from "./custom-landings.js";
 
 export async function assertLandingImages(
   configs: z.infer<typeof landingSchema>[],
@@ -57,6 +58,7 @@ export async function validateLandingDesign(config: unknown) {
     };
   try {
     await assertLandingImages([result.data]);
+    await assertCustomLandingSources([result.data]);
   } catch (error) {
     return {
       valid: false,
@@ -65,7 +67,11 @@ export async function validateLandingDesign(config: unknown) {
   }
   return {
     valid: true,
-    mode: result.data.design ? "canvas" : "template",
+    mode: result.data.customLanding
+      ? "custom"
+      : result.data.design
+        ? "canvas"
+        : "template",
     nodes: result.data.design?.nodes.length ?? 0,
     issues: [],
     next: "Save a DRAFT and inspect get_experiment preview URLs on desktop and mobile. Validation does not test provider delivery, marketing claims or every accessibility requirement.",

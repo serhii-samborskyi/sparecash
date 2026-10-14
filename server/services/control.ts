@@ -1,4 +1,8 @@
 import { assertLandingImages } from "./landing-designs.js";
+import {
+  assertCustomLandingSources,
+  hydrateCustomLandingConfig,
+} from "./custom-landings.js";
 import { deduplicateSales } from "./retargeting-report.js";
 import { engagementCounts } from "./engagement.js";
 import { Prisma } from "@prisma/client";
@@ -70,6 +74,10 @@ export async function saveExperiment(input: unknown, actor: string) {
   const data = experimentSchema.parse(input);
   const result = await db.$transaction(async (tx) => {
     await assertLandingImages(
+      data.variants.map(({ config }) => config),
+      tx,
+    );
+    await assertCustomLandingSources(
       data.variants.map(({ config }) => config),
       tx,
     );
@@ -363,6 +371,7 @@ export async function experimentResults(id: string) {
             : converted(experiment.objective);
       return {
         ...v,
+        config: await hydrateCustomLandingConfig(landingSchema.parse(v.config)),
         visits: visits.length,
         verified: visits.filter((v) => v.verified).length,
         subscriptions: subs,
