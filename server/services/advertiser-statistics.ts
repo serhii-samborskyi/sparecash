@@ -195,11 +195,17 @@ async function load(
       error.issues.some(
         (issue) => issue.code === "too_big" && issue.path[0] === "result",
       );
+    const firstIssue =
+      error instanceof z.ZodError
+        ? error.issues[0]
+          ? `${error.issues[0].path.join(".") || "response"}: ${error.issues[0].code}`
+          : "response: invalid"
+        : null;
     const message =
       error instanceof z.ZodError
         ? oversized
           ? "PropellerAds returned too many statistics rows. Narrow the date range or campaign."
-          : "PropellerAds returned an incompatible statistics response. Check the configured advertiser API endpoint."
+          : `PropellerAds returned an incompatible statistics response (${firstIssue}). Check the configured advertiser API endpoint.`
         : error instanceof Error && error.message.startsWith("PropellerAds")
           ? error.message
           : "PropellerAds statistics could not be refreshed. Try again shortly.";

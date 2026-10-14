@@ -138,6 +138,15 @@ it.each([
   },
 );
 
+it("reports a safe field path for incompatible provider responses", async () => {
+  fetchMock.mockResolvedValue(
+    Response.json({ result: [{ ...row, spent: undefined }] }),
+  );
+  const result = await run(true);
+  expect(result.message).toContain("result.0.spent: invalid_union");
+  expect(result.message).not.toContain(JSON.stringify(row));
+});
+
 it("does not turn missing credentials into zero advertiser spend", async () => {
   config.PROPELLER_API_TOKEN = "";
   const result = await run();
