@@ -23,6 +23,23 @@ it("sorts rates with missing data last in both directions without changing the r
   ]);
   expect(rows[0].key).toBe("missing");
 });
+it("always keeps unattributed traffic after attributed segments", () => {
+  const rows = [
+    { key: "unattributed", label: "Unattributed", visits: 100 },
+    { key: "small", label: "Zone 1", visits: 1 },
+    { key: "large", label: "Zone 2", visits: 50 },
+  ] as StatisticsRow[];
+  expect(orderStatistics(rows, "visits", "desc").map((r) => r.key)).toEqual([
+    "large",
+    "small",
+    "unattributed",
+  ]);
+  expect(orderStatistics(rows, "visits", "asc").map((r) => r.key)).toEqual([
+    "small",
+    "large",
+    "unattributed",
+  ]);
+});
 it("exports absent values as blanks and escapes spreadsheet formulas and commas", () => {
   const csv = statisticsCsv([
     {

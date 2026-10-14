@@ -28,7 +28,9 @@ import {
 } from "../security.js";
 import {
   engagementSchema,
+  preQuizActivitySchema,
   recordEngagement,
+  recordPreQuizActivity,
   recordContinueWithoutUpdates,
 } from "../services/engagement.js";
 import { settings } from "../services/control.js";
@@ -219,6 +221,12 @@ publicRouter.post("/visit", async (req, res) => {
       verified: hasVisitorProof(visit),
       expiresAt: visit.verificationExpiresAt,
     },
+    preQuizActivity: {
+      activeMs: visit.preQuizActiveMs,
+      clicks: visit.preQuizClicks,
+      scrolls: visit.preQuizScrolls,
+      complete: !!visit.preQuizEndedAt,
+    },
   });
 });
 publicRouter.post("/engagement", checkOrigin, async (req, res) => {
@@ -236,6 +244,23 @@ publicRouter.post("/engagement", checkOrigin, async (req, res) => {
   }
   await recordEngagement(visitId, input.event);
   res.set("Cache-Control", "no-store").json({ ok: true });
+});
+
+publicRouter.post("/pre-quiz-activity", checkOrigin, async (req, res) => {
+  const input = z
+    .object({
+      visitToken: z.string().max(500),
+      activity: preQuizActivitySchema,
+    })
+    .strict()
+    .parse(req.body);
+  const visitId = verifyToken(input.visitToken, "visit");
+  if (!visitId) {
+    res.status(400).json({ error: "Session expired" });
+    return;
+  }
+  const recorded = await recordPreQuizActivity(visitId, input.activity);
+  res.set("Cache-Control", "no-store").json({ ok: true, recorded });
 });
 
 publicRouter.post(

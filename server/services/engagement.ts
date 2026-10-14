@@ -22,6 +22,15 @@ export const engagementSchema = z.discriminatedUnion("kind", [
     .strict(),
 ]);
 
+export const preQuizActivitySchema = z
+  .object({
+    activeMs: z.number().int().min(0).max(86_400_000),
+    clicks: z.number().int().min(0).max(10_000),
+    scrolls: z.number().int().min(0).max(10_000),
+    complete: z.boolean().default(false),
+  })
+  .strict();
+
 type Event = { kind: string; questionId: string; answer?: string };
 
 // Accept only the visible, answered prefix of the visit's immutable quiz.
@@ -92,6 +101,35 @@ export async function recordEngagement(visitId: string, input: unknown) {
         },
         data: { verifiedAt },
       });
+  });
+}
+
+// The browser sends cumulative counters so retries and out-of-order requests are
+// idempotent. A final snapshot may arrive just after the first quiz answer; the
+// row lock lets that one snapshot complete the pre-quiz measurement without
+// accepting later inflation.
+export async function recordPreQuizActivity(visitId: string, input: unknown) {
+  const activity = preQuizActivitySchema.parse(input);
+  return db.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "Visit" WHERE id=${visitId} FOR UPDATE`;
+    const visit = await tx.visit.findUniqueOrThrow({ where: { id: visitId } });
+    if (visit.preQuizEndedAt) return false;
+    const quizStarted = await tx.visitEvent.findFirst({
+      where: { visitId, kind: "QUESTION_ANSWERED" },
+      select: { id: true },
+    });
+    if (quizStarted && !activity.complete) return false;
+    await tx.visit.update({
+      where: { id: visitId },
+      data: {
+        preQuizMeasuredAt: visit.preQuizMeasuredAt ?? new Date(),
+        preQuizEndedAt: activity.complete ? new Date() : null,
+        preQuizActiveMs: Math.max(visit.preQuizActiveMs, activity.activeMs),
+        preQuizClicks: Math.max(visit.preQuizClicks, activity.clicks),
+        preQuizScrolls: Math.max(visit.preQuizScrolls, activity.scrolls),
+      },
+    });
+    return true;
   });
 }
 

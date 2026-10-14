@@ -82,6 +82,11 @@ function counts(segment: Segment) {
     quizStarted: 0,
     quizCompleted: 0,
     updatesOpened: 0,
+    preQuizMeasuredVisits: 0,
+    preQuizActivityVisits: 0,
+    preQuizActiveMs: 0,
+    preQuizClicks: 0,
+    preQuizScrolls: 0,
     applicationVisitors: 0,
     applications: 0,
     subscribers: 0,
@@ -115,13 +120,19 @@ function propellerContext(value: Prisma.JsonValue): PropellerAdContext {
   ) as PropellerAdContext;
 }
 function finish(row: Counts) {
-  const { clarityPagesPerSessionWeighted, ...visible } = row;
+  const { clarityPagesPerSessionWeighted, preQuizActiveMs, ...visible } = row;
   const comparableCosts =
     row.adSpend !== null &&
     row.visits > 0 &&
     row.matchedPaidVisits === row.visits;
   return {
     ...visible,
+    preQuizActiveSeconds: rounded(preQuizActiveMs / 1000),
+    preQuizAverageSeconds: ratio(
+      preQuizActiveMs / 1000,
+      row.preQuizMeasuredVisits,
+    ),
+    preQuizInteractions: row.preQuizClicks + row.preQuizScrolls,
     revenue: rounded(row.revenue),
     recordedClickCost: rounded(row.recordedClickCost),
     adSpend: row.adSpend === null ? null : rounded(row.adSpend),
@@ -224,6 +235,10 @@ export async function statisticsReport(input: StatisticsInput = {}) {
       adContext: true,
       cost: true,
       costRecorded: true,
+      preQuizMeasuredAt: true,
+      preQuizActiveMs: true,
+      preQuizClicks: true,
+      preQuizScrolls: true,
       source: { select: { campaignId: true, zoneId: true } },
       variantId: true,
       variant: {
@@ -472,6 +487,9 @@ export async function statisticsReport(input: StatisticsInput = {}) {
     const subs = visit.leads.flatMap((l) => l.subscriptions);
     const quiz = events.has("QUESTION_ANSWERED");
     const engaged = quiz || visit.applications.length > 0 || subs.length > 0;
+    const measuredPreQuiz =
+      !!visit.preQuizMeasuredAt && visit.preQuizMeasuredAt <= observedAt;
+    const preQuizActivity = visit.preQuizClicks + visit.preQuizScrolls > 0;
     const sold = visit.applications.filter((a) => a.postbacks.length > 0);
     const matched =
       ["country"].includes(query.groupBy) || query.country
@@ -502,6 +520,13 @@ export async function statisticsReport(input: StatisticsInput = {}) {
       if (quiz) target.quizStarted++;
       if (events.has("QUIZ_COMPLETED")) target.quizCompleted++;
       if (events.has("UPDATES_OPENED")) target.updatesOpened++;
+      if (measuredPreQuiz) {
+        target.preQuizMeasuredVisits++;
+        target.preQuizActiveMs += visit.preQuizActiveMs;
+        target.preQuizClicks += visit.preQuizClicks;
+        target.preQuizScrolls += visit.preQuizScrolls;
+        if (preQuizActivity) target.preQuizActivityVisits++;
+      }
       if (visit.applications.length) target.applicationVisitors++;
       target.applications += visit.applications.length;
       if (subs.length) target.subscribers++;
@@ -674,6 +699,8 @@ export async function statisticsReport(input: StatisticsInput = {}) {
       .map(finish)
       .sort(
         (a, b) =>
+          Number(a.label === "Unattributed") -
+            Number(b.label === "Unattributed") ||
           b.visits - a.visits ||
           (b.adClicks ?? 0) - (a.adClicks ?? 0) ||
           a.key.localeCompare(b.key),
@@ -687,6 +714,8 @@ export async function statisticsReport(input: StatisticsInput = {}) {
         "Unverified visits with bot score ≥70 from recorded abuse evidence. Failed checks, timeouts and unfinished checks alone do not mean bots.",
       engagement:
         "Unique visits with a quiz answer, a server-recorded application click, or a confirmed subscription, divided by all visits. Opening updates alone is excluded.",
+      preQuizActivity:
+        "First-party page behavior before the first quiz answer. Time counts only while the page is visible; clicks count meaningful controls outside the quiz; scrolls count separate scroll gestures. Older visits without this measurement are excluded from the average rather than counted as zero.",
       subscriptions:
         "Unique visits with at least one confirmed subscription, divided by all visits. Multiple channels count once. Later opt-outs remain in the confirmed rate.",
       ctr: "PropellerAds clicks ÷ impressions. Recomputed from totals, never averaged from row percentages. Ad clicks and tracked visits are different counts.",

@@ -24,6 +24,8 @@ device, browser and operating system. Unknown dimensions remain visible.
 | Suspected bots                   | Unverified visits with bot score ≥70 from recorded abuse evidence.                                                                                                                             |
 | Unverified                       | Remaining visits. Pending/failed/expired checks or provider errors alone do not prove bot activity.                                                                                            |
 | Engagement                       | Unique visits with a quiz answer, an application click recorded by the server, or a confirmed subscription, divided by visits. Multiple actions count once. Opening updates alone is excluded. |
+| Pre-quiz time                    | Average time the page was visible before the first quiz answer, plus total measured time. Older unmeasured visits are excluded from the average instead of counted as zero.                    |
+| Pre-quiz activity                | Meaningful control clicks outside the quiz and separate scroll gestures before the first quiz answer. Also shows active and measured visit counts.                                             |
 | Verified engagement              | Engaged visits whose verification flag is true, divided by verified visits.                                                                                                                    |
 | Quiz completion                  | Visits with a completed quiz divided by visits that answered a question.                                                                                                                       |
 | Application rate                 | Visits with at least one recorded application click divided by visits. It is not completed lender applications.                                                                                |
@@ -106,11 +108,12 @@ owner endpoint retains authentication, origin checks and a 20 requests/minute
 limit. No contact addresses, names, raw user agents or verification tokens are
 returned.
 
-Deploy migration `202610110003_traffic_statistics` with the web and worker
-release; the standard Docker startup applies it. It adds nullable visit
-location columns, a date index, and the snapshot table. There is no historical
-geo backfill or new required environment variable. Reconnect MCP clients to
-discover `statistics_report`.
+Deploy migrations `202610110003_traffic_statistics` and
+`202610130002_prequiz_activity` with the web and worker release; the standard
+Docker startup applies them. The latter stores cumulative first-party visible
+time, meaningful click and scroll counters on each visit. There is no
+historical behavior backfill or new required environment variable. Reconnect
+MCP clients to discover the latest `statistics_report` fields.
 
 Reports reject more than 50,000 matching visits or advertiser rows rather than
 silently truncating totals. Narrow the dates or campaign if this limit is

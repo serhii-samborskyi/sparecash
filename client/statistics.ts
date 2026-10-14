@@ -11,6 +11,9 @@ export function orderStatistics(
   direction: "asc" | "desc",
 ) {
   return [...rows].sort((a, b) => {
+    const unattributed =
+      Number(a.label === "Unattributed") - Number(b.label === "Unattributed");
+    if (unattributed) return unattributed;
     const x = a[key],
       y = b[key];
     if (x === null) return y === null ? a.key.localeCompare(b.key) : 1;
