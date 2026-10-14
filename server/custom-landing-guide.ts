@@ -13,6 +13,8 @@ export function customLandingGuide() {
     slot: "The funnel token must be a direct child of the submitted fragment. Content before and after it is rendered in separately scoped authored sections, so custom CSS cannot style or conceal protected controls.",
     actions:
       'Use <a href="#application"> or <button type="button" data-sc-action="open-funnel"> to scroll and focus the protected funnel. Custom forms and JavaScript are not accepted.',
+    personalization:
+      "Use {{region_phrase}} where location is optional. It becomes ' in Texas' when a trusted edge or advertiser region exists and becomes an empty string when it does not. Use {{region}} only when the surrounding sentence remains natural with an empty value.",
     html: {
       allowed:
         "Semantic text/layout elements, tables, details/summary, local media-library images, ordinary HTTPS/mail/tel links, buttons that open the funnel, and privacy-enhanced YouTube or Vimeo iframes.",

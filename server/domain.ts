@@ -46,7 +46,7 @@ export const landingSchema = z
       .regex(/^[\p{L}\p{M} .'-]+$/u)
       .optional()
       .describe(
-        "Optional state, province or administrative region used in {{region}} landing copy when trusted edge or advertiser region data is unavailable.",
+        "Optional state, province or administrative region used when trusted edge or advertiser region data is unavailable. Use {{region_phrase}} to append ' in Region' only when a region exists.",
       ),
     button: z.string().min(2).max(50).default("Explore my options"),
     theme: z.enum(["forest", "blue", "plum"]).default("forest"),
