@@ -81,6 +81,37 @@ function outcome(visit: Visit) {
   return "Visit only";
 }
 
+function retargetingOutcome(visit: Visit) {
+  const journey = visit.retargeting.journey;
+  const attempts = visit.retargeting.pixels;
+  if (attempts.length) {
+    const loaded = attempts.some((attempt) => attempt.state === "LOADED");
+    const failed = attempts.some((attempt) =>
+      ["FAILED", "UNCERTAIN"].includes(attempt.state),
+    );
+    if (loaded) return "Pixel loaded in the visitor's browser";
+    if (failed) return "Pixel attempt failed or was uncertain";
+    return "Pixel issued; browser receipt is pending";
+  }
+  if (!journey) return "No browser journey recorded";
+  if (journey.privacy === "DENIED")
+    return "No pixel: personalized advertising was declined";
+  if (journey.group === "CONTROL")
+    return "No pixel: visitor is in the persistent control group";
+  if (journey.suppressedAt)
+    return "No pixel: journey is suppressed from retargeting";
+  if (
+    visit.verification.verified &&
+    visit.events.some((event) =>
+      ["QUESTION_ANSWERED", "CHANNEL_SELECTED", "QUIZ_COMPLETED"].includes(
+        event.kind,
+      ),
+    )
+  )
+    return "No pixel attempt recorded for this qualifying visit";
+  return "No qualifying retargeting activity recorded";
+}
+
 function VisitDetails({ visit }: { visit: Visit }) {
   const adContext = Object.entries(visit.adContext).map(
     ([key, value]) => [humanize(key), value] as [string, unknown],
@@ -258,6 +289,8 @@ function VisitDetails({ visit }: { visit: Visit }) {
         <h4>Retargeting</h4>
         <KeyValues
           values={[
+            ["Result", retargetingOutcome(visit)],
+            ["Pixel attempts", visit.retargeting.pixels.length],
             ["Journey ID", visit.journeyId],
             ["Journey group", visit.retargeting.journey?.group],
             ["Privacy choice", visit.retargeting.journey?.privacy],
@@ -288,6 +321,11 @@ function VisitDetails({ visit }: { visit: Visit }) {
             {pixel.reason ? ` · ${pixel.reason}` : ""}
           </p>
         ))}
+        {!visit.retargeting.pixels.length && (
+          <p className="visit-empty-detail">
+            No PropellerAds audience request was recorded for this visit.
+          </p>
+        )}
       </section>
     </div>
   );
