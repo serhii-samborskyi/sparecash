@@ -1319,6 +1319,104 @@ it("validates owner time-zone overrides and rechecks deferred enrollments", asyn
   }
 });
 
+it("lets the owner remove a testing contact without rewriting traffic history", async () => {
+  const created = await db.lead.create({
+    data: {
+      name: "Disposable testing contact",
+      visitId,
+      timezone: "America/Chicago",
+      answers: { amount: "$2,500" },
+      events: {
+        create: { type: "SUBSCRIBED", detail: "Test contact created" },
+      },
+      subscriptions: {
+        create: [
+          {
+            channel: "EMAIL",
+            address: `remove-${crypto.randomUUID()}@example.com`,
+            status: "ACTIVE",
+            consentText: "Test consent",
+            consentVersion: "test",
+            consentIpHash: "test",
+          },
+          {
+            channel: "SMS",
+            address: `+1${Date.now().toString().slice(-10)}`,
+            status: "ACTIVE",
+            consentText: "Test consent",
+            consentVersion: "test",
+            consentIpHash: "test",
+          },
+        ],
+      },
+      applications: { create: { visitId } },
+    },
+  });
+  const chain = await db.chain.findFirstOrThrow({
+    where: { channel: "EMAIL" },
+  });
+  const firstSubscription = await db.subscription.findFirstOrThrow({
+    where: { leadId: created.id },
+  });
+  const enrollment = await db.enrollment.create({
+    data: {
+      subscriptionId: firstSubscription.id,
+      chainId: chain.id,
+      nextAt: new Date(Date.now() + 86400000),
+    },
+  });
+  await db.delivery.create({
+    data: {
+      subscriptionId: firstSubscription.id,
+      enrollmentId: enrollment.id,
+      step: 0,
+      subject: "Testing",
+      body: "Testing",
+    },
+  });
+  const lead = await db.lead.findUniqueOrThrow({
+    where: { id: created.id },
+    include: { subscriptions: true, applications: true },
+  });
+  const application = lead.applications[0];
+  expect(application).toBeDefined();
+  expect((await request(`/api/admin/leads/${lead.id}`, "DELETE")).status).toBe(
+    401,
+  );
+
+  const response = await request(
+    `/api/admin/leads/${lead.id}`,
+    "DELETE",
+    undefined,
+    true,
+  );
+  expect(response.status).toBe(200);
+  expect(response.data.ok).toBe(true);
+  expect(response.data.deleted.subscriptions).toBe(2);
+  expect(await db.lead.findUnique({ where: { id: lead.id } })).toBeNull();
+  expect(await db.subscription.count({ where: { leadId: lead.id } })).toBe(0);
+  expect(
+    await db.delivery.count({
+      where: { subscriptionId: { in: lead.subscriptions.map((s) => s.id) } },
+    }),
+  ).toBe(0);
+  expect(
+    (
+      await db.applicationClick.findUniqueOrThrow({
+        where: { id: application.id },
+      })
+    ).leadId,
+  ).toBeNull();
+  expect(
+    await db.visit.findUnique({ where: { id: lead.visitId } }),
+  ).not.toBeNull();
+  expect(
+    await db.auditLog.count({
+      where: { action: "lead.deleted", entityId: lead.id },
+    }),
+  ).toBe(1);
+});
+
 it("defers quiet-hour leads so a later eligible recipient is not starved", async () => {
   const previous = await settings();
   await db.enrollment.updateMany({

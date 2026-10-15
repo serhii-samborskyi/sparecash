@@ -9,6 +9,7 @@ import {
   testProviderSchema,
 } from "../services/integration-tests.js";
 import { updateLeadTimezone, leadTiming } from "../services/timezones.js";
+import { deleteLead } from "../services/leads.js";
 import { timezoneSchema } from "../timezones.js";
 import {
   runtimeSettingsView,
@@ -252,6 +253,11 @@ adminRouter.patch("/leads/:id", async (req, res) => {
     await db.lead.update({ where: { id: String(req.params.id) }, data: input }),
   );
   await audit("owner", "lead.notes_updated", String(req.params.id));
+});
+adminRouter.delete("/leads/:id", async (req, res) => {
+  res
+    .set("Cache-Control", "no-store")
+    .json(await deleteLead(String(req.params.id), "owner"));
 });
 adminRouter.post("/leads/:id/decline", async (req, res) => {
   res.json(

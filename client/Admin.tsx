@@ -31,6 +31,7 @@ import {
   ChevronDown,
   Clock,
   SlidersHorizontal,
+  Trash2,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { api, post, money, number, date } from "./api";
@@ -81,7 +82,8 @@ export function Admin() {
     [extra, setExtra] = useState<any>(null),
     [query, setQuery] = useState(""),
     [listPage, setListPage] = useState(1),
-    [loading, setLoading] = useState(false);
+    [loading, setLoading] = useState(false),
+    [removingLeadId, setRemovingLeadId] = useState<string | null>(null);
   const notify = useCallback((message: string) => {
     setToast(message);
     setTimeout(() => setToast(""), 4000);
@@ -720,7 +722,7 @@ export function Admin() {
                           <th>Stage</th>
                           <th>Source</th>
                           <th>Added</th>
-                          <th />
+                          <th aria-label="Contact actions" />
                         </tr>
                       </thead>
                       <tbody>
@@ -784,8 +786,28 @@ export function Admin() {
                             </td>
                             <td>{lead.visit.source?.zoneId ?? "Direct"}</td>
                             <td className="muted">{date(lead.createdAt)}</td>
-                            <td>
-                              <ChevronRight size={16} />
+                            <td className="audience-actions-cell">
+                              <div className="audience-row-actions">
+                                <button
+                                  type="button"
+                                  className="icon-button remove-contact-button"
+                                  aria-label={`Remove ${lead.name || "unnamed visitor"}`}
+                                  title="Remove testing contact"
+                                  onClick={() =>
+                                    setModal({
+                                      type: "remove-lead",
+                                      value: lead,
+                                    })
+                                  }
+                                >
+                                  <Trash2 size={15} />
+                                </button>
+                                <ChevronRight
+                                  className="audience-row-chevron"
+                                  size={16}
+                                  aria-hidden="true"
+                                />
+                              </div>
                             </td>
                           </tr>
                         ))}
@@ -1342,6 +1364,64 @@ export function Admin() {
               void refresh();
             }}
           />
+        </Modal>
+      )}
+      {modal?.type === "remove-lead" && (
+        <Modal title="Remove testing contact?" onClose={closeModal}>
+          <div className="modal-body remove-contact-confirmation">
+            <p>
+              This permanently removes the contact, subscriptions, consent
+              records, and queued follow-ups from SpareCash.
+            </p>
+            <div className="remove-contact-identity">
+              <b>{modal.value.name || "Unnamed visitor"}</b>
+              <span>
+                {modal.value.subscriptions.find(
+                  (subscription: any) => subscription.channel === "EMAIL",
+                )?.address ??
+                  modal.value.subscriptions[0]?.address ??
+                  "No subscription"}
+              </span>
+            </div>
+            <p className="help">
+              Anonymous visit and conversion statistics remain available.
+            </p>
+          </div>
+          <div className="modal-footer remove-contact-footer">
+            <button
+              type="button"
+              className="button secondary"
+              disabled={removingLeadId === modal.value.id}
+              onClick={closeModal}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="button danger-button"
+              disabled={removingLeadId === modal.value.id}
+              onClick={async () => {
+                const id = modal.value.id as string;
+                setRemovingLeadId(id);
+                try {
+                  await api(`/admin/leads/${id}`, { method: "DELETE" });
+                  closeModal();
+                  notify("Testing contact removed");
+                  await refresh();
+                  if (extra?.items?.length === 1 && listPage > 1)
+                    setListPage((current) => current - 1);
+                  else await loadPage();
+                } catch (error) {
+                  notify((error as Error).message);
+                } finally {
+                  setRemovingLeadId(null);
+                }
+              }}
+            >
+              {removingLeadId === modal.value.id && <Spinner />}
+              Remove contact
+            </button>
+          </div>
         </Modal>
       )}
       {modal?.type === "results" && (

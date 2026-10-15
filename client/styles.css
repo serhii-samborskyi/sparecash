@@ -1091,6 +1091,52 @@ td small {
   background: #ecf3e4;
   color: #6b8a51;
 }
+.audience-actions-cell {
+  width: 84px;
+  padding-left: 8px;
+  padding-right: 14px;
+}
+.audience-row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+}
+.remove-contact-button {
+  color: #a44545;
+}
+.audience-row-chevron {
+  color: #7e8d73;
+}
+.remove-contact-confirmation > p:first-child {
+  margin: 0;
+  max-width: 52ch;
+  color: #66765c;
+  line-height: 1.6;
+}
+.remove-contact-identity {
+  display: grid;
+  gap: 4px;
+  margin: 18px 0 14px;
+  padding: 14px 15px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fafbf7;
+}
+.remove-contact-identity b {
+  font-size: 12px;
+}
+.remove-contact-identity span {
+  color: #849175;
+  font-size: 10px;
+}
+.remove-contact-footer {
+  justify-content: flex-end;
+}
+.button.danger-button {
+  border-color: #9d4444;
+  background: #9d4444;
+}
 .pagination {
   display: flex;
   justify-content: flex-end;
@@ -2406,6 +2452,13 @@ summary {
   }
   .icon-button:hover {
     background: #edf2e5;
+  }
+  .remove-contact-button:hover {
+    background: #fbefed;
+    color: #8d3434;
+  }
+  .button.danger-button:hover {
+    background: #873737;
   }
   .url-copy-button:hover {
     background: #edf2e5;
