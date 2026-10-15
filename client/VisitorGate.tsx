@@ -23,10 +23,12 @@ function loadVerification() {
 
 export function VisitorGate({
   session,
+  active,
   onVerified,
   runner,
 }: {
   session: any;
+  active: boolean;
   onVerified: (verified: boolean) => void;
   runner: React.MutableRefObject<(() => Promise<void>) | undefined>;
 }) {
@@ -88,7 +90,7 @@ export function VisitorGate({
     return () => clearTimeout(timer);
   }, [verified, expiresAt, updateVerified, runner]);
   useEffect(() => {
-    if (verified) return;
+    if (verified || !active) return;
     let disposed = false,
       widget: string | undefined;
     setError("");
@@ -151,10 +153,11 @@ export function VisitorGate({
     session.visitId,
     session.turnstileSiteKey,
     verified,
+    active,
     retry,
     updateVerified,
   ]);
-  if (verified) return null;
+  if (verified || !active) return null;
   return (
     <section
       className="visitor-controls"

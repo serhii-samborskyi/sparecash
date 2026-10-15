@@ -11,11 +11,15 @@ created by this implementation. Production account checks remain outstanding.
 
 ## Verification and engagement
 
-Every live landing mounts Turnstile with the first quiz/application step after
-creating its visit. The interaction-only widget stays out of the hero unless a
-visitor must complete a challenge. This covers quiz participants and people who never subscribe.
-Rendering, raw engagement and continuation to loan options remain available
-while verification is incomplete; audience enrollment does not.
+Every live quiz landing starts Turnstile on the visitor's first answer after
+creating its visit; pages without a quiz start it at the protected application
+step. The interaction-only widget stays out of the hero unless a visitor must
+complete a challenge. This covers quiz participants and people who never
+subscribe. Rendering and raw engagement remain available while verification is
+incomplete; direct landing subscription, direct continuation to RoundSky, and
+audience enrollment require current server-verified proof. A signed follow-up
+link keeps its existing delivery-token protection so an older confirmed
+subscriber is not locked out when the original 30-minute visit proof expires.
 
 `POST /api/public/verify-visit` requires the signed visit token and matching
 first-party journey cookie. Siteverify must return success, the `APP_URL`

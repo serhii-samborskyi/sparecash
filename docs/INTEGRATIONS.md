@@ -115,10 +115,18 @@ The owner Statistics view imports authenticated spend. Campaign and bid changes 
 
 Copy the account S2S URL from **PropellerAds → Tracking** into **Settings → Integrations → PropellerAds S2S postback URL**. SpareCash preserves its account parameters and supplies `visitor_id`, `payout`, and the goal:
 
-- an application continuation sends the main conversion (goal 1);
-- a deduplicated RoundSky SOLD callback sends `goal=2` with the incremental commission as payout.
+- a deduplicated RoundSky SOLD callback sends the main conversion (goal 1)
+  with commission as payout;
+- a server-recorded application continuation sends `goal=2`;
+- a verified quiz completion sends `goal=3`.
 
-The worker stores each conversion before delivery. A successful response is never resent. A timeout or server failure is marked uncertain for manual reconciliation because the PropellerAds conversion endpoint has no application idempotency key.
+Only attributed visits with a valid provider click ID qualify. The database
+enforces one row per click ID and goal, so refreshes and repeat application
+clicks cannot send the same event twice. The worker stores each conversion
+before delivery and logs every request attempt with its HTTP status. A
+successful response is never resent. A timeout or server failure is marked
+uncertain for manual reconciliation because the PropellerAds conversion
+endpoint has no application idempotency key.
 
 Official reference: https://ssp-api.propellerads.com/v5/docs/
 Official MCP: https://propellerads.com/mcp-connector/
@@ -140,9 +148,12 @@ Set a hostname-restricted site key and secret. All live landings start
 verification with `action=visit` and the server-issued visit ID as `cData`, even
 when the visitor never subscribes. The server checks Siteverify success,
 hostname, action and visit binding, then retains a 30-minute visit proof.
-The widget uses interaction-only appearance and is mounted with the first
-application/quiz step, so an interactive challenge appears at the action it
-protects instead of occupying the landing hero.
+The widget uses interaction-only appearance. Quiz landings start it on the
+visitor's first answer; pages without a quiz start it at the protected
+application step. The page remains readable while it runs, and the server
+requires current proof before any direct landing subscription or RoundSky
+continuation. Signed follow-up links retain their delivery-token protection
+because they can be opened after the original visit proof expires.
 Audience verification has no test-key bypass. Legacy `action=subscribe` remains
 accepted for existing clients but does not supply an audience proof.
 

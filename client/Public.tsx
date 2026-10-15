@@ -76,6 +76,7 @@ function Landing({ preview }: { preview: boolean }) {
     [phone, setPhone] = useState(""),
     [company, setCompany] = useState(""),
     [visitorVerified, setVisitorVerified] = useState(false),
+    [verificationRequested, setVerificationRequested] = useState(false),
     [searchStep, setSearchStep] = useState(-1),
     [searchFinished, setSearchFinished] = useState(false),
     [busy, setBusy] = useState(false),
@@ -311,6 +312,11 @@ function Landing({ preview }: { preview: boolean }) {
     entryPoint: "application" | "optional_updates" = "application",
   ) {
     if (preview) return;
+    if (!visitorVerified) {
+      setVerificationRequested(true);
+      setError("Finish the secure browser check, then continue.");
+      return;
+    }
     setBusy(true);
     try {
       clarityEvent(
@@ -363,6 +369,7 @@ function Landing({ preview }: { preview: boolean }) {
       {!preview && (
         <VisitorGate
           session={session}
+          active={verificationRequested || questions.length === 0}
           onVerified={setVisitorVerified}
           runner={pixelRunner}
         />
@@ -469,7 +476,7 @@ function Landing({ preview }: { preview: boolean }) {
           <button
             className="button full"
             onClick={() => void continueOffer()}
-            disabled={busy}
+            disabled={busy || !visitorVerified}
           >
             Continue to loan options
             <ArrowRight size={17} />
@@ -503,6 +510,7 @@ function Landing({ preview }: { preview: boolean }) {
                 key={option}
                 className={answers[question.id] === option ? "selected" : ""}
                 onClick={() => {
+                  if (step === 0) setVerificationRequested(true);
                   window.dispatchEvent(new Event("sparecash-quiz-started"));
                   const index = config.questions.findIndex(
                     (q: any) => q.id === question.id,
@@ -594,7 +602,7 @@ function Landing({ preview }: { preview: boolean }) {
               </p>
               <button
                 className="button full"
-                disabled={preview || busy}
+                disabled={preview || busy || !visitorVerified}
                 onClick={() => void continueOffer()}
               >
                 {busy ? <Spinner /> : null} Continue to application{" "}
@@ -746,7 +754,7 @@ function Landing({ preview }: { preview: boolean }) {
               <button
                 type="button"
                 className="skip-updates"
-                disabled={preview || busy}
+                disabled={preview || busy || !visitorVerified}
                 onClick={() => void continueOffer("optional_updates")}
               >
                 Continue without updates{" "}

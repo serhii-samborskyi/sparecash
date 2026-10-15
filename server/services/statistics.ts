@@ -86,6 +86,7 @@ function counts(segment: Segment) {
     unverified: 0,
     verificationFailed: 0,
     verificationErrors: 0,
+    verificationNotFinished: 0,
     engaged: 0,
     verifiedEngaged: 0,
     quizStarted: 0,
@@ -109,6 +110,7 @@ function counts(segment: Segment) {
     locatedVisits: 0,
     recordedClickCost: 0,
     costRecordedVisits: 0,
+    serverHits: null as number | null,
     impressions: null as number | null,
     adClicks: null as number | null,
     adSpend: null as number | null,
@@ -239,6 +241,21 @@ function finish(row: Counts) {
       row.adSpend !== null && row.adClicks !== null
         ? ratio(row.adSpend, row.adClicks)
         : null,
+    paidClickDeliveryRate:
+      row.serverHits !== null && row.adClicks !== null
+        ? ratio(row.serverHits, row.adClicks)
+        : null,
+    jsRenderRate:
+      row.serverHits !== null ? ratio(row.visits, row.serverHits) : null,
+    verifiedPerAdClick:
+      row.adClicks !== null ? ratio(row.verified, row.adClicks) : null,
+    costPerVisit: comparableCosts ? ratio(row.adSpend!, row.visits) : null,
+    costPerQuizCompletion: comparableCosts
+      ? ratio(row.adSpend!, row.quizCompleted)
+      : null,
+    costPerApplication: comparableCosts
+      ? ratio(row.adSpend!, row.applicationVisitors)
+      : null,
     costPerSubscriber: comparableCosts
       ? ratio(row.adSpend!, row.subscribers)
       : null,
@@ -380,7 +397,16 @@ export async function statisticsReport(input: StatisticsInput = {}) {
     !query.device &&
     !query.browser &&
     !query.os;
-  const [ads, clarity] = await Promise.all([
+  const hitSupported =
+    ["zone", "campaign", "day"].includes(query.groupBy) &&
+    !query.variantId &&
+    !query.country &&
+    !query.region &&
+    !query.city &&
+    !query.device &&
+    !query.browser &&
+    !query.os;
+  const [ads, clarity, landingHits] = await Promise.all([
     supported
       ? advertiserStatistics(
           {
@@ -399,7 +425,26 @@ export async function statisticsReport(input: StatisticsInput = {}) {
           status: "unsupported" as const,
         }),
     clarityReport(),
+    hitSupported
+      ? db.landingHit.findMany({
+          where: {
+            createdAt: { gte: new Date(from), lt: end },
+            ...(query.campaignId ? { campaignId: query.campaignId } : {}),
+            ...(query.zoneId ? { zoneId: query.zoneId } : {}),
+          },
+          take: 100001,
+          select: {
+            campaignId: true,
+            zoneId: true,
+            createdAt: true,
+          },
+        })
+      : Promise.resolve([]),
   ]);
+  if (landingHits.length > 100000)
+    throw new Error(
+      "More than 100,000 server hits match this report. Narrow the dates or campaign; no partial totals were returned.",
+    );
   const groups = new Map<string, Counts>();
   const summary = counts({
     key: "total",
@@ -542,6 +587,45 @@ export async function statisticsReport(input: StatisticsInput = {}) {
         return make([a.day], a.day);
     }
   }
+  const campaignNames = new Map(
+    ads.rows.map((row) => [row.campaignId, row.campaignName]),
+  );
+  function hitSegment(hit: (typeof landingHits)[number]) {
+    switch (query.groupBy) {
+      case "zone":
+        return make(
+          [hit.campaignId, hit.zoneId],
+          hit.zoneId
+            ? `Zone ${hit.zoneId}`
+            : hit.campaignId
+              ? "Unknown zone"
+              : "Unattributed",
+          hit.campaignId
+            ? (campaignNames.get(hit.campaignId) ??
+                `Campaign ${hit.campaignId}`)
+            : "No campaign or zone",
+          {
+            campaignId: hit.campaignId ?? undefined,
+            zoneId: hit.zoneId ?? undefined,
+          },
+        );
+      case "campaign":
+        return make(
+          [hit.campaignId],
+          hit.campaignId
+            ? (campaignNames.get(hit.campaignId) ??
+                `Campaign ${hit.campaignId}`)
+            : "Unattributed",
+          hit.campaignId ? `Campaign ${hit.campaignId}` : "",
+          { campaignId: hit.campaignId ?? undefined },
+        );
+      default:
+        return make(
+          [hit.createdAt.toISOString().slice(0, 10)],
+          hit.createdAt.toISOString().slice(0, 10),
+        );
+    }
+  }
   const adScopes = new Set(
     ads.rows.map((a) =>
       JSON.stringify([a.campaignId, a.zoneId, a.country, a.day]),
@@ -584,6 +668,8 @@ export async function statisticsReport(input: StatisticsInput = {}) {
       else target.unverified++;
       if (visit.verificationState === "FAILED") target.verificationFailed++;
       if (visit.verificationState === "ERROR") target.verificationErrors++;
+      if (["UNVERIFIED", "PENDING"].includes(visit.verificationState))
+        target.verificationNotFinished++;
       if (engaged) target.engaged++;
       if (engaged && visit.verified) target.verifiedEngaged++;
       if (quiz) target.quizStarted++;
@@ -615,6 +701,17 @@ export async function statisticsReport(input: StatisticsInput = {}) {
         target.recordedClickCost += Number(visit.cost);
       }
       if (matched) target.matchedPaidVisits++;
+    }
+  }
+  if (hitSupported) {
+    summary.serverHits = 0;
+    for (const hit of landingHits) {
+      const segment = hitSegment(hit);
+      const row = group(segment);
+      row.label = segment.label;
+      row.detail = segment.detail;
+      row.serverHits = (row.serverHits ?? 0) + 1;
+      summary.serverHits++;
     }
   }
   if (["ready", "stale"].includes(ads.status)) {
@@ -777,6 +874,8 @@ export async function statisticsReport(input: StatisticsInput = {}) {
     definitions: {
       visits:
         "Recorded visit sessions, not unique people. New advertising clicks can create new visits.",
+      serverHits:
+        "HTTP requests observed by SpareCash on /go before browser JavaScript runs. Repeat loads count again. Compare paid clicks → server hits → rendered visits → verified visits to locate traffic loss.",
       verified:
         "Latest recorded browser verification passed. Verification is a quality signal, not guaranteed human identity. Legacy verified visits are included.",
       suspectedBots:
@@ -791,7 +890,7 @@ export async function statisticsReport(input: StatisticsInput = {}) {
       revenue:
         "Earliest SOLD commission per application, including follow-ups attributed to the original visit. Purchased leads are not funded loans.",
       costs:
-        "PropellerAds spend is separate from recorded click costs. Cost per subscriber and ROAS require advertiser scope matching for every visit in the row. No estimated allocation to cities, devices or landing variants.",
+        "PropellerAds spend is separate from URL-declared click costs. Cost per visit, quiz completion, application, subscriber and sale require advertiser scope matching for every visit in the row. No estimated allocation to cities, devices or landing variants.",
       geography:
         "Approximate IP location from trusted edge headers. Missing historical locations stay unknown. Browser and device categories come from the stored user agent.",
       propellerAttribution:
@@ -909,6 +1008,43 @@ export async function statisticsVisits(input: StatisticsVisitsInput) {
           orderBy: { createdAt: "asc" },
           select: { state: true, errors: true, createdAt: true },
         },
+        landingHits: {
+          orderBy: { createdAt: "asc" },
+          select: {
+            id: true,
+            createdAt: true,
+            campaignId: true,
+            zoneId: true,
+            externalClickId: true,
+            userAgent: true,
+          },
+        },
+        advertiserConversions: {
+          orderBy: { createdAt: "asc" },
+          select: {
+            event: true,
+            goal: true,
+            externalClickId: true,
+            payout: true,
+            status: true,
+            attempts: true,
+            error: true,
+            createdAt: true,
+            attemptedAt: true,
+            sentAt: true,
+            deliveryAttempts: {
+              orderBy: { attempt: "asc" },
+              select: {
+                attempt: true,
+                httpStatus: true,
+                outcome: true,
+                error: true,
+                createdAt: true,
+                completedAt: true,
+              },
+            },
+          },
+        },
         engagementEvents: {
           orderBy: [{ createdAt: "asc" }, { id: "asc" }],
           select: {
@@ -955,20 +1091,6 @@ export async function statisticsVisits(input: StatisticsVisitsInput) {
                 event: true,
                 revenue: true,
                 createdAt: true,
-              },
-            },
-            advertiserConversions: {
-              orderBy: { createdAt: "asc" },
-              select: {
-                event: true,
-                goal: true,
-                payout: true,
-                status: true,
-                attempts: true,
-                error: true,
-                createdAt: true,
-                attemptedAt: true,
-                sentAt: true,
               },
             },
           },
@@ -1040,6 +1162,24 @@ export async function statisticsVisits(input: StatisticsVisitsInput) {
               createdAt: attempt.createdAt.toISOString(),
             })),
           },
+          landingHits: visit.landingHits.map((hit) => ({
+            ...hit,
+            createdAt: hit.createdAt.toISOString(),
+          })),
+          advertiserConversions: visit.advertiserConversions.map(
+            (conversion) => ({
+              ...conversion,
+              payout: Number(conversion.payout),
+              createdAt: conversion.createdAt.toISOString(),
+              attemptedAt: iso(conversion.attemptedAt),
+              sentAt: iso(conversion.sentAt),
+              deliveryAttempts: conversion.deliveryAttempts.map((attempt) => ({
+                ...attempt,
+                createdAt: attempt.createdAt.toISOString(),
+                completedAt: iso(attempt.completedAt),
+              })),
+            }),
+          ),
           preQuiz: {
             measuredAt: iso(visit.preQuizMeasuredAt),
             endedAt: iso(visit.preQuizEndedAt),
@@ -1074,15 +1214,6 @@ export async function statisticsVisits(input: StatisticsVisitsInput) {
               revenue: Number(postback.revenue),
               createdAt: postback.createdAt.toISOString(),
             })),
-            advertiserConversions: application.advertiserConversions.map(
-              (conversion) => ({
-                ...conversion,
-                payout: Number(conversion.payout),
-                createdAt: conversion.createdAt.toISOString(),
-                attemptedAt: iso(conversion.attemptedAt),
-                sentAt: iso(conversion.sentAt),
-              }),
-            ),
           })),
           retargeting: {
             campaignId: visit.retargetingCampaignId,

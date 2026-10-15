@@ -2,6 +2,7 @@ import { z } from "zod";
 import { db } from "../db.js";
 import { landingSchema, visibleQuestions } from "../domain.js";
 import { hasVisitorProof } from "./visitor-verification.js";
+import { queueAdvertiserConversion } from "./advertiser-conversion-events.js";
 
 export const engagementSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("UPDATES_OPENED") }).strict(),
@@ -106,6 +107,12 @@ export async function recordEngagement(visitId: string, input: unknown) {
           OR: events.map((e) => ({ kind: e.kind, questionId: e.questionId })),
         },
         data: { verifiedAt },
+      });
+    if (verifiedAt && events.some((event) => event.kind === "QUIZ_COMPLETED"))
+      await queueAdvertiserConversion(tx, {
+        visit: latest,
+        event: "QUIZ_COMPLETED",
+        goal: 3,
       });
   });
 }

@@ -57,9 +57,7 @@ function segmentLines(label: string, campaign: boolean) {
   const lineCount = Math.min(3, Math.ceil(parts.length / 2));
   const partsPerLine = Math.ceil(parts.length / lineCount);
   return Array.from({ length: lineCount }, (_, index) =>
-    parts
-      .slice(index * partsPerLine, (index + 1) * partsPerLine)
-      .join(" · "),
+    parts.slice(index * partsPerLine, (index + 1) * partsPerLine).join(" · "),
   ).filter(Boolean);
 }
 type Column = {
@@ -115,11 +113,39 @@ const columns: Record<string, Column[]> = {
   ],
   acquisition: [
     { key: "impressions", label: "Impressions" },
-    { key: "adClicks", label: "Ad clicks" },
+    { key: "adClicks", label: "Billed ad clicks" },
     { key: "ctr", label: "Ad CTR", type: "rate" },
-    { key: "visits", label: "Tracked visits" },
+    {
+      key: "serverHits",
+      label: "Server hits",
+      hint: "Requests received before browser JavaScript runs",
+    },
+    {
+      key: "paidClickDeliveryRate",
+      label: "Clicks → server",
+      type: "rate",
+    },
+    { key: "visits", label: "JS visits" },
+    { key: "jsRenderRate", label: "Server → JS", type: "rate" },
+    { key: "verified", label: "Verified visits" },
+    {
+      key: "verifiedPerAdClick",
+      label: "Clicks → verified",
+      type: "rate",
+    },
     { key: "adSpend", label: "Ad spend", type: "money" },
     { key: "cpc", label: "Ad CPC", type: "money" },
+    { key: "costPerVisit", label: "Cost / visit", type: "money" },
+    {
+      key: "costPerQuizCompletion",
+      label: "Cost / quiz",
+      type: "money",
+    },
+    {
+      key: "costPerApplication",
+      label: "Cost / application",
+      type: "money",
+    },
   ],
   quality: [
     { key: "visits", label: "Visits" },
@@ -138,6 +164,7 @@ const columns: Record<string, Column[]> = {
     },
     { key: "verificationFailed", label: "Failed checks" },
     { key: "verificationErrors", label: "Check errors" },
+    { key: "verificationNotFinished", label: "Not finished" },
     {
       key: "verifiedEngagementRate",
       label: "Engaged / verified",

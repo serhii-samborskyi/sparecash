@@ -37,6 +37,7 @@ export async function processAdvertiserConversions() {
   });
   let sent = 0;
   for (const conversion of due) {
+    const attemptNumber = conversion.attempts + 1;
     const claimed = await db.advertiserConversion.updateMany({
       where: { id: conversion.id, status: "PENDING" },
       data: {
@@ -47,6 +48,13 @@ export async function processAdvertiserConversions() {
       },
     });
     if (!claimed.count) continue;
+    const attempt = await db.advertiserConversionAttempt.create({
+      data: {
+        conversionId: conversion.id,
+        attempt: attemptNumber,
+        outcome: "SENDING",
+      },
+    });
     try {
       const response = await fetch(deliveryUrl(conversion), {
         method: "GET",
@@ -55,14 +63,25 @@ export async function processAdvertiserConversions() {
         headers: { Accept: "text/plain, application/json" },
       });
       if (!response.ok) {
+        const status =
+          response.status >= 400 && response.status < 500
+            ? "FAILED"
+            : "UNCERTAIN";
+        const error = `PropellerAds returned HTTP ${response.status}`;
         await db.advertiserConversion.update({
           where: { id: conversion.id },
           data: {
-            status:
-              response.status >= 400 && response.status < 500
-                ? "FAILED"
-                : "UNCERTAIN",
-            error: `PropellerAds returned HTTP ${response.status}`,
+            status,
+            error,
+          },
+        });
+        await db.advertiserConversionAttempt.update({
+          where: { id: attempt.id },
+          data: {
+            outcome: status,
+            httpStatus: response.status,
+            error,
+            completedAt: new Date(),
           },
         });
         continue;
@@ -70,6 +89,14 @@ export async function processAdvertiserConversions() {
       await db.advertiserConversion.update({
         where: { id: conversion.id },
         data: { status: "SENT", sentAt: new Date(), error: null },
+      });
+      await db.advertiserConversionAttempt.update({
+        where: { id: attempt.id },
+        data: {
+          outcome: "SENT",
+          httpStatus: response.status,
+          completedAt: new Date(),
+        },
       });
       sent++;
     } catch {
@@ -81,6 +108,15 @@ export async function processAdvertiserConversions() {
           status: "UNCERTAIN",
           error:
             "Postback outcome is uncertain; check PropellerAds before retrying",
+        },
+      });
+      await db.advertiserConversionAttempt.update({
+        where: { id: attempt.id },
+        data: {
+          outcome: "UNCERTAIN",
+          error:
+            "Postback outcome is uncertain; check PropellerAds before retrying",
+          completedAt: new Date(),
         },
       });
     }

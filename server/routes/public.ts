@@ -44,6 +44,7 @@ import {
   unsubscribe,
   transitionLead,
 } from "../services/journeys.js";
+import { attachLandingHit } from "../services/landing-hits.js";
 export const publicRouter = Router();
 publicRouter.use(
   rateLimit({
@@ -182,6 +183,7 @@ publicRouter.post("/visit", async (req, res) => {
     maxAge: 86400000,
     path: "/",
   });
+  await attachLandingHit(req, res, input, visit.id);
   res.json({
     visitToken,
     visitId: visit.id,
@@ -651,6 +653,7 @@ publicRouter.post("/application", async (req, res) => {
   const url = await createRoundSkyApplication({
     leadId,
     visitId: lead.visitId,
+    requireVerification: true,
   });
   res.set("Cache-Control", "no-store").json({ url });
 });
@@ -744,7 +747,10 @@ publicRouter.post("/continue", async (req, res) => {
     res.status(503).json({ error: "Loan options are not connected yet." });
     return;
   }
-  const url = await createRoundSkyApplication({ visitId: visit.id });
+  const url = await createRoundSkyApplication({
+    visitId: visit.id,
+    requireVerification: true,
+  });
   res.set("Cache-Control", "no-store").json({ url });
 });
 

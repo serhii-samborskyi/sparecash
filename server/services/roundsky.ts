@@ -9,6 +9,7 @@ import {
 import { settings } from "./control.js";
 import { lockJourney, refreshJourneySuppression } from "./retargeting.js";
 import { hasVisitorProof } from "./visitor-verification.js";
+import { queueAdvertiserConversion } from "./advertiser-conversion-events.js";
 
 export function roundSkyWebhookSecret() {
   return env.ROUNDSKY_WEBHOOK_TOKEN;
@@ -45,6 +46,7 @@ export async function createRoundSkyApplication(input: {
   visitId: string;
   leadId?: string;
   deliveryId?: string;
+  requireVerification?: boolean;
 }) {
   const config = await settings();
   if (!config.roundskyUrl)
@@ -71,16 +73,21 @@ export async function createRoundSkyApplication(input: {
     const current = await tx.visit.findUniqueOrThrow({
       where: { id: visit.id },
     });
-    const application = await tx.applicationClick.create({ data: input });
-    if (current.sourceId && current.externalClickId)
-      await tx.advertiserConversion.create({
-        data: {
-          applicationId: application.id,
-          event: "APPLICATION",
-          goal: 1,
-          externalClickId: current.externalClickId,
-        },
-      });
+    if (input.requireVerification && !hasVisitorProof(current))
+      throw new Error("Finish browser verification, then continue.");
+    const application = await tx.applicationClick.create({
+      data: {
+        visitId: input.visitId,
+        leadId: input.leadId,
+        deliveryId: input.deliveryId,
+      },
+    });
+    await queueAdvertiserConversion(tx, {
+      visit: current,
+      applicationId: application.id,
+      event: "APPLICATION",
+      goal: 2,
+    });
     await tx.visitEvent.createMany({
       data: [
         {

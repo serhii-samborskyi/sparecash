@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import { db } from "../db.js";
 import { env } from "../config.js";
 import { hash } from "../security.js";
+import { queueAdvertiserConversion } from "./advertiser-conversion-events.js";
 
 export const VERIFICATION_LIFETIME_MS = 30 * 60_000;
 
@@ -141,6 +142,19 @@ export async function verifyVisitor(
       await tx.visitEvent.updateMany({
         where: { visitId, verifiedAt: null },
         data: { verifiedAt: new Date() },
+      });
+    if (
+      latest &&
+      state === "VERIFIED" &&
+      (await tx.visitEvent.findFirst({
+        where: { visitId, kind: "QUIZ_COMPLETED" },
+        select: { id: true },
+      }))
+    )
+      await queueAdvertiserConversion(tx, {
+        visit: current,
+        event: "QUIZ_COMPLETED",
+        goal: 3,
       });
   });
   const visit = await db.visit.findUniqueOrThrow({ where: { id: visitId } });

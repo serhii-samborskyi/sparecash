@@ -152,6 +152,13 @@ function VisitDetails({ visit }: { visit: Visit }) {
             ["Browser", visit.browserContext.browser],
             ["Operating system", visit.browserContext.os],
             ["User agent", visit.userAgent],
+            ["Server hits linked to visit", visit.landingHits.length],
+            [
+              "First server hit",
+              visit.landingHits[0]
+                ? date(visit.landingHits[0].createdAt)
+                : null,
+            ],
           ]}
         />
       </section>
@@ -274,16 +281,39 @@ function VisitDetails({ visit }: { visit: Visit }) {
                 {date(postback.createdAt)}
               </p>
             ))}
-            {application.advertiserConversions.map((conversion, index) => (
-              <p key={`${conversion.event}-${index}`}>
-                Advertiser goal {conversion.goal} · {conversion.event} ·{" "}
-                {conversion.status}
-                {conversion.payout ? ` · ${money(conversion.payout)}` : ""}
-                {conversion.error ? ` · ${conversion.error}` : ""}
+          </div>
+        ))}
+      </section>
+      <section>
+        <h4>PropellerAds conversion feedback</h4>
+        {visit.advertiserConversions.map((conversion, index) => (
+          <div
+            className="visit-outcome-card"
+            key={`${conversion.event}-${conversion.goal}-${index}`}
+          >
+            <p>
+              <b>
+                Goal {conversion.goal} · {humanize(conversion.event)}
+              </b>{" "}
+              · {conversion.status}
+              {conversion.payout ? ` · ${money(conversion.payout)}` : ""}
+              {conversion.error ? ` · ${conversion.error}` : ""}
+            </p>
+            {conversion.deliveryAttempts.map((attempt) => (
+              <p key={attempt.attempt}>
+                Attempt {attempt.attempt} · {attempt.outcome} · HTTP{" "}
+                {attempt.httpStatus ?? "no response"} ·{" "}
+                {date(attempt.createdAt)}
+                {attempt.error ? ` · ${attempt.error}` : ""}
               </p>
             ))}
           </div>
         ))}
+        {!visit.advertiserConversions.length && (
+          <p className="visit-empty-detail">
+            No advertiser conversion is queued for this visit.
+          </p>
+        )}
       </section>
       <section>
         <h4>Retargeting</h4>

@@ -19,6 +19,7 @@ import {
   refreshRuntimeConfiguration,
 } from "./runtime-config.js";
 import { runtimeContext } from "./config.js";
+import { recordLandingHit } from "./services/landing-hits.js";
 export const app = express();
 app.disable("x-powered-by");
 // Coolify terminates TLS; only trust its loopback/private reverse-proxy hop.
@@ -104,6 +105,9 @@ app.use(async (_req, _res, next) => {
     next(error);
   }
 });
+// This route runs before the SPA and before any browser JavaScript. It records
+// the paid landing request, then lets the normal static/Vite handler serve it.
+app.get("/go/:slug", recordLandingHit);
 app.post(
   "/api/auth/login",
   rateLimit({

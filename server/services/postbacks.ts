@@ -4,6 +4,7 @@ import { nextLeadStatus, shouldStop } from "../domain.js";
 import { settings } from "./control.js";
 import { transitionLead } from "./journeys.js";
 import { lockJourney } from "./retargeting.js";
+import { queueAdvertiserConversion } from "./advertiser-conversion-events.js";
 
 export class PostbackConflictError extends Error {}
 
@@ -46,23 +47,13 @@ export async function recordPostback(input: {
             });
       }
       await tx.postback.create({ data: { ...input, revenue } });
-      if (
-        input.event === "SOLD" &&
-        app.visit.sourceId &&
-        app.visit.externalClickId
-      )
-        await tx.advertiserConversion.upsert({
-          where: {
-            applicationId_goal: { applicationId: app.id, goal: 2 },
-          },
-          create: {
-            applicationId: app.id,
-            event: "SOLD",
-            goal: 2,
-            externalClickId: app.visit.externalClickId,
-            payout: revenue,
-          },
-          update: {},
+      if (input.event === "SOLD")
+        await queueAdvertiserConversion(tx, {
+          visit: { id: app.visitId, ...app.visit },
+          applicationId: app.id,
+          event: "SOLD",
+          goal: 1,
+          payout: revenue,
         });
       if (app.leadId) {
         await tx.$queryRaw`SELECT id FROM "Lead" WHERE id=${app.leadId} FOR UPDATE`;

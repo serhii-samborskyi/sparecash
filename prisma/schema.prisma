@@ -138,51 +138,73 @@ model TrafficSource {
 
 model Visit {
   journeyId             String?
-  journey               VisitorJourney?       @relation(fields: [journeyId], references: [id], onDelete: SetNull)
-  verificationState     String                @default("UNVERIFIED")
+  journey               VisitorJourney?        @relation(fields: [journeyId], references: [id], onDelete: SetNull)
+  verificationState     String                 @default("UNVERIFIED")
   verificationAttemptId String?
   verifiedAt            DateTime?
   verificationExpiresAt DateTime?
   verifications         VisitorVerification[]
   retargetingCampaignId String?
   retargetingAudienceId String?
-  configSnapshot        Json                  @default("{}")
-  id                    String                @id @default(uuid())
+  configSnapshot        Json                   @default("{}")
+  id                    String                 @id @default(uuid())
   experimentId          String
-  experiment            Experiment            @relation(fields: [experimentId], references: [id])
+  experiment            Experiment             @relation(fields: [experimentId], references: [id])
   variantId             String
-  variant               Variant               @relation(fields: [variantId], references: [id])
+  variant               Variant                @relation(fields: [variantId], references: [id])
   sourceId              String?
-  source                TrafficSource?        @relation(fields: [sourceId], references: [id])
+  source                TrafficSource?         @relation(fields: [sourceId], references: [id])
   externalClickId       String?
-  adContext             Json                  @default("{}")
+  adContext             Json                   @default("{}")
   ipHash                String
   userAgent             String
   country               String?
   region                String?
   city                  String?
   geoSource             String?
-  verified              Boolean               @default(false)
-  challenged            Boolean               @default(false)
-  botScore              Int                   @default(0)
+  verified              Boolean                @default(false)
+  challenged            Boolean                @default(false)
+  botScore              Int                    @default(0)
   evidence              String[]
-  cost                  Decimal               @default(0) @db.Decimal(12, 6)
-  costRecorded          Boolean               @default(false)
+  cost                  Decimal                @default(0) @db.Decimal(12, 6)
+  costRecorded          Boolean                @default(false)
   preQuizMeasuredAt     DateTime?
   preQuizEndedAt        DateTime?
-  preQuizActiveMs       Int                   @default(0)
-  preQuizClicks         Int                   @default(0)
-  preQuizScrolls        Int                   @default(0)
-  createdAt             DateTime              @default(now())
+  preQuizActiveMs       Int                    @default(0)
+  preQuizClicks         Int                    @default(0)
+  preQuizScrolls        Int                    @default(0)
+  createdAt             DateTime               @default(now())
   leads                 Lead[]
   applications          ApplicationClick[]
   engagementEvents      VisitEvent[]
+  landingHits           LandingHit[]
+  advertiserConversions AdvertiserConversion[]
 
   @@index([sourceId, createdAt])
   @@index([ipHash, createdAt])
   @@index([experimentId, createdAt])
   @@index([journeyId, createdAt])
   @@index([createdAt])
+}
+
+// A server-observed request to a public landing. This is written before the
+// browser application and its JavaScript run, so paid-click delivery loss can
+// be separated from render and verification loss.
+model LandingHit {
+  id              String   @id @default(uuid())
+  slug            String
+  campaignId      String?
+  zoneId          String?
+  externalClickId String?
+  userAgent       String
+  ipHash          String
+  visitId         String?
+  visit           Visit?   @relation(fields: [visitId], references: [id], onDelete: SetNull)
+  createdAt       DateTime @default(now())
+
+  @@index([campaignId, zoneId, createdAt])
+  @@index([slug, createdAt])
+  @@index([visitId])
 }
 
 // Complete read-only advertiser report snapshots. Never mixed with click costs.
@@ -421,36 +443,55 @@ model Delivery {
 }
 
 model ApplicationClick {
-  id         String     @id @default(uuid())
-  leadId     String?
-  lead       Lead?      @relation(fields: [leadId], references: [id])
-  visitId    String
-  visit      Visit      @relation(fields: [visitId], references: [id])
-  deliveryId String?
-  createdAt  DateTime   @default(now())
-  postbacks  Postback[]
+  id                    String                 @id @default(uuid())
+  leadId                String?
+  lead                  Lead?                  @relation(fields: [leadId], references: [id])
+  visitId               String
+  visit                 Visit                  @relation(fields: [visitId], references: [id])
+  deliveryId            String?
+  createdAt             DateTime               @default(now())
+  postbacks             Postback[]
   advertiserConversions AdvertiserConversion[]
 }
 
 // Durable outbound conversion feedback. Ambiguous network outcomes are held for
 // review rather than retried because advertiser postbacks are not idempotent.
 model AdvertiserConversion {
-  id              String           @id @default(cuid())
-  applicationId   String
-  application     ApplicationClick @relation(fields: [applicationId], references: [id], onDelete: Cascade)
-  event           String
-  goal            Int
-  externalClickId String
-  payout          Decimal          @default(0) @db.Decimal(12, 4)
-  status          String           @default("PENDING")
-  attempts        Int              @default(0)
-  error           String?
-  createdAt       DateTime         @default(now())
-  attemptedAt     DateTime?
-  sentAt          DateTime?
+  id               String                        @id @default(cuid())
+  visitId          String
+  visit            Visit                         @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  applicationId    String?
+  application      ApplicationClick?             @relation(fields: [applicationId], references: [id], onDelete: SetNull)
+  event            String
+  goal             Int
+  externalClickId  String
+  payout           Decimal                       @default(0) @db.Decimal(12, 4)
+  status           String                        @default("PENDING")
+  attempts         Int                           @default(0)
+  error            String?
+  createdAt        DateTime                      @default(now())
+  attemptedAt      DateTime?
+  sentAt           DateTime?
+  deliveryAttempts AdvertiserConversionAttempt[]
 
-  @@unique([applicationId, goal])
+  @@unique([externalClickId, goal])
   @@index([status, createdAt])
+  @@index([visitId, createdAt])
+}
+
+model AdvertiserConversionAttempt {
+  id           String               @id @default(cuid())
+  conversionId String
+  conversion   AdvertiserConversion @relation(fields: [conversionId], references: [id], onDelete: Cascade)
+  attempt      Int
+  httpStatus   Int?
+  outcome      String
+  error        String?
+  createdAt    DateTime             @default(now())
+  completedAt  DateTime?
+
+  @@unique([conversionId, attempt])
+  @@index([createdAt])
 }
 
 model Postback {

@@ -241,7 +241,7 @@ function makeServer() {
   );
   register(
     "statistics_report",
-    "Compare acquisition by zone, campaign, landing, country, state, city, device, browser, OS or UTC day. Reports verified/suspected-bot/unverified rates, measured pre-quiz visible time, meaningful non-quiz clicks and scroll gestures, unique engaged and confirmed subscription visits, applications, deduplicated sales and revenue. Reads paginated PropellerAds impressions/clicks/spend for supported dimensions, cached 15 minutes; refreshAds refreshes the read-only snapshot. Date strings are inclusive YYYY-MM-DD (up to 93 days). No invented historical geography, no automatic campaign changes, no treating unverified as bots or missing advertiser data as zero.",
+    "Compare acquisition by zone, campaign, landing, country, state, city, device, browser, OS or UTC day. For zone/campaign/day, separates PropellerAds billed clicks, server-observed landing hits, JavaScript visits and verified visits, with cost per visit, quiz completion and application. Also reports verified/suspected-bot/unverified rates, measured pre-quiz activity, subscriptions, applications, deduplicated sales and revenue. Reads paginated PropellerAds impressions/clicks/spend for supported dimensions, cached 15 minutes; refreshAds refreshes the read-only snapshot. Date strings are inclusive YYYY-MM-DD (up to 93 days). No invented historical geography, automatic campaign changes, treating unverified as bots or treating missing advertiser data as zero.",
     statisticsSchema.shape,
     statisticsReport,
     true,

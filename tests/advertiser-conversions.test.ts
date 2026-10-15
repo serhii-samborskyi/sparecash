@@ -12,8 +12,15 @@ const conversions = vi.hoisted(() => ({
   update: vi.fn(),
   count: vi.fn(),
 }));
+const attempts = vi.hoisted(() => ({
+  create: vi.fn(),
+  update: vi.fn(),
+}));
 vi.mock("../server/db", () => ({
-  db: { advertiserConversion: conversions },
+  db: {
+    advertiserConversion: conversions,
+    advertiserConversionAttempt: attempts,
+  },
 }));
 
 let config: RuntimeConfiguration;
@@ -26,6 +33,7 @@ const conversion = {
   externalClickId: "propeller-click-123",
   payout: { toString: () => "0" },
   status: "PENDING",
+  attempts: 0,
 };
 
 beforeEach(() => {
@@ -39,6 +47,8 @@ beforeEach(() => {
   conversions.findMany.mockResolvedValue([conversion]);
   conversions.update.mockResolvedValue({});
   conversions.count.mockResolvedValue(0);
+  attempts.create.mockResolvedValue({ id: "attempt-1" });
+  attempts.update.mockResolvedValue({});
   fetchMock = vi.fn().mockResolvedValue(new Response("ok"));
   vi.stubGlobal("fetch", fetchMock);
 });
@@ -66,6 +76,14 @@ it("sends the click ID as the primary PropellerAds conversion exactly once", asy
       data: expect.objectContaining({ status: "SENT" }),
     }),
   );
+  expect(attempts.update).toHaveBeenCalledWith({
+    where: { id: "attempt-1" },
+    data: expect.objectContaining({
+      outcome: "SENT",
+      httpStatus: 200,
+      completedAt: expect.any(Date),
+    }),
+  });
 });
 
 it("holds an ambiguous network outcome instead of retrying it", async () => {
@@ -79,6 +97,13 @@ it("holds an ambiguous network outcome instead of retrying it", async () => {
       error:
         "Postback outcome is uncertain; check PropellerAds before retrying",
     },
+  });
+  expect(attempts.update).toHaveBeenCalledWith({
+    where: { id: "attempt-1" },
+    data: expect.objectContaining({
+      outcome: "UNCERTAIN",
+      completedAt: expect.any(Date),
+    }),
   });
 });
 

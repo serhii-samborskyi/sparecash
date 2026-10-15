@@ -27,7 +27,10 @@ feedback and retargeting activity.
 
 | Metric                           | Definition                                                                                                                                                                                     |
 | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Visits                           | Recorded visit sessions, not unique people. Each new advertiser click can produce another visit.                                                                                               |
+| Billed ad clicks                 | Clicks reported by PropellerAds for the selected campaign, zone and UTC day.                                                                                                                   |
+| Server hits                      | Requests received on `/go/<slug>` before browser JavaScript runs. Repeat loads count again.                                                                                                    |
+| JS visits                        | Recorded visit sessions after the application loads, not unique people. Each new advertiser click can produce another visit.                                                                   |
+| Click → server / server → JS     | Server hits divided by billed clicks, and JS visits divided by server hits. These expose delivery loss separately from browser-render loss.                                                    |
 | Ad CTR                           | PropellerAds clicks divided by impressions. Aggregates recompute the ratio from totals.                                                                                                        |
 | Verified                         | Visit's latest recorded browser verification passed, including legacy verified visits. This is a quality signal, not certain human identity.                                                   |
 | Suspected bots                   | Unverified visits with bot score ≥70 from recorded abuse evidence.                                                                                                                             |
@@ -43,6 +46,7 @@ feedback and retargeting activity.
 | Active subscribers               | Visits with at least one currently active, confirmed subscription.                                                                                                                             |
 | Purchased leads and commission   | Earliest SOLD per application, including follow-ups attributed to their original acquisition visit. Duplicate SOLD callbacks do not multiply revenue. SOLD is not approval or funding.         |
 | Ad spend/CPC                     | Read from PropellerAds; CPC is spend divided by advertiser clicks.                                                                                                                             |
+| Cost/visit, quiz, application    | PropellerAds spend divided by JS visits, quiz completions, or unique application visitors.                                                                                                     |
 | Cost/subscriber, cost/sale, ROAS | Calculated only when advertiser reporting scopes match every visit in the row. Missing costs or unmatched visits leave these blank.                                                            |
 | Recorded click costs             | Existing per-visit cost records, displayed separately and never added to advertiser spend.                                                                                                     |
 
@@ -69,8 +73,11 @@ rows must match the requested dates/campaigns/zone/country. See the
 By default, advertiser requests cover campaigns already attributed to local
 traffic sources. An explicit campaign filter can load a campaign with no
 recorded local visits. Zones that have impressions/clicks but no tracked visits
-still appear. Advertiser clicks and landed visit sessions are independent
-measurements and may differ.
+still appear. Advertiser clicks, server landing hits, rendered visits and
+verified visits are independent measurements and may differ. Server hits are
+available for zone, campaign and UTC-day views. Each hit is linked to the
+rendered visit when the browser reaches the visit endpoint, which also makes
+the raw hit visible in the visit-detail explorer.
 
 Complete snapshots live in `AdStatisticsSnapshot` and are reused for 15 minutes
 while browsing. **Refresh** requests a new read. Overlapping identical requests
@@ -124,8 +131,10 @@ diagnosis. It deliberately excludes IP hashes, verification token hashes and
 subscription addresses. The service scans at most 50,000 candidate visits so
 macro, device and unknown-value rows match the aggregate report exactly.
 
-Deploy migrations `202610110003_traffic_statistics` and
-`202610130002_prequiz_activity` with the web and worker release; the standard
+Deploy migrations `202610110003_traffic_statistics`,
+`202610130002_prequiz_activity`, and
+`202610150001_server_hits_and_conversion_goals` with the web and worker
+release; the standard
 Docker startup applies them. The latter stores cumulative first-party visible
 time, meaningful click and scroll counters on each visit. There is no
 historical behavior backfill or new required environment variable. Reconnect

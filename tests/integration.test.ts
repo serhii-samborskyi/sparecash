@@ -55,6 +55,7 @@ import {
 import { landingDesignExamples } from "../server/landing-design-guide";
 import { clarityReport } from "../server/services/clarity";
 import { recordPreQuizActivity } from "../server/services/engagement";
+import { createRoundSkyApplication } from "../server/services/roundsky";
 import {
   resetMarketingWorkspace,
   workspaceResetConfirmation,
@@ -423,6 +424,14 @@ it("rejects subscriptions without storing contacts or contacting providers when 
 });
 it("records the rendered consent snapshot and waits for email confirmation", async () => {
   const visit = await db.visit.findUniqueOrThrow({ where: { id: visitId } });
+  await db.visit.update({
+    where: { id: visitId },
+    data: {
+      verified: true,
+      verificationState: "VERIFIED",
+      verificationExpiresAt: new Date(Date.now() + 30 * 60_000),
+    },
+  });
   const oldConsent = (visit.configSnapshot as any).emailConsent;
   await db.variant.update({
     where: { id: visit.variantId },
@@ -2882,6 +2891,14 @@ it("round-trips protected canvases through MCP, previews and visit snapshots", a
     });
     expect(blocked.isError).toBe(true);
     expect(JSON.stringify(blocked)).toContain("already has traffic");
+    await db.visit.update({
+      where: { id: visit.data.visitId },
+      data: {
+        verified: true,
+        verificationState: "VERIFIED",
+        verificationExpiresAt: new Date(Date.now() + 30 * 60_000),
+      },
+    });
     const continuation = await request("/api/public/continue", "POST", {
       visitToken: visit.data.visitToken,
       entryPoint: "optional_updates",
@@ -2896,7 +2913,10 @@ it("round-trips protected canvases through MCP, previews and visit snapshots", a
     expect(
       await db.advertiserConversion.findUniqueOrThrow({
         where: {
-          applicationId_goal: { applicationId: application.id, goal: 1 },
+          externalClickId_goal: {
+            externalClickId: "canvas-click",
+            goal: 2,
+          },
         },
       }),
     ).toMatchObject({
@@ -2913,7 +2933,10 @@ it("round-trips protected canvases through MCP, previews and visit snapshots", a
     expect(
       await db.advertiserConversion.findUniqueOrThrow({
         where: {
-          applicationId_goal: { applicationId: application.id, goal: 2 },
+          externalClickId_goal: {
+            externalClickId: "canvas-click",
+            goal: 1,
+          },
         },
       }),
     ).toMatchObject({
@@ -2925,7 +2948,10 @@ it("round-trips protected canvases through MCP, previews and visit snapshots", a
       (
         await db.advertiserConversion.findUniqueOrThrow({
           where: {
-            applicationId_goal: { applicationId: application.id, goal: 2 },
+            externalClickId_goal: {
+              externalClickId: "canvas-click",
+              goal: 1,
+            },
           },
         })
       ).payout.toNumber(),
@@ -3098,6 +3124,20 @@ it("records anonymous quiz engagement once per visit without subscribing or send
     (await db.visit.findUniqueOrThrow({ where: { id: visit.id } })).verified,
   ).toBe(false);
   expect(providerCalls.length).toBe(before);
+  await expect(
+    createRoundSkyApplication({
+      visitId: visit.id,
+      requireVerification: true,
+    }),
+  ).rejects.toThrow("Finish browser verification");
+  await db.visit.update({
+    where: { id: visit.id },
+    data: {
+      verified: true,
+      verificationState: "VERIFIED",
+      verificationExpiresAt: new Date(Date.now() + 30 * 60_000),
+    },
+  });
   const direct = await request("/api/public/continue", "POST", {
     visitToken: signed,
   });
@@ -4124,7 +4164,41 @@ it("compares zones and locations with honest traffic quality, weighted CTR and d
     preQuizScrolls: 1,
   });
   await create({ verificationState: "ERROR" });
-  await create({ verificationState: "FAILED" });
+  await create();
+  await db.landingHit.createMany({
+    data: [
+      ...Array.from({ length: 7 }, () => ({
+        slug: exp.slug,
+        campaignId,
+        zoneId: "111",
+        externalClickId: "server-hit-111",
+        userAgent: "Android",
+        ipHash: "server-hit-test",
+        createdAt: arrived,
+      })),
+      ...Array.from({ length: 4 }, () => ({
+        slug: exp.slug,
+        campaignId,
+        zoneId: "222",
+        externalClickId: "server-hit-222",
+        userAgent: "Android",
+        ipHash: "server-hit-test",
+        createdAt: arrived,
+      })),
+    ],
+  });
+  await db.landingHit.create({
+    data: {
+      slug: exp.slug,
+      campaignId,
+      zoneId: "111",
+      externalClickId: "server-hit-linked",
+      userAgent: "Android",
+      ipHash: "server-hit-test",
+      visitId: human.id,
+      createdAt: arrived,
+    },
+  });
   await db.visitEvent.createMany({
     data: [
       {
@@ -4267,8 +4341,13 @@ it("compares zones and locations with honest traffic quality, weighted CTR and d
       verified: 1,
       suspectedBots: 1,
       unverified: 2,
-      verificationFailed: 2,
+      verificationFailed: 1,
       verificationErrors: 1,
+      verificationNotFinished: 1,
+      serverHits: 12,
+      paidClickDeliveryRate: 12 / 19,
+      jsRenderRate: 1 / 3,
+      verifiedPerAdClick: 1 / 19,
       engaged: 1,
       engagementRate: 0.25,
       preQuizMeasuredVisits: 2,
@@ -4286,12 +4365,17 @@ it("compares zones and locations with honest traffic quality, weighted CTR and d
       sold: 1,
       revenue: 3,
       adSpend: 3,
+      costPerVisit: 0.75,
+      costPerQuizCompletion: 3,
+      costPerApplication: 3,
       recordedClickCost: 0.5,
       ctr: 0.019,
     });
     expect(report.rows).toHaveLength(2);
     expect(report.rows.find((r) => r.label === "Zone 222")).toMatchObject({
       visits: 0,
+      serverHits: 4,
+      paidClickDeliveryRate: 4 / 9,
       ctr: 0.01,
       subscriptionRate: null,
       claritySessions: 5,
@@ -4299,6 +4383,12 @@ it("compares zones and locations with honest traffic quality, weighted CTR and d
     });
     expect(report.rows.find((r) => r.label === "Zone 111")).toMatchObject({
       costPerSubscriber: 1,
+      serverHits: 8,
+      paidClickDeliveryRate: 0.8,
+      jsRenderRate: 0.5,
+      costPerVisit: 0.25,
+      costPerQuizCompletion: 1,
+      costPerApplication: 1,
       adContribution: 2,
       ctr: 0.1,
       claritySessions: 10,
@@ -4353,6 +4443,13 @@ it("compares zones and locations with honest traffic quality, weighted CTR and d
       browserContext: { device: "Desktop", browser: "Chrome", os: "Windows" },
       verification: { verified: true, state: "VERIFIED", botScore: 0 },
       preQuiz: { activeSeconds: 30, clicks: 2, scrolls: 1 },
+      landingHits: [
+        expect.objectContaining({
+          campaignId,
+          zoneId: "111",
+          externalClickId: "server-hit-linked",
+        }),
+      ],
       events: [
         { kind: "QUESTION_ANSWERED", questionId: "a", answer: "W2 employee" },
         {
