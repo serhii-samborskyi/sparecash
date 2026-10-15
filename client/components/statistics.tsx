@@ -1021,7 +1021,21 @@ export function Statistics() {
                                     </span>
                                   ))}
                                 </b>
-                                {row.detail && <small>{row.detail}</small>}
+                                {row.detail && (
+                                  <small title={row.detail}>
+                                    {segmentLines(
+                                      row.detail,
+                                      row.detail.includes(" | "),
+                                    ).map((line, index) => (
+                                      <span
+                                        className="statistics-segment-line"
+                                        key={`${index}:${line}`}
+                                      >
+                                        {line}
+                                      </span>
+                                    ))}
+                                  </small>
+                                )}
                                 {row.visits < 30 && (
                                   <em>
                                     {row.visits

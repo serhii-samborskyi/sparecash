@@ -392,7 +392,9 @@
   line-height: 1.5;
   margin-top: 4px;
   max-width: 210px;
+  overflow: hidden;
   overflow-wrap: anywhere;
+  white-space: normal;
 }
 .statistics-segment em {
   display: inline-block;
