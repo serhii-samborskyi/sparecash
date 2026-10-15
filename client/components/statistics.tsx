@@ -996,7 +996,7 @@ export function Statistics() {
                           <th scope="row">
                             <div className="statistics-segment">
                               <span>
-                                <b>{row.label}</b>
+                                <b title={row.label}>{row.label}</b>
                                 {row.detail && <small>{row.detail}</small>}
                                 {row.visits < 30 && (
                                   <em>

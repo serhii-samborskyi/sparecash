@@ -369,14 +369,19 @@
   text-align: left;
 }
 .statistics-segment > span {
+  flex: 1 1 auto;
+  width: 0;
   min-width: 0;
 }
 .statistics-segment b {
-  display: block;
+  display: -webkit-box;
   font-weight: 600;
   line-height: 1.4;
+  overflow: hidden;
   overflow-wrap: anywhere;
   white-space: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 .statistics-segment small {
   display: block;
