@@ -149,7 +149,7 @@ function makeServer() {
   );
   register(
     "reset_marketing_workspace",
-    "Permanently delete every experiment, landing variant and asset; all visits, engagement, contacts, subscriptions, application events, postbacks, advertiser/Clarity statistics, retargeting data and follow-up chains. Preserves app settings, integration credentials and owner sessions. This cannot be undone. Requires the exact confirmation phrase.",
+    "Permanently delete every experiment, landing variant and asset; all visits, engagement, contacts, subscriptions, application events, postbacks, advertiser/Clarity statistics, retargeting pixel activity and spend, and follow-up chains. Clears stale retargeting campaign mappings while preserving exact audience pixel configuration, app settings, integration credentials and owner sessions. This cannot be undone. Requires the exact confirmation phrase.",
     {
       confirmation: z.literal(workspaceResetConfirmation),
     },

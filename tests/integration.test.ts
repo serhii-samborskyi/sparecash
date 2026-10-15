@@ -4558,6 +4558,40 @@ it("summarizes Clarity exports by paid campaign and zone without exposing URLs",
 it("resets marketing content and statistics while preserving configuration", async () => {
   const configuration = await readRuntimeConfiguration();
   const generalSettings = await settings();
+  const retargetingAudiences = await db.retargetingAudience.findMany({
+    orderBy: { id: "asc" },
+  });
+  expect(retargetingAudiences.length).toBeGreaterThan(0);
+  await db.setting.upsert({
+    where: { key: "retargeting_plan" },
+    create: {
+      key: "retargeting_plan",
+      value: {
+        stages: [
+          {
+            name: "Stale test mapping",
+            audienceId: retargetingAudiences[0].id,
+            excludeAudienceIds: [],
+            campaignIds: ["123"],
+          },
+        ],
+        targetingChecks: [],
+      },
+    },
+    update: {
+      value: {
+        stages: [
+          {
+            name: "Stale test mapping",
+            audienceId: retargetingAudiences[0].id,
+            excludeAudienceIds: [],
+            campaignIds: ["123"],
+          },
+        ],
+        targetingChecks: [],
+      },
+    },
+  });
 
   await expect(
     resetMarketingWorkspace("wrong confirmation", "test"),
@@ -4575,6 +4609,16 @@ it("resets marketing content and statistics while preserving configuration", asy
   expect(await db.lead.count()).toBe(0);
   expect(await db.chain.count()).toBe(0);
   expect(await db.claritySnapshot.count()).toBe(0);
+  expect(
+    await db.retargetingAudience.findMany({ orderBy: { id: "asc" } }),
+  ).toEqual(retargetingAudiences);
+  expect(
+    (
+      await db.setting.findUniqueOrThrow({
+        where: { key: "retargeting_plan" },
+      })
+    ).value,
+  ).toEqual({ stages: [], targetingChecks: [] });
   expect(await settings()).toEqual(generalSettings);
   expect(await readRuntimeConfiguration()).toEqual(configuration);
   expect(await db.auditLog.findMany()).toEqual([

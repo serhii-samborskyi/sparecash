@@ -35,7 +35,19 @@ export async function resetMarketingWorkspace(
     const sourceActions = await tx.sourceAction.deleteMany();
     const trafficSources = await tx.trafficSource.deleteMany();
     const retargetingSpend = await tx.retargetingSpend.deleteMany();
-    const retargetingAudiences = await tx.retargetingAudience.deleteMany();
+    // Audience IDs and exact provider pixels are account infrastructure, not
+    // campaign statistics. Keep them across a marketing reset so a later
+    // landing cannot silently stop collection. The campaign plan is cleared
+    // below because its landing and targeting evidence become stale.
+    const retargetingAudiences = await tx.retargetingAudience.count();
+    await tx.setting.upsert({
+      where: { key: "retargeting_plan" },
+      create: {
+        key: "retargeting_plan",
+        value: { stages: [], targetingChecks: [] },
+      },
+      update: { value: { stages: [], targetingChecks: [] } },
+    });
     const adStatisticsSnapshots = await tx.adStatisticsSnapshot.deleteMany();
     const claritySnapshots = await tx.claritySnapshot.deleteMany();
     const variants = await tx.variant.deleteMany();
@@ -65,7 +77,7 @@ export async function resetMarketingWorkspace(
       deliveries: deliveries.count,
       trafficSources: trafficSources.count,
       sourceActions: sourceActions.count,
-      retargetingAudiences: retargetingAudiences.count,
+      preservedRetargetingAudiences: retargetingAudiences,
       retargetingPixelAttempts: retargetingPixelAttempts.count,
       retargetingSpend: retargetingSpend.count,
       adStatisticsSnapshots: adStatisticsSnapshots.count,
@@ -87,6 +99,11 @@ export async function resetMarketingWorkspace(
   return {
     ok: true,
     deleted,
-    preserved: ["settings", "integration credentials", "owner sessions"],
+    preserved: [
+      "settings",
+      "integration credentials",
+      "owner sessions",
+      "retargeting audience pixel configuration",
+    ],
   };
 }
