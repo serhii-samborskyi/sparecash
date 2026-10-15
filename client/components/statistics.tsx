@@ -50,6 +50,18 @@ const pct = (v: number | null) =>
   v === null
     ? "—"
     : `${(v * 100).toLocaleString("en-US", { maximumFractionDigits: 1 })}%`;
+function segmentLines(label: string, campaign: boolean) {
+  if (!campaign) return [label];
+  const parts = label.split(/\s*\|\s*/).filter(Boolean);
+  if (parts.length < 3) return [label];
+  const lineCount = Math.min(3, Math.ceil(parts.length / 2));
+  const partsPerLine = Math.ceil(parts.length / lineCount);
+  return Array.from({ length: lineCount }, (_, index) =>
+    parts
+      .slice(index * partsPerLine, (index + 1) * partsPerLine)
+      .join(" · "),
+  ).filter(Boolean);
+}
 type Column = {
   key: NumericMetric;
   label: string;
@@ -996,7 +1008,19 @@ export function Statistics() {
                           <th scope="row">
                             <div className="statistics-segment">
                               <span>
-                                <b title={row.label}>{row.label}</b>
+                                <b title={row.label}>
+                                  {segmentLines(
+                                    row.label,
+                                    filters.groupBy === "campaign",
+                                  ).map((line, index) => (
+                                    <span
+                                      className="statistics-segment-line"
+                                      key={`${index}:${line}`}
+                                    >
+                                      {line}
+                                    </span>
+                                  ))}
+                                </b>
                                 {row.detail && <small>{row.detail}</small>}
                                 {row.visits < 30 && (
                                   <em>

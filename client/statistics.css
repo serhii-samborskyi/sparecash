@@ -374,14 +374,15 @@
   min-width: 0;
 }
 .statistics-segment b {
-  display: -webkit-box;
+  display: block;
   font-weight: 600;
   line-height: 1.4;
   overflow: hidden;
   overflow-wrap: anywhere;
   white-space: normal;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+}
+.statistics-segment-line {
+  display: block;
 }
 .statistics-segment small {
   display: block;
