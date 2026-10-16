@@ -3472,7 +3472,10 @@ async function rtSetup() {
   await saveRetargetingSettings({ enabled: true, audiences: rtAudiences });
 }
 let rtCounter = 20;
-async function rtVisit(group: "TREATMENT" | "CONTROL" = "TREATMENT") {
+async function rtVisit(
+  group: "TREATMENT" | "CONTROL" = "TREATMENT",
+  campaignId = "88100",
+) {
   const n = ++rtCounter;
   const config = landingSchema.parse({
     title: "Retargeting test",
@@ -3494,7 +3497,7 @@ async function rtVisit(group: "TREATMENT" | "CONTROL" = "TREATMENT") {
     "POST",
     {
       slug: experiment.slug,
-      campaignId: "88100",
+      campaignId,
       zoneId: "1",
       clickId: `original-${n}`,
     },
@@ -3655,6 +3658,91 @@ it("automatically qualifies verified quiz actions without a local advertising op
   expect(
     (await db.visit.findUniqueOrThrow({ where: { id: f.visit.id } })).botScore,
   ).toBeLessThan(70);
+});
+
+it("limits completion pixels to their configured acquisition campaigns", async () => {
+  await rtSetup();
+  const completionAudiences = [
+    {
+      id: "88004",
+      name: "W2 quiz completed",
+      purpose: "REENGAGEMENT",
+      enabled: true,
+      enrollment: {
+        type: "image",
+        url: "https://my.rtmark.net/img.gif?f=sync&lr=1&partner=88004",
+      },
+      removal: {
+        type: "image",
+        url: "https://my.rtmark.net/img.gif?f=off&lr=1&partner=88004",
+      },
+      qualifyingEvents: ["QUIZ_COMPLETED"],
+      sourceCampaignIds: ["88110"],
+      excludeOn: ["PAID"],
+    },
+    {
+      id: "88005",
+      name: "1099 quiz completed",
+      purpose: "REENGAGEMENT",
+      enabled: true,
+      enrollment: {
+        type: "image",
+        url: "https://my.rtmark.net/img.gif?f=sync&lr=1&partner=88005",
+      },
+      removal: {
+        type: "image",
+        url: "https://my.rtmark.net/img.gif?f=off&lr=1&partner=88005",
+      },
+      qualifyingEvents: ["QUIZ_COMPLETED"],
+      sourceCampaignIds: ["88111"],
+      excludeOn: ["PAID"],
+    },
+  ];
+  await saveRetargetingSettings({
+    enabled: true,
+    audiences: [...rtAudiences, ...completionAudiences],
+  });
+
+  const w2 = await rtVisit("TREATMENT", "88110");
+  await w2.verify();
+  await w2.send("engagement", {
+    event: {
+      kind: "QUESTION_ANSWERED",
+      questionId: "amount",
+      answers: { amount: "Small" },
+    },
+  });
+  const w2Pixels = (await w2.send("retargeting/qualify")).data.pixels.map(
+    (pixel: { id: string }) => pixel.id,
+  );
+  const w2Attempts = await db.retargetingPixelAttempt.findMany({
+    where: { id: { in: w2Pixels } },
+    select: { audienceId: true },
+  });
+  expect(w2Attempts.map((attempt) => attempt.audienceId).sort()).toEqual([
+    "88001",
+    "88004",
+  ]);
+
+  const contractor = await rtVisit("TREATMENT", "88111");
+  await contractor.verify();
+  await contractor.send("engagement", {
+    event: {
+      kind: "QUESTION_ANSWERED",
+      questionId: "amount",
+      answers: { amount: "Large" },
+    },
+  });
+  const contractorPixels = (
+    await contractor.send("retargeting/qualify")
+  ).data.pixels.map((pixel: { id: string }) => pixel.id);
+  const contractorAttempts = await db.retargetingPixelAttempt.findMany({
+    where: { id: { in: contractorPixels } },
+    select: { audienceId: true },
+  });
+  expect(
+    contractorAttempts.map((attempt) => attempt.audienceId).sort(),
+  ).toEqual(["88001", "88005"]);
 });
 
 it("keeps controls out of audiences, honors advertising refusal/GPC and records verification outages separately", async () => {

@@ -69,6 +69,7 @@ export const audienceSchema = z
     enrollment: pixelSchema,
     removal: pixelSchema.optional(),
     qualifyingEvents: z.array(event).min(1).max(5),
+    sourceCampaignIds: z.array(id).max(100).default([]),
     applicationStatus: z.enum(["ANY", "NONE", "STARTED"]).default("ANY"),
     subscriptionStatus: z.enum(["ANY", "NONE", "CONFIRMED"]).default("ANY"),
     excludeOn: z

@@ -144,6 +144,18 @@ describe("retargeting contracts", () => {
         .success,
     ).toBe(false);
     expect(
+      audienceSchema.parse({
+        ...audience,
+        sourceCampaignIds: ["12010687"],
+      }).sourceCampaignIds,
+    ).toEqual(["12010687"]);
+    expect(
+      audienceSchema.safeParse({
+        ...audience,
+        sourceCampaignIds: ["not-a-campaign"],
+      }).success,
+    ).toBe(false);
+    expect(
       planSchema.safeParse({
         stages: [{ name: "Day three", audienceId: "11", delayDays: 3 }],
       }).success,

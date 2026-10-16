@@ -104,11 +104,17 @@ export function audienceEligible(a: Audience, facts: JourneyFacts) {
 export async function journeyFacts(
   tx: Prisma.TransactionClient,
   journeyId: string,
+  sourceCampaignIds: string[] = [],
 ): Promise<JourneyFacts> {
   // Only events on server-verified visits can supply qualifying engagement.
   // Negative outcomes suppress across the entire journey, including unverified returns.
   const visits = await tx.visit.findMany({
-    where: { journeyId },
+    where: {
+      journeyId,
+      ...(sourceCampaignIds.length
+        ? { source: { campaignId: { in: sourceCampaignIds } } }
+        : {}),
+    },
     select: {
       verifiedAt: true,
       engagementEvents: { select: { kind: true, verifiedAt: true } },
@@ -174,6 +180,30 @@ export async function qualifyPixels(visitId: string, journeyId: string) {
       throw new Error("Journey does not match this visit");
     const facts = await journeyFacts(tx, journeyId);
     facts.paid ||= !!journey.suppressedAt;
+    const audienceFacts = new Map(
+      await Promise.all(
+        config.audiences.map(
+          async (audience) =>
+            [
+              audience.id,
+              audience.sourceCampaignIds.length
+                ? {
+                    ...(await journeyFacts(
+                      tx,
+                      journeyId,
+                      audience.sourceCampaignIds,
+                    )),
+                    // Suppression is journey-wide even when qualification is
+                    // limited to acquisition campaigns.
+                    application: facts.application,
+                    subscribed: facts.subscribed,
+                    paid: facts.paid,
+                  }
+                : facts,
+            ] as const,
+        ),
+      ),
+    );
     const attempts = await tx.retargetingPixelAttempt.findMany({
       where: { journeyId },
     });
@@ -181,7 +211,9 @@ export async function qualifyPixels(visitId: string, journeyId: string) {
     // UNKNOWN remains unchanged: automatic tracking is not a recorded consent.
     const adsAllowed = journey.privacy !== "DENIED";
     const verified = hasVisitorProof(visit);
-    const eligible = config.audiences.filter((a) => audienceEligible(a, facts));
+    const eligible = config.audiences.filter((a) =>
+      audienceEligible(a, audienceFacts.get(a.id) ?? facts),
+    );
     // Use the same eligibility definition for both arms, before checking group.
     if (
       ready &&
@@ -203,7 +235,7 @@ export async function qualifyPixels(visitId: string, journeyId: string) {
         !adsAllowed ||
         !config.enabled ||
         !current ||
-        !audienceEligible(current, facts);
+        !audienceEligible(current, audienceFacts.get(current.id) ?? facts);
       if (!noLongerEligible && !enrollment.suppressionReason) continue;
       const reason = facts.paid
         ? "PAID_LEAD"
@@ -299,6 +331,28 @@ export async function refreshJourneySuppression(journeyId: string) {
         where: { journeyId, action: "ENROLL", suppressionReason: null },
       }),
     ]);
+    const audienceFacts = new Map(
+      await Promise.all(
+        config.audiences.map(
+          async (audience) =>
+            [
+              audience.id,
+              audience.sourceCampaignIds.length
+                ? {
+                    ...(await journeyFacts(
+                      tx,
+                      journeyId,
+                      audience.sourceCampaignIds,
+                    )),
+                    application: facts.application,
+                    subscribed: facts.subscribed,
+                    paid: facts.paid,
+                  }
+                : facts,
+            ] as const,
+        ),
+      ),
+    );
     for (const attempt of attempts) {
       const audience = config.audiences.find(
         (a) => a.id === attempt.audienceId,
@@ -307,7 +361,7 @@ export async function refreshJourneySuppression(journeyId: string) {
         journey.privacy === "DENIED" ||
         !config.enabled ||
         !audience ||
-        !audienceEligible(audience, facts)
+        !audienceEligible(audience, audienceFacts.get(audience.id) ?? facts)
       )
         await tx.retargetingPixelAttempt.update({
           where: { id: attempt.id },
