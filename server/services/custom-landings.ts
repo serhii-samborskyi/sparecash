@@ -115,6 +115,7 @@ function cleanFragment(html: string, version: 1 | 2) {
         "class",
         "title",
         "role",
+        "hidden",
         "aria-*",
         "data-sc-action",
         "data-sc-form",
