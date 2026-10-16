@@ -33,6 +33,16 @@
   min-width: 0;
   flex: 1;
 }
+.custom-landing-content .contact-fields {
+  grid-template-columns: 1fr !important;
+}
+@media (min-width: 881px) {
+  .custom-landing-content [data-sc-activity] {
+    top: 7rem !important;
+    right: 1.2rem !important;
+    left: auto !important;
+  }
+}
 .custom-landing-bound > .visitor-controls {
   width: min(100% - 32px, 680px);
   margin: 0 auto 32px;
