@@ -150,6 +150,11 @@
   .landing-canvas {
     padding: 12px;
   }
+  .landing-canvas.funnel-first-mobile
+    .design-container:has(> .design-funnel)
+    > .design-funnel {
+    order: -1;
+  }
   .landing-canvas .design-node {
     --dc-width: var(--dc-m-width);
     --dc-padding: var(--dc-m-padding);

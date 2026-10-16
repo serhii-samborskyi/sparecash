@@ -77,9 +77,11 @@ function nodeVariables(
 export function LandingCanvas({
   design,
   funnel,
+  funnelFirstMobile = false,
 }: {
   design: LandingDesign;
   funnel: ReactNode;
+  funnelFirstMobile?: boolean;
 }) {
   const nodes = new Map(design.nodes.map((node) => [node.id, node]));
   let imageIndex = 0;
@@ -174,7 +176,7 @@ export function LandingCanvas({
   };
   return (
     <main
-      className="landing-canvas"
+      className={`landing-canvas${funnelFirstMobile ? " funnel-first-mobile" : ""}`}
       style={{
         background: design.background,
         color: design.color,

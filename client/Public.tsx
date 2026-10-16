@@ -923,7 +923,11 @@ function Landing({ preview }: { preview: boolean }) {
       {config.customLanding ? (
         <CustomLanding source={config.customLanding} funnel={funnel} />
       ) : config.design ? (
-        <LandingCanvas design={config.design} funnel={funnel} />
+        <LandingCanvas
+          design={config.design}
+          funnel={funnel}
+          funnelFirstMobile={config.funnelMode === "instant"}
+        />
       ) : (
         <main className="landing-layout">
           <div className="landing-story">
