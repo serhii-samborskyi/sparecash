@@ -109,6 +109,7 @@ export async function saveExperiment(input: unknown, actor: string) {
       const previous = existing?.variants.find((v) => v.id === variant.id);
       if (
         previous &&
+        !variant.preserveConfig &&
         !isDeepStrictEqual(
           landingSchema.parse(previous.config),
           variant.config,
@@ -129,7 +130,9 @@ export async function saveExperiment(input: unknown, actor: string) {
         update: {
           name: variant.name,
           weight: variant.weight,
-          config: variant.config,
+          config: variant.preserveConfig
+            ? (previous!.config as Prisma.InputJsonValue)
+            : variant.config,
         },
       });
     }

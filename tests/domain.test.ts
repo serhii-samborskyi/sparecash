@@ -10,6 +10,7 @@ import {
   normalizePhone,
   landingSchema,
   visibleQuestions,
+  experimentSchema,
 } from "../server/domain";
 describe("traffic decisions", () => {
   const rules = settingsSchema.parse({});
@@ -178,6 +179,35 @@ describe("conditional landing quizzes", () => {
       landingSchema.safeParse({
         ...base,
         regionFallback: "<strong>Texas</strong>",
+      }).success,
+    ).toBe(false);
+  });
+});
+describe("experiment variant preservation", () => {
+  it("only permits preserving stored content for an existing variant", () => {
+    const experiment = {
+      name: "Existing experiment",
+      slug: "existing-experiment",
+      variants: [
+        {
+          id: "variant-a",
+          name: "A",
+          weight: 100,
+          preserveConfig: true,
+          config: {
+            title: "Existing landing",
+            description: "This complete config is ignored when preserving.",
+          },
+        },
+      ],
+    };
+    expect(experimentSchema.parse(experiment).variants[0].preserveConfig).toBe(
+      true,
+    );
+    expect(
+      experimentSchema.safeParse({
+        ...experiment,
+        variants: [{ ...experiment.variants[0], id: undefined }],
       }).success,
     ).toBe(false);
   });

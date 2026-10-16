@@ -250,6 +250,12 @@ export const experimentSchema = z
           name: z.string().min(1).max(80),
           weight: z.number().int().min(0).max(100),
           config: landingSchema,
+          preserveConfig: z
+            .boolean()
+            .default(false)
+            .describe(
+              "For an existing variant with traffic, keep its stored config while changing allocation or adding another variant.",
+            ),
         }),
       )
       .min(1)
@@ -258,6 +264,10 @@ export const experimentSchema = z
   .refine(
     (v) => v.variants.some((x) => x.weight > 0),
     "At least one variant must receive traffic",
+  )
+  .refine(
+    (v) => v.variants.every((x) => !x.preserveConfig || Boolean(x.id)),
+    "Only an existing variant can preserve its stored config",
   );
 export const chainSchema = z.object({
   id: z.string().optional(),

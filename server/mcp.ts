@@ -586,7 +586,7 @@ function makeServer() {
   );
   register(
     "save_experiment",
-    "Create/edit landing pages and conditional quizzes. Choose one presentation mode per variant: classic template, composable config.design after landing_design_guide, or immutable config.customLanding.sourceId after custom_landing_guide/create_custom_landing_source. Image/logo uploads use {src,alt}; upload first. questions/showWhen, form copy, consent and offerFirst always control the app-owned protected funnel. Supply complete variants; omitted variants get zero traffic. Create a new variant for content changes after traffic. DRAFT previews; ACTIVE publishes.",
+    "Create/edit landing pages and conditional quizzes. Choose one presentation mode per variant: classic template, composable config.design after landing_design_guide, or immutable config.customLanding.sourceId after custom_landing_guide/create_custom_landing_source. Image/logo uploads use {src,alt}; upload first. questions/showWhen, form copy, consent and offerFirst always control the app-owned protected funnel. Supply complete variants; omitted variants get zero traffic. Create a new variant for content changes after traffic. For existing variants with traffic, send preserveConfig:true to retain their exact stored content while adding a variant. DRAFT previews; ACTIVE publishes.",
     { experiment: experimentSchema },
     async ({ experiment }) => saveExperiment(experiment, "mcp"),
   );
