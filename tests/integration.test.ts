@@ -456,7 +456,9 @@ it("records consent, starts warm-up, and keeps email confirmation optional", asy
   });
   expect(r.status).toBe(200);
   leadId = r.data.leadId;
-  const sub = await db.subscription.findFirstOrThrow({ where: { leadId } });
+  const sub = await db.subscription.findFirstOrThrow({
+    where: { leadId, channel: "EMAIL" },
+  });
   emailId = sub.id;
   expect(sub.status).toBe("PENDING");
   expect(sub.consentText).toBe(oldConsent);
@@ -486,6 +488,27 @@ it("records consent, starts warm-up, and keeps email confirmation optional", asy
   expect(
     providerCalls.filter((c) => c.url.includes("/smtp/email")),
   ).toHaveLength(1);
+  expect(
+    await db.leadEvent.count({
+      where: {
+        leadId,
+        type: { startsWith: "VERIFICATION_DELIVERY_" },
+      },
+    }),
+  ).toBe(2);
+  const details = await statisticsVisits({
+    groupBy: "campaign",
+    segmentKey: JSON.stringify(["123"]),
+    campaignId: "123",
+    pageSize: 100,
+  });
+  expect(
+    details.items
+      .find((item) => item.id === visitId)
+      ?.leads[0].events.filter((event) =>
+        event.type.startsWith("VERIFICATION_DELIVERY_"),
+      ),
+  ).toHaveLength(2);
   expect(
     (
       await request("/api/public/confirm", "POST", {

@@ -1079,6 +1079,15 @@ export async function statisticsVisits(input: StatisticsVisitsInput) {
             timezoneSource: true,
             answers: true,
             createdAt: true,
+            events: {
+              orderBy: { createdAt: "asc" },
+              select: {
+                id: true,
+                type: true,
+                detail: true,
+                createdAt: true,
+              },
+            },
             subscriptions: {
               orderBy: { consentAt: "asc" },
               select: {
@@ -1213,6 +1222,10 @@ export async function statisticsVisits(input: StatisticsVisitsInput) {
           leads: visit.leads.map((lead) => ({
             ...lead,
             createdAt: lead.createdAt.toISOString(),
+            events: lead.events.map((event) => ({
+              ...event,
+              createdAt: event.createdAt.toISOString(),
+            })),
             subscriptions: lead.subscriptions.map((subscription) => ({
               ...subscription,
               consentAt: subscription.consentAt.toISOString(),

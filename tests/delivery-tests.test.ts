@@ -60,7 +60,7 @@ it.each(["SMS", "iMessage"] as const)(
     );
     expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
       chatGuid: `${service};-;+13125550123`,
-      message: expect.stringContaining("test message"),
+      text: expect.stringContaining("test message"),
       tempGuid: requestId,
       method: "apple-script",
     });

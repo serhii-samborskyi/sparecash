@@ -71,7 +71,7 @@ export async function sendText(phone: string, message: string, id: string) {
     {},
     {
       chatGuid: `${env.BLUEBUBBLES_SERVICE};-;${phone}`,
-      message,
+      text: message,
       tempGuid: id,
       method: "apple-script",
     },
@@ -88,23 +88,29 @@ export async function sendText(phone: string, message: string, id: string) {
 }
 export async function sendVerification(sub: Subscription, code: string) {
   if (env.LIVE_DELIVERY !== "true") return { paused: true };
+  let providerId: string | undefined;
   if (sub.channel === "EMAIL") {
     if (!env.BREVO_API_KEY || !env.BREVO_SENDER_EMAIL)
       throw new Error("Brevo is not configured");
     const link = `${env.APP_URL}/confirm?token=${encodeURIComponent(token("confirm", sub.id, 86400))}`;
-    await brevo("/smtp/email", {
+    const result = await brevo("/smtp/email", {
       sender: { name: env.BREVO_SENDER_NAME, email: env.BREVO_SENDER_EMAIL },
       to: [{ email: sub.address }],
       subject: "Confirm your SpareCash email subscription",
       htmlContent: `<p>You requested email updates from SpareCash.</p><p>Your updates are active. You can optionally <a href="${escapeHtml(link)}">verify your email address</a>.</p><p>If you did not request this, use the preference link in any update to unsubscribe.</p>`,
     });
+    if (typeof result.messageId !== "string" || !result.messageId)
+      throw new Error(
+        "Brevo did not confirm a message ID; check Brevo logs before retrying",
+      );
+    providerId = result.messageId;
   } else if (sub.channel === "SMS")
-    await sendText(
+    providerId = await sendText(
       sub.address,
       `Your SpareCash optional verification code is ${code}. It expires in 10 minutes. Updates are already active. Reply STOP to opt out.`,
       sub.id,
     );
-  return { paused: false };
+  return { paused: false, providerId };
 }
 export async function verifyPush(subscriptionId: string, externalId: string) {
   if (!env.ONESIGNAL_APP_ID || !env.ONESIGNAL_API_KEY)

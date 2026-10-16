@@ -37,7 +37,11 @@ import { settings } from "../services/control.js";
 import { detectTimezone } from "../timezones.js";
 import { trustedIpTimezone } from "../services/timezones.js";
 import { trustedVisitLocation } from "../services/visit-context.js";
-import { sendVerification, verifyPush } from "../services/providers.js";
+import {
+  ProviderError,
+  sendVerification,
+  verifyPush,
+} from "../services/providers.js";
 import { hydrateCustomLandingConfig } from "../services/custom-landings.js";
 import {
   activateSubscription,
@@ -496,14 +500,45 @@ publicRouter.post(
         return subscription;
       });
       await enroll(sub.id, "SUBSCRIBED");
+      const provider = channel === "SMS" ? "BlueBubbles" : "Brevo";
+      await db.leadEvent.create({
+        data: {
+          leadId: lead.id,
+          type: "VERIFICATION_DELIVERY_STARTED",
+          detail: `${channel} optional verification requested from ${provider}`,
+        },
+      });
       try {
         const delivery = await sendVerification(sub, code);
+        await db.leadEvent.create({
+          data: {
+            leadId: lead.id,
+            type: delivery.paused
+              ? "VERIFICATION_DELIVERY_PAUSED"
+              : "VERIFICATION_DELIVERY_ACCEPTED",
+            detail: delivery.paused
+              ? `${channel} optional verification was not sent because live delivery is paused`
+              : `${provider} accepted the ${channel} optional verification${delivery.providerId ? ` · provider ID ${delivery.providerId}` : ""}`,
+          },
+        });
         results.push({
           channel,
           state: delivery.paused ? "PAUSED" : "PENDING",
           subscriptionToken: token("verify", sub.id, 600),
         });
-      } catch {
+      } catch (error) {
+        const reason =
+          error instanceof ProviderError ||
+          (error instanceof Error && error.message.startsWith(provider))
+            ? error.message
+            : `${provider} did not confirm the verification request; check provider logs`;
+        await db.leadEvent.create({
+          data: {
+            leadId: lead.id,
+            type: "VERIFICATION_DELIVERY_FAILED",
+            detail: `${channel} optional verification failed · ${reason}`,
+          },
+        });
         results.push({
           channel,
           state: "RECORDED",

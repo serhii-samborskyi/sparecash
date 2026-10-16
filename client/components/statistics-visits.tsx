@@ -270,6 +270,16 @@ function VisitDetails({ visit }: { visit: Visit }) {
                     : ""}
                 </p>
               ))}
+              {lead.events
+                .filter((event) =>
+                  event.type.startsWith("VERIFICATION_DELIVERY_"),
+                )
+                .map((event) => (
+                  <p key={event.id}>
+                    <b>{humanize(event.type)}</b> · {event.detail} ·{" "}
+                    {date(event.createdAt)}
+                  </p>
+                ))}
             </div>
           ))
         ) : (
