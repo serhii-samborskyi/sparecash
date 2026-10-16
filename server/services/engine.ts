@@ -10,11 +10,12 @@ import {
 import { token } from "../security.js";
 import { settings } from "./control.js";
 import { deliver, ProviderError } from "./providers.js";
-import { enroll } from "./journeys.js";
+import { enroll, enrollPendingConsents } from "./journeys.js";
 import { evaluateSources } from "./traffic.js";
 import { sendingTimezone, nextSendingTime } from "../timezones.js";
 import { processAdvertiserConversions } from "./advertiser-conversions.js";
 import { syncClarityIfDue } from "./clarity.js";
+import { canReceiveFollowups } from "../subscription-policy.js";
 export async function tick() {
   return withRuntimeConfiguration(runTick);
 }
@@ -29,6 +30,7 @@ async function runTick() {
       if (!state.locked) return { busy: true };
       const advertiserConversions = await processAdvertiserConversions();
       const clarity = await syncClarityIfDue();
+      const pendingConsentsEnrolled = await enrollPendingConsents();
       await db.delivery.updateMany({
         where: {
           status: "SENDING",
@@ -62,7 +64,7 @@ async function runTick() {
           lead = sub.lead,
           now = new Date();
         if (
-          sub.status !== "ACTIVE" ||
+          !canReceiveFollowups(sub) ||
           shouldStop(lead.status, config.stopOn) ||
           now.getTime() - enrollment.startedAt.getTime() >
             enrollment.chain.maxDays * 86400000
@@ -132,7 +134,12 @@ async function runTick() {
           where: {
             id: message.id,
             status: "PENDING",
-            subscription: { status: "ACTIVE" },
+            subscription: {
+              OR: [
+                { status: "ACTIVE" },
+                { status: "PENDING", channel: { in: ["EMAIL", "SMS"] } },
+              ],
+            },
             enrollment: { status: "ACTIVE" },
           },
           data: { status: "SENDING" },
@@ -152,7 +159,7 @@ async function runTick() {
           });
           const freshConfig = await settings();
           if (
-            fresh.status !== "ACTIVE" ||
+            !canReceiveFollowups(fresh) ||
             shouldStop(fresh.lead.status, freshConfig.stopOn)
           ) {
             await db.delivery.update({
@@ -245,7 +252,13 @@ async function runTick() {
         },
         update: { value: { at: new Date().toISOString(), sent } },
       });
-      return { sent, clarity, ...advertiserConversions, ...traffic };
+      return {
+        sent,
+        pendingConsentsEnrolled,
+        clarity,
+        ...advertiserConversions,
+        ...traffic,
+      };
     },
     { timeout: 240000, maxWait: 1000 },
   );

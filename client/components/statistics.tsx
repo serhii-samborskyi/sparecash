@@ -102,8 +102,15 @@ const columns: Record<string, Column[]> = {
       hint: "Meaningful non-quiz clicks and separate scroll gestures",
     },
     {
+      key: "optInRate",
+      label: "Opt-ins",
+      type: "rate",
+      count: "optedInVisitors",
+      hint: "Current pending or active opt-ins",
+    },
+    {
       key: "subscriptionRate",
-      label: "Subscriptions",
+      label: "Confirmed",
       type: "rate",
       count: "subscribers",
     },
@@ -205,6 +212,13 @@ const columns: Record<string, Column[]> = {
   ],
   subscriptions: [
     { key: "visits", label: "Visits" },
+    {
+      key: "optInRate",
+      label: "Opt-ins / visit",
+      type: "rate",
+      count: "optedInVisitors",
+    },
+    { key: "pendingOptIns", label: "Pending confirmation" },
     {
       key: "subscriptionRate",
       label: "Confirmed / visit",
@@ -838,12 +852,12 @@ export function Statistics() {
             </div>
             <div className="metric">
               <div>
-                Subscription rate <Users size={19} />
+                Opt-in rate <Users size={19} />
               </div>
-              <strong>{pct(report.summary.subscriptionRate)}</strong>
+              <strong>{pct(report.summary.optInRate)}</strong>
               <small>
-                {number(report.summary.subscribers)} visits with a confirmed
-                opt-in
+                {number(report.summary.optedInVisitors)} opted in ·{" "}
+                {number(report.summary.pendingOptIns)} pending confirmation
               </small>
             </div>
           </div>

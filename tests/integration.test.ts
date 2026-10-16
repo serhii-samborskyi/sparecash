@@ -422,7 +422,7 @@ it("rejects subscriptions without storing contacts or contacting providers when 
     );
   }
 });
-it("records the rendered consent snapshot and waits for email confirmation", async () => {
+it("records consent, starts warm-up, and keeps email confirmation optional", async () => {
   const visit = await db.visit.findUniqueOrThrow({ where: { id: visitId } });
   await db.visit.update({
     where: { id: visitId },
@@ -460,6 +460,15 @@ it("records the rendered consent snapshot and waits for email confirmation", asy
   emailId = sub.id;
   expect(sub.status).toBe("PENDING");
   expect(sub.consentText).toBe(oldConsent);
+  expect(
+    await db.enrollment.count({
+      where: {
+        subscriptionId: sub.id,
+        chainId: initialEmailChainId,
+        status: "ACTIVE",
+      },
+    }),
+  ).toBe(1);
   expect(
     providerCalls.filter((c) => c.url.includes("/smtp/email")),
   ).toHaveLength(1);
@@ -4422,6 +4431,17 @@ it("compares zones and locations with honest traffic quality, weighted CTR and d
       confirmedAt: new Date(),
     })),
   });
+  await db.subscription.create({
+    data: {
+      leadId: lead.id,
+      channel: "SMS",
+      address: "stats-SMS",
+      status: "PENDING",
+      consentText: "Test only",
+      consentVersion: "test",
+      consentIpHash: "test",
+    },
+  });
   const application = await db.applicationClick.create({
     data: { visitId: human.id, leadId: lead.id },
   });
@@ -4550,6 +4570,10 @@ it("compares zones and locations with honest traffic quality, weighted CTR and d
       preQuizInteractions: 4,
       subscribers: 1,
       subscriptionRate: 0.25,
+      optedInVisitors: 1,
+      optInRate: 0.25,
+      pendingOptIns: 1,
+      pendingOptInRate: 0.25,
       emailSubscribers: 1,
       pushSubscribers: 1,
       applicationVisitors: 1,

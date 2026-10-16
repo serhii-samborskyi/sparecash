@@ -99,6 +99,8 @@ function counts(segment: Segment) {
     preQuizScrolls: 0,
     applicationVisitors: 0,
     applications: 0,
+    optedInVisitors: 0,
+    pendingOptIns: 0,
     subscribers: 0,
     activeSubscribers: 0,
     emailSubscribers: 0,
@@ -230,6 +232,8 @@ function finish(row: Counts) {
     verifiedEngagementRate: ratio(row.verifiedEngaged, row.verified),
     quizCompletionRate: ratio(row.quizCompleted, row.quizStarted),
     applicationRate: ratio(row.applicationVisitors, row.visits),
+    optInRate: ratio(row.optedInVisitors, row.visits),
+    pendingOptInRate: ratio(row.pendingOptIns, row.visits),
     subscriptionRate: ratio(row.subscribers, row.visits),
     saleRate: ratio(row.soldVisitors, row.visits),
     revenuePerVisit: ratio(row.revenue, row.visits),
@@ -337,8 +341,8 @@ export async function statisticsReport(input: StatisticsInput = {}) {
       leads: {
         select: {
           subscriptions: {
-            where: { confirmedAt: { lte: observedAt } },
-            select: { channel: true, status: true },
+            where: { consentAt: { lte: observedAt } },
+            select: { channel: true, status: true, confirmedAt: true },
           },
         },
       },
@@ -638,6 +642,8 @@ export async function statisticsReport(input: StatisticsInput = {}) {
     const row = group(segment(visit));
     const events = new Set(visit.engagementEvents.map((e) => e.kind));
     const subs = visit.leads.flatMap((l) => l.subscriptions);
+    const confirmedSubs = subs.filter((s) => s.confirmedAt);
+    const pendingSubs = subs.filter((s) => s.status === "PENDING");
     const quiz = events.has("QUESTION_ANSWERED");
     const engaged = quiz || visit.applications.length > 0 || subs.length > 0;
     const measuredPreQuiz =
@@ -684,11 +690,17 @@ export async function statisticsReport(input: StatisticsInput = {}) {
       }
       if (visit.applications.length) target.applicationVisitors++;
       target.applications += visit.applications.length;
-      if (subs.length) target.subscribers++;
+      if (subs.some((s) => s.status !== "UNSUBSCRIBED"))
+        target.optedInVisitors++;
+      if (pendingSubs.length) target.pendingOptIns++;
+      if (confirmedSubs.length) target.subscribers++;
       if (subs.some((s) => s.status === "ACTIVE")) target.activeSubscribers++;
-      if (subs.some((s) => s.channel === "EMAIL")) target.emailSubscribers++;
-      if (subs.some((s) => s.channel === "SMS")) target.smsSubscribers++;
-      if (subs.some((s) => s.channel === "PUSH")) target.pushSubscribers++;
+      if (confirmedSubs.some((s) => s.channel === "EMAIL"))
+        target.emailSubscribers++;
+      if (confirmedSubs.some((s) => s.channel === "SMS"))
+        target.smsSubscribers++;
+      if (confirmedSubs.some((s) => s.channel === "PUSH"))
+        target.pushSubscribers++;
       if (sold.length) target.soldVisitors++;
       target.sold += sold.length;
       target.revenue += sold.reduce(
@@ -886,6 +898,8 @@ export async function statisticsReport(input: StatisticsInput = {}) {
         "First-party page behavior before the first quiz answer. Time counts only while the page is visible; clicks count meaningful controls outside the quiz; scrolls count separate scroll gestures. Older visits without this measurement are excluded from the average rather than counted as zero.",
       subscriptions:
         "Unique visits with at least one confirmed subscription, divided by all visits. Multiple channels count once. Later opt-outs remain in the confirmed rate.",
+      optIns:
+        "Unique visits with a currently pending or active email, text or push opt-in. Pending address confirmation is shown separately and can enter the warm-up sequence for email and text.",
       ctr: "PropellerAds clicks ÷ impressions. Recomputed from totals, never averaged from row percentages. Ad clicks and tracked visits are different counts.",
       revenue:
         "Earliest SOLD commission per application, including follow-ups attributed to the original visit. Purchased leads are not funded loans.",

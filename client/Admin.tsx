@@ -400,9 +400,9 @@ export function Admin() {
                   icon={MousePointer2}
                 />
                 <Metric
-                  label="Active subscriptions"
-                  value={number(stats.subscriptions)}
-                  caption="Across push, text & email"
+                  label="Opt-ins captured"
+                  value={number(stats.optIns)}
+                  caption={`${number(stats.subscriptions)} active · ${number(stats.pendingSubscriptions)} pending confirmation`}
                   icon={Users}
                 />
                 <Metric
@@ -431,6 +431,7 @@ export function Admin() {
                     {[
                       ["Visitors", stats.visits, "#193e35"],
                       ["Verified visits", stats.verified, "#3d6c58"],
+                      ["Opt-ins captured", stats.optIns, "#5a8269"],
                       ["Active subscriptions", stats.subscriptions, "#709d78"],
                       ["Purchased leads", stats.sold, "#a1c496"],
                       ["Funded loans", stats.funded, "#d1e3b7"],

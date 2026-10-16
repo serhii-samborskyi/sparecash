@@ -41,6 +41,7 @@ import { sendVerification, verifyPush } from "../services/providers.js";
 import { hydrateCustomLandingConfig } from "../services/custom-landings.js";
 import {
   activateSubscription,
+  enroll,
   unsubscribe,
   transitionLead,
 } from "../services/journeys.js";
@@ -478,6 +479,14 @@ publicRouter.post(
           verificationExpiresAt: new Date(Date.now() + 600000),
         },
       });
+      await db.leadEvent.create({
+        data: {
+          leadId: lead.id,
+          type: "OPTED_IN",
+          detail: `${channel} consent captured; address confirmation is optional`,
+        },
+      });
+      await enroll(sub.id, "SUBSCRIBED");
       try {
         const delivery = await sendVerification(sub, code);
         results.push({
@@ -488,9 +497,9 @@ publicRouter.post(
       } catch {
         results.push({
           channel,
-          state: "FAILED",
+          state: "RECORDED",
           message:
-            "Confirmation could not be delivered. Please try again later.",
+            "Your updates are active. Optional address verification could not be delivered.",
         });
       }
     }

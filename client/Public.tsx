@@ -383,7 +383,7 @@ function Landing({ preview }: { preview: boolean }) {
           <p>
             {pushStatus === "confirmed" && result.results.length === 0
               ? "You’re subscribed to browser notifications."
-              : "Finish confirming your channels to receive updates."}
+              : "Your updates are on. Address verification is optional."}
           </p>
           {result.results.map((r: any) => (
             <div className="confirmation-channel" key={r.channel}>
@@ -391,10 +391,10 @@ function Landing({ preview }: { preview: boolean }) {
               <p>
                 {r.state === "PENDING"
                   ? r.channel === "EMAIL"
-                    ? "Check your inbox and confirm your email address."
+                    ? "Updates can begin now. You can optionally verify your email from the message we sent."
                     : smsConfirmed
                       ? "Your phone number is confirmed."
-                      : "Enter the six-digit confirmation code sent to your phone."
+                      : "Updates can begin now. Enter the code if you also want to verify your number."
                   : r.state === "PAUSED"
                     ? "Updates are not active yet. Your preference has been recorded."
                     : r.message}
@@ -430,7 +430,7 @@ function Landing({ preview }: { preview: boolean }) {
                       onChange={(e) => setCode(e.target.value)}
                     />
                     <button className="button secondary" disabled={busy}>
-                      Confirm
+                      Verify number (optional)
                     </button>
                   </form>
                 )}

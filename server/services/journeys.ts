@@ -3,6 +3,7 @@ import { db } from "../db.js";
 import { nextLeadStatus, shouldStop } from "../domain.js";
 import { settings } from "./control.js";
 import { refreshJourneySuppression } from "./retargeting.js";
+import { canReceiveFollowups } from "../subscription-policy.js";
 export async function enroll(subscriptionId: string, trigger: string) {
   return db.$transaction(async (tx) => {
     const sub = await tx.subscription.findUniqueOrThrow({
@@ -10,7 +11,7 @@ export async function enroll(subscriptionId: string, trigger: string) {
       include: { lead: true },
     });
     if (
-      sub.status !== "ACTIVE" ||
+      !canReceiveFollowups(sub) ||
       shouldStop(sub.lead.status, (await settings()).stopOn)
     )
       return null;
@@ -129,10 +130,31 @@ export async function transitionLead(
 }
 export async function enrollExisting(channel: Channel, trigger: string) {
   const subs = await db.subscription.findMany({
-    where: { channel, status: "ACTIVE" },
+    where: {
+      channel,
+      OR: [
+        { status: "ACTIVE" },
+        ...(channel === "PUSH" ? [] : [{ status: "PENDING" as const }]),
+      ],
+    },
     take: 1000,
   });
   let count = 0;
   for (const sub of subs) if (await enroll(sub.id, trigger)) count++;
   return { count };
+}
+
+export async function enrollPendingConsents() {
+  const subscriptions = await db.subscription.findMany({
+    where: {
+      status: "PENDING",
+      channel: { in: ["EMAIL", "SMS"] },
+      enrollments: { none: { chain: { trigger: "SUBSCRIBED" } } },
+    },
+    take: 100,
+  });
+  let count = 0;
+  for (const subscription of subscriptions)
+    if (await enroll(subscription.id, "SUBSCRIBED")) count++;
+  return count;
 }

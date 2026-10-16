@@ -4,6 +4,7 @@ import { env } from "../config.js";
 import { token } from "../security.js";
 import { escapeHtml } from "../domain.js";
 import { settings } from "./control.js";
+import { canReceiveFollowups } from "../subscription-policy.js";
 
 export class ProviderError extends Error {
   constructor(
@@ -95,12 +96,12 @@ export async function sendVerification(sub: Subscription, code: string) {
       sender: { name: env.BREVO_SENDER_NAME, email: env.BREVO_SENDER_EMAIL },
       to: [{ email: sub.address }],
       subject: "Confirm your SpareCash email subscription",
-      htmlContent: `<p>You requested email updates from SpareCash.</p><p><a href="${escapeHtml(link)}">Confirm your subscription</a></p><p>If you did not request this, ignore this email. No marketing messages will be sent until you confirm.</p>`,
+      htmlContent: `<p>You requested email updates from SpareCash.</p><p>Your updates are active. You can optionally <a href="${escapeHtml(link)}">verify your email address</a>.</p><p>If you did not request this, use the preference link in any update to unsubscribe.</p>`,
     });
   } else if (sub.channel === "SMS")
     await sendText(
       sub.address,
-      `Your SpareCash confirmation code is ${code}. It expires in 10 minutes. If you did not request this, ignore this text.`,
+      `Your SpareCash optional verification code is ${code}. It expires in 10 minutes. Updates are already active. Reply STOP to opt out.`,
       sub.id,
     );
   return { paused: false };
@@ -197,7 +198,7 @@ export async function deliver(
   const current = await db.subscription.findUniqueOrThrow({
     where: { id: sub.id },
   });
-  if (current.status !== "ACTIVE")
+  if (!canReceiveFollowups(current))
     throw new Error("Recipient unsubscribed before sending");
   await brevo(`/emailCampaigns/${campaign.id}/sendNow`, {});
   return String(campaign.id);

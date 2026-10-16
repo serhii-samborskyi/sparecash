@@ -295,9 +295,11 @@ export async function trafficReport(
       leads: 0,
       confirmedSubscriptions: 0,
       activeSubscriptions: 0,
+      pendingOptIns: 0,
       optedOutSubscriptions: 0,
       channels: { EMAIL: 0, SMS: 0, PUSH: 0 },
       subscribedVisits: new Set<string>(),
+      optedInVisits: new Set<string>(),
       subscribedPeople: new Set<string>(),
       soldVisits: new Set<string>(),
       recordedSpend: 0,
@@ -335,6 +337,9 @@ export async function trafficReport(
     const group = visitGroups.get(sub.lead.visitId);
     if (!group) continue;
     if (sub.status === "ACTIVE") group.activeSubscriptions++;
+    if (sub.status === "PENDING") group.pendingOptIns++;
+    if (sub.status !== "UNSUBSCRIBED")
+      group.optedInVisits.add(sub.lead.visitId);
     if (sub.confirmedAt && sub.confirmedAt <= observedAt) {
       group.confirmedSubscriptions++;
       group.channels[sub.channel]++;
@@ -357,6 +362,7 @@ export async function trafficReport(
     .map((group) => {
       const {
         subscribedVisits,
+        optedInVisits,
         subscribedPeople,
         soldVisits,
         applications: _a,
@@ -372,7 +378,9 @@ export async function trafficReport(
         recordedSpend: rounded(group.recordedSpend),
         costCoverage: ratio(group.costRecordedVisits, group.visits),
         subscribedVisitors: subscribedVisits.size,
+        optedInVisitors: optedInVisits.size,
         subscribedPeople: subscribedPeople.size,
+        optInRate: ratio(optedInVisits.size, group.visits),
         soldVisitors: soldVisits.size,
         subscriptionRate: ratio(subscribedVisits.size, group.visits),
         saleRate: ratio(soldVisits.size, group.visits),
@@ -404,7 +412,7 @@ export async function trafficReport(
       "Acquisition visit cohort; subsequent confirmations and application postbacks observed up to observedAt. Follow-up revenue also belongs to its original source and landing; do not add these reports together.",
     notes: [
       "SOLD is a purchased lead, not approval or funding. No postback is not a decline.",
-      "Subscription rates use unique visits; channel counts include multiple channels per person. Confirmed counts retain later opt-outs.",
+      "Opt-in rates include current pending and active consent records. Confirmed subscription rates use unique visits; channel counts include multiple channels per person. Confirmed counts retain later opt-outs.",
       "Sample flags are descriptive, not significance tests. Zero conversions do not prove bots.",
       "Ad contribution excludes messaging and operating costs; null when any visit lacks recorded spend. No automatic advertiser spend reconciliation.",
     ],

@@ -252,6 +252,7 @@ export async function dashboard() {
     visits,
     verified,
     subscriptions,
+    pendingSubscriptions,
     leads,
     postbacks,
     deliveries,
@@ -266,6 +267,7 @@ export async function dashboard() {
     db.visit.count(),
     db.visit.count({ where: { verified: true } }),
     db.subscription.count({ where: { status: "ACTIVE" } }),
+    db.subscription.count({ where: { status: "PENDING" } }),
     db.lead.count(),
     db.postback.findMany({
       select: {
@@ -303,6 +305,8 @@ export async function dashboard() {
       visits,
       verified,
       subscriptions,
+      pendingSubscriptions,
+      optIns: subscriptions + pendingSubscriptions,
       leads,
       sold: new Set(
         postbacks.filter((p) => p.event === "SOLD").map((p) => p.applicationId),
