@@ -71,7 +71,7 @@ export async function sendText(phone: string, message: string, id: string) {
     {},
     {
       chatGuid: `${env.BLUEBUBBLES_SERVICE};-;${phone}`,
-      text: message,
+      message,
       tempGuid: id,
       method: "apple-script",
     },
