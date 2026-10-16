@@ -64,6 +64,13 @@ describe("retargeting contracts", () => {
         },
       }).success,
     ).toBe(false);
+    expect(
+      audienceSchema.parse({
+        ...audience,
+        purpose: "FUNNEL_EXCLUSION",
+        qualifyingEvents: ["QUIZ_COMPLETED"],
+      }).purpose,
+    ).toBe("FUNNEL_EXCLUSION");
     for (const invalid of [
       "a".repeat(63),
       "a".repeat(65),

@@ -63,6 +63,7 @@ export const audienceSchema = z
       "REENGAGEMENT",
       "APPLICATION",
       "SUBSCRIPTION",
+      "FUNNEL_EXCLUSION",
       "PAID_EXCLUSION",
     ]),
     enabled: z.boolean(),
@@ -271,7 +272,10 @@ export function validateConfiguration(
   )
     gaps.push("Replace the Turnstile test key before launch.");
   const enabled = config.audiences.filter((a) => a.enabled);
-  if (!enabled.some((a) => a.purpose !== "PAID_EXCLUSION"))
+  const marketing = enabled.filter(
+    (a) => !["FUNNEL_EXCLUSION", "PAID_EXCLUSION"].includes(a.purpose),
+  );
+  if (!marketing.length)
     gaps.push(
       "Provide an enabled marketing audience and its exact enrollment pixel.",
     );
@@ -279,7 +283,7 @@ export function validateConfiguration(
     if (!a.removal)
       gaps.push(`Audience ${a.id}: provide the exact removal pixel.`);
   const launchGaps: string[] = [];
-  for (const a of enabled.filter((a) => a.purpose !== "PAID_EXCLUSION")) {
+  for (const a of marketing) {
     const stages = config.plan.stages.filter((s) => s.audienceId === a.id);
     if (!stages.length || stages.some((s) => !s.campaignIds.length))
       launchGaps.push(

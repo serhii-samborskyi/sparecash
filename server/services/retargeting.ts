@@ -219,7 +219,9 @@ export async function qualifyPixels(visitId: string, journeyId: string) {
       ready &&
       adsAllowed &&
       verified &&
-      eligible.some((a) => a.purpose !== "PAID_EXCLUSION") &&
+      eligible.some(
+        (a) => !["FUNNEL_EXCLUSION", "PAID_EXCLUSION"].includes(a.purpose),
+      ) &&
       !journey.eligibleAt
     )
       await tx.visitorJourney.update({

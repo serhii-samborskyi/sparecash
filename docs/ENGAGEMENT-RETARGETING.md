@@ -73,9 +73,16 @@ across devices.
 ## Audience settings and event stages
 
 Use `save_retargeting_settings` to save audience IDs, names, purposes, enabled
-status, qualifying events, application/subscription conditions, suppression
+status, qualifying events, optional source campaign IDs, application/subscription conditions, suppression
 conditions and **exact account-provided pixel URLs**. Settings and changes are
 stored in PostgreSQL and audited. Omitted audiences are disabled, not deleted.
+
+An empty `sourceCampaignIds` list matches all acquisition campaigns. A non-empty
+list limits qualifying events to visits attributed to those campaign IDs while
+application, subscription and paid suppression remains journey-wide. Use
+`FUNNEL_EXCLUSION` for audiences such as quiz completers that are collected only
+to exclude them from broader click-based retargeting campaigns; these audiences
+do not require their own retargeting campaign stage.
 
 Supported qualifying events are `QUIZ_PARTICIPATED`, `QUIZ_COMPLETED`,
 `APPLICATION`, `SUBSCRIBED`, and `PAID`. `PAID` is reserved for a

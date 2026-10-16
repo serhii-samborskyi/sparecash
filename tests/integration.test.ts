@@ -3666,7 +3666,7 @@ it("limits completion pixels to their configured acquisition campaigns", async (
     {
       id: "88004",
       name: "W2 quiz completed",
-      purpose: "REENGAGEMENT",
+      purpose: "FUNNEL_EXCLUSION",
       enabled: true,
       enrollment: {
         type: "image",
@@ -3683,7 +3683,7 @@ it("limits completion pixels to their configured acquisition campaigns", async (
     {
       id: "88005",
       name: "1099 quiz completed",
-      purpose: "REENGAGEMENT",
+      purpose: "FUNNEL_EXCLUSION",
       enabled: true,
       enrollment: {
         type: "image",
@@ -3702,6 +3702,11 @@ it("limits completion pixels to their configured acquisition campaigns", async (
     enabled: true,
     audiences: [...rtAudiences, ...completionAudiences],
   });
+  const launchGaps = validateConfiguration(
+    await retargetingConfiguration(),
+  ).launchGaps.join("\n");
+  expect(launchGaps).not.toContain("88004");
+  expect(launchGaps).not.toContain("88005");
 
   const w2 = await rtVisit("TREATMENT", "88110");
   await w2.verify();
