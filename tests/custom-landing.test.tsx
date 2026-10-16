@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import { CustomLanding } from "../client/CustomLanding";
+import {
+  activityNotificationDelay,
+  CustomLanding,
+} from "../client/CustomLanding";
 import { landingSchema } from "../server/domain";
 import { prepareCustomLandingSource } from "../server/services/custom-landings";
 
@@ -14,6 +17,12 @@ const source = (overrides: Record<string, unknown> = {}) => ({
 });
 
 describe("custom landing sources", () => {
+  it("delays activity notifications by a random 5 to 15 seconds", () => {
+    expect(activityNotificationDelay(0)).toBe(5_000);
+    expect(activityNotificationDelay(0.5)).toBe(10_000);
+    expect(activityNotificationDelay(0.999999999)).toBe(15_000);
+  });
+
   it("sanitizes, scopes and renders authored sections around the protected funnel", async () => {
     const prepared = await prepareCustomLandingSource(source());
     expect(prepared.css).toContain(".custom-landing-content .guide");

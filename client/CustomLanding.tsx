@@ -20,6 +20,21 @@ type CustomField = {
   maxLength?: number;
 };
 type ContactRequirement = "hidden" | "optional" | "required";
+const ACTIVITY_NOTICE_MIN_DELAY_MS = 5_000;
+const ACTIVITY_NOTICE_MAX_DELAY_MS = 15_000;
+const ACTIVITY_NOTICE_VISIBLE_MS = 6_300;
+
+export function activityNotificationDelay(random = Math.random()) {
+  const normalized = Math.min(Math.max(random, 0), 0.999999999);
+  return (
+    ACTIVITY_NOTICE_MIN_DELAY_MS +
+    Math.floor(
+      normalized *
+        (ACTIVITY_NOTICE_MAX_DELAY_MS - ACTIVITY_NOTICE_MIN_DELAY_MS + 1),
+    )
+  );
+}
+
 export type BoundFormSubmission = {
   answers: Record<string, string>;
   name?: string;
@@ -116,8 +131,13 @@ export function CustomLanding({
 
   useEffect(() => {
     if (!bound || activity.length === 0) return;
-    const show = window.setTimeout(() => setActivityVisible(true), 900);
-    const hide = window.setTimeout(() => setActivityVisible(false), 7200);
+    setActivityVisible(false);
+    const showDelay = activityNotificationDelay();
+    const show = window.setTimeout(() => setActivityVisible(true), showDelay);
+    const hide = window.setTimeout(
+      () => setActivityVisible(false),
+      showDelay + ACTIVITY_NOTICE_VISIBLE_MS,
+    );
     return () => {
       window.clearTimeout(show);
       window.clearTimeout(hide);
