@@ -16,7 +16,7 @@ export async function queueAdvertiserConversion(
       sourceId: string | null;
       externalClickId: string | null;
     };
-    event: "SOLD" | "APPLICATION" | "QUIZ_COMPLETED";
+    event: "SOLD" | "APPLICATION" | "OPT_IN";
     goal: 1 | 2 | 3;
     applicationId?: string;
     payout?: Prisma.Decimal;

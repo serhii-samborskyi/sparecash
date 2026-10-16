@@ -46,6 +46,7 @@ import {
   transitionLead,
 } from "../services/journeys.js";
 import { attachLandingHit } from "../services/landing-hits.js";
+import { queueAdvertiserConversion } from "../services/advertiser-conversion-events.js";
 export const publicRouter = Router();
 publicRouter.use(
   rateLimit({
@@ -466,25 +467,33 @@ publicRouter.post(
         continue;
       }
       const code = String(randomInt(100000, 1000000));
-      const sub = await db.subscription.create({
-        data: {
-          leadId: lead.id,
-          channel,
-          address,
-          consentText:
-            channel === "EMAIL" ? config.emailConsent : config.smsConsent,
-          consentVersion: config.consentVersion,
-          consentIpHash: ipHash(req.ip ?? "unknown"),
-          verificationHash: hash(`${env.TOKEN_SECRET}:${code}`),
-          verificationExpiresAt: new Date(Date.now() + 600000),
-        },
-      });
-      await db.leadEvent.create({
-        data: {
-          leadId: lead.id,
-          type: "OPTED_IN",
-          detail: `${channel} consent captured; address confirmation is optional`,
-        },
+      const sub = await db.$transaction(async (tx) => {
+        const subscription = await tx.subscription.create({
+          data: {
+            leadId: lead.id,
+            channel,
+            address,
+            consentText:
+              channel === "EMAIL" ? config.emailConsent : config.smsConsent,
+            consentVersion: config.consentVersion,
+            consentIpHash: ipHash(req.ip ?? "unknown"),
+            verificationHash: hash(`${env.TOKEN_SECRET}:${code}`),
+            verificationExpiresAt: new Date(Date.now() + 600000),
+          },
+        });
+        await tx.leadEvent.create({
+          data: {
+            leadId: lead.id,
+            type: "OPTED_IN",
+            detail: `${channel} consent captured; address confirmation is optional`,
+          },
+        });
+        await queueAdvertiserConversion(tx, {
+          visit,
+          event: "OPT_IN",
+          goal: 3,
+        });
+        return subscription;
       });
       await enroll(sub.id, "SUBSCRIBED");
       try {
@@ -580,6 +589,13 @@ publicRouter.post("/push", async (req, res) => {
     return;
   }
   await activateSubscription(sub.id);
+  await db.$transaction((tx) =>
+    queueAdvertiserConversion(tx, {
+      visit: lead.visit,
+      event: "OPT_IN",
+      goal: 3,
+    }),
+  );
   res.json({ ok: true });
 });
 publicRouter.post("/verify-phone", async (req, res) => {

@@ -118,7 +118,7 @@ Copy the account S2S URL from **PropellerAds → Tracking** into **Settings → 
 - a deduplicated RoundSky SOLD callback sends the main conversion (goal 1)
   with commission as payout;
 - a server-recorded application continuation sends `goal=2`;
-- a verified quiz completion sends `goal=3`.
+- a captured email/text opt-in or confirmed push opt-in sends `goal=3`; optional email/text address verification is not required.
 
 Only attributed visits with a valid provider click ID qualify. The database
 enforces one row per click ID and goal, so refreshes and repeat application

@@ -461,6 +461,20 @@ it("records consent, starts warm-up, and keeps email confirmation optional", asy
   expect(sub.status).toBe("PENDING");
   expect(sub.consentText).toBe(oldConsent);
   expect(
+    await db.advertiserConversion.findUniqueOrThrow({
+      where: {
+        externalClickId_goal: {
+          externalClickId: "click-test",
+          goal: 3,
+        },
+      },
+    }),
+  ).toMatchObject({
+    event: "OPT_IN",
+    externalClickId: "click-test",
+    status: "PENDING",
+  });
+  expect(
     await db.enrollment.count({
       where: {
         subscriptionId: sub.id,
