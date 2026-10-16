@@ -51,6 +51,7 @@ import {
 } from "../services/journeys.js";
 import { attachLandingHit } from "../services/landing-hits.js";
 import { queueAdvertiserConversion } from "../services/advertiser-conversion-events.js";
+import { recentApplicationActivity } from "../services/recent-activity.js";
 export const publicRouter = Router();
 publicRouter.use(
   rateLimit({
@@ -190,30 +191,33 @@ publicRouter.post("/visit", async (req, res) => {
     path: "/",
   });
   await attachLandingHit(req, res, input, visit.id);
+  const config = await hydrateCustomLandingConfig(
+    landingSchema.parse(
+      Object.keys(visit.configSnapshot as object).length
+        ? visit.configSnapshot
+        : selected.config,
+    ),
+    {
+      city:
+        visit.city ??
+        (typeof (visit.adContext as Record<string, unknown>)?.city === "string"
+          ? String((visit.adContext as Record<string, unknown>).city)
+          : input.adContext.city),
+      region:
+        visit.region ??
+        (typeof (visit.adContext as Record<string, unknown>)?.region ===
+        "string"
+          ? String((visit.adContext as Record<string, unknown>).region)
+          : input.adContext.region),
+    },
+  );
   res.json({
     visitToken,
     visitId: visit.id,
-    config: await hydrateCustomLandingConfig(
-      landingSchema.parse(
-        Object.keys(visit.configSnapshot as object).length
-          ? visit.configSnapshot
-          : selected.config,
-      ),
-      {
-        city:
-          visit.city ??
-          (typeof (visit.adContext as Record<string, unknown>)?.city ===
-          "string"
-            ? String((visit.adContext as Record<string, unknown>).city)
-            : input.adContext.city),
-        region:
-          visit.region ??
-          (typeof (visit.adContext as Record<string, unknown>)?.region ===
-          "string"
-            ? String((visit.adContext as Record<string, unknown>).region)
-            : input.adContext.region),
-      },
-    ),
+    config,
+    recentActivity: config.activityNotice?.enabled
+      ? await recentApplicationActivity(experiment.id)
+      : [],
     turnstileSiteKey: env.TURNSTILE_SITE_KEY,
     oneSignalAppId: env.ONESIGNAL_APP_ID,
     analytics: {

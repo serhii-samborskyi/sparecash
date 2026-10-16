@@ -105,6 +105,7 @@ describe("conditional landing quizzes", () => {
       typography: "sans",
       sections: [],
       showIllustration: true,
+      funnelMode: "guided",
     });
     expect(
       landingSchema.safeParse({
@@ -112,6 +113,16 @@ describe("conditional landing quizzes", () => {
         accentColor: "url(javascript:alert(1))",
       }).success,
     ).toBe(false);
+  });
+  it("supports a compact request card and recorded activity notice", () => {
+    const parsed = landingSchema.parse({
+      title: "W-2 personal loan finder",
+      description: "Choose two details and check your next step.",
+      funnelMode: "instant",
+      activityNotice: { enabled: true },
+    });
+    expect(parsed.funnelMode).toBe("instant");
+    expect(parsed.activityNotice).toEqual({ enabled: true });
   });
   it("accepts a bounded post-quiz preparation stage", () => {
     const base = {

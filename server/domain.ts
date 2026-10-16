@@ -71,6 +71,19 @@ export const landingSchema = z
         "Optional immutable custom HTML/CSS source. Mutually exclusive with design and the classic template story. The app still owns the quiz, opt-in and application funnel.",
       ),
     offerFirst: z.boolean().default(false),
+    funnelMode: z
+      .enum(["guided", "instant"])
+      .default("guided")
+      .describe(
+        "Guided shows one quiz question at a time. Instant keeps the short quiz and optional update form together in one compact request card.",
+      ),
+    activityNotice: z
+      .object({ enabled: z.boolean().default(false) })
+      .strict()
+      .optional()
+      .describe(
+        "Shows anonymized recent application activity recorded by SpareCash. Live pages never invent names, locations or loan outcomes.",
+      ),
     benefits: z
       .array(z.string().min(1).max(160))
       .max(5)

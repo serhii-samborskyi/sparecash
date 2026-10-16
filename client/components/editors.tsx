@@ -460,6 +460,35 @@ export function ExperimentEditor({
               <option value="true">Continue to application first</option>
             </select>
           </Field>
+          <Field
+            label="Form flow"
+            hint="Instant keeps a short quiz and optional contact step in one compact card."
+          >
+            <select
+              value={v.config.funnelMode}
+              onChange={(e) => config("funnelMode", e.target.value)}
+            >
+              <option value="guided">One question at a time</option>
+              <option value="instant">Compact request card</option>
+            </select>
+          </Field>
+          <Field
+            label="Recent activity notification"
+            hint="Uses anonymized, recorded application activity only."
+          >
+            <select
+              value={String(v.config.activityNotice?.enabled ?? false)}
+              onChange={(e) =>
+                config(
+                  "activityNotice",
+                  e.target.value === "true" ? { enabled: true } : undefined,
+                )
+              }
+            >
+              <option value="false">Hidden</option>
+              <option value="true">Show recorded activity</option>
+            </select>
+          </Field>
           {!v.config.design && !v.config.customLanding && (
             <Field
               label="Decorative illustration"

@@ -2014,6 +2014,98 @@ summary {
   padding: 32px;
   min-height: 450px;
 }
+.recent-activity-notice {
+  position: fixed;
+  z-index: 35;
+  top: 18px;
+  left: 18px;
+  width: min(430px, calc(100vw - 36px));
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+  border: 1px solid #dbe7dc;
+  border-radius: 22px;
+  background: #ffffff;
+  color: #29483d;
+  box-shadow: 0 18px 55px #173c3326;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-14px);
+  transition:
+    opacity 220ms ease-out,
+    transform 220ms ease-out;
+}
+.recent-activity-notice.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+.recent-activity-notice p {
+  color: #5e756b;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.recent-activity-notice strong {
+  color: #29483d;
+  font-weight: 750;
+}
+.recent-activity-icon {
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #dff2e6;
+  color: #2d7957;
+  box-shadow: inset 0 0 0 8px #edf8f1;
+}
+.instant-request > p {
+  margin-bottom: 22px;
+}
+.instant-questions {
+  display: grid;
+  gap: 22px;
+}
+.instant-questions fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.instant-questions fieldset:disabled {
+  opacity: 0.52;
+}
+.instant-questions legend {
+  margin-bottom: 10px;
+  color: #4f665a;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+.instant-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.instant-options button {
+  min-height: 45px;
+  padding: 10px 12px;
+  border: 1px solid #dce6d8;
+  border-radius: 9px;
+  background: #ffffff;
+  color: #60745f;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.35;
+  text-align: left;
+}
+.instant-options button.selected {
+  border-color: #87ad8d;
+  background: #edf5e8;
+  color: #214b3c;
+  box-shadow: inset 0 0 0 1px #87ad8d;
+}
 .application-card h2 {
   font-size: 24px;
   letter-spacing: -0.8px;
@@ -2816,6 +2908,24 @@ summary {
     padding: 25px;
     min-height: 0;
     box-shadow: 0 8px 25px #455b2010;
+  }
+  .recent-activity-notice {
+    top: 12px;
+    left: 12px;
+    width: calc(100vw - 24px);
+    gap: 11px;
+    padding: 13px 14px;
+    border-radius: 17px;
+  }
+  .recent-activity-notice p {
+    font-size: 12px;
+  }
+  .recent-activity-icon {
+    width: 40px;
+    height: 40px;
+  }
+  .instant-options {
+    grid-template-columns: 1fr;
   }
   .application-card h2 {
     font-size: 23px;

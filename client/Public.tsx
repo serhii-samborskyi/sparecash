@@ -54,6 +54,57 @@ function loadScript(url: string) {
     );
   return scripts.get(url)!;
 }
+
+function RecentActivityNotice({
+  enabled,
+  preview,
+  items,
+}: {
+  enabled: boolean;
+  preview: boolean;
+  items?: { location: string; amount?: string }[];
+}) {
+  const activity =
+    preview && enabled
+      ? [{ location: "Nashville", amount: "$2,500–$5,000" }]
+      : (items ?? []);
+  const [visible, setVisible] = useState(false);
+  const [index, setIndex] = useState(0);
+  useEffect(() => {
+    if (!enabled || activity.length === 0) return;
+    const show = window.setTimeout(() => setVisible(true), 900);
+    const hide = window.setTimeout(() => setVisible(false), 7200);
+    return () => {
+      window.clearTimeout(show);
+      window.clearTimeout(hide);
+    };
+  }, [enabled, activity.length, index]);
+  useEffect(() => {
+    if (!enabled || activity.length < 2) return;
+    const cycle = window.setInterval(
+      () => setIndex((current) => (current + 1) % activity.length),
+      12000,
+    );
+    return () => window.clearInterval(cycle);
+  }, [enabled, activity.length]);
+  if (!enabled || activity.length === 0) return null;
+  const item = activity[index % activity.length];
+  return (
+    <aside
+      className={`recent-activity-notice${visible ? " visible" : ""}`}
+      role="status"
+      aria-live="polite"
+    >
+      <span className="recent-activity-icon" aria-hidden="true">
+        <Check size={21} />
+      </span>
+      <p>
+        <strong>Someone in {item.location}</strong> continued to a personal loan
+        application{item.amount ? ` after selecting ${item.amount}` : ""}.
+      </p>
+    </aside>
+  );
+}
 export function Public() {
   const preview = location.pathname.startsWith("/preview/"),
     utility = [
@@ -364,6 +415,58 @@ function Landing({ preview }: { preview: boolean }) {
       : (session.availableChannels ?? []),
     questions = visibleQuestions(config.questions ?? [], answers),
     question = questions[step];
+  const instantComplete =
+    questions.length === 0 ||
+    questions.every((item: any) => Boolean(answers[item.id]));
+  const chooseAnswer = (
+    selectedQuestion: any,
+    option: string,
+    instant = false,
+  ) => {
+    const index = config.questions.findIndex(
+      (item: any) => item.id === selectedQuestion.id,
+    );
+    if (index === 0) setVerificationRequested(true);
+    window.dispatchEvent(new Event("sparecash-quiz-started"));
+    const preceding = new Set(
+      config.questions.slice(0, index).map((item: any) => item.id),
+    );
+    const nextAnswers: Record<string, string> = {
+      ...Object.fromEntries(
+        Object.entries(answers).filter(([id]) => preceding.has(id)),
+      ),
+      [selectedQuestion.id]: option,
+    };
+    trackEngagement.current(session.visitToken, preview, {
+      kind: "QUESTION_ANSWERED",
+      questionId: selectedQuestion.id,
+      answers: nextAnswers,
+    });
+    setAnswers(nextAnswers);
+    if (!instant) {
+      setStep(step + 1);
+      return;
+    }
+    const nextVisible = visibleQuestions(config.questions, nextAnswers);
+    const firstUnanswered = nextVisible.findIndex(
+      (item: any) => !nextAnswers[item.id],
+    );
+    setStep(firstUnanswered < 0 ? nextVisible.length : firstUnanswered);
+  };
+  const backToQuestions = () => {
+    if (config.funnelMode !== "instant") {
+      setStep(step - 1);
+      return;
+    }
+    const last = questions[questions.length - 1];
+    setAnswers(
+      Object.fromEntries(
+        Object.entries(answers).filter(([id]) => id !== last?.id),
+      ),
+    );
+    setStep(Math.max(0, questions.length - 1));
+    updatesRecorded.current = false;
+  };
   const funnel = (
     <section className="application-card" id="application" tabIndex={-1}>
       {!preview && (
@@ -486,6 +589,46 @@ function Landing({ preview }: { preview: boolean }) {
             details may be used to prefill it.
           </p>
         </>
+      ) : config.funnelMode === "instant" && !instantComplete ? (
+        <div className="instant-request">
+          <div className="form-progress">
+            <span>REQUEST OPTIONS</span>
+            <span>{questions.length} QUICK DETAILS</span>
+          </div>
+          <h2>{config.formTitle}</h2>
+          <p>{config.formDescription}</p>
+          <div className="instant-questions">
+            {questions.map((item: any, index: number) => {
+              const locked = questions
+                .slice(0, index)
+                .some((prior: any) => !answers[prior.id]);
+              return (
+                <fieldset key={item.id} disabled={locked}>
+                  <legend>{item.label}</legend>
+                  <div className="instant-options">
+                    {item.options.map((option: string) => (
+                      <button
+                        type="button"
+                        key={option}
+                        aria-pressed={answers[item.id] === option}
+                        className={
+                          answers[item.id] === option ? "selected" : ""
+                        }
+                        onClick={() => chooseAnswer(item, option, true)}
+                      >
+                        {option}
+                      </button>
+                    ))}
+                  </div>
+                </fieldset>
+              );
+            })}
+          </div>
+          <p className="fine-print">
+            <LockKeyhole size={12} />
+            No credit check to answer these questions.
+          </p>
+        </div>
       ) : question ? (
         <>
           <div className="form-progress">
@@ -509,31 +652,7 @@ function Landing({ preview }: { preview: boolean }) {
               <button
                 key={option}
                 className={answers[question.id] === option ? "selected" : ""}
-                onClick={() => {
-                  if (step === 0) setVerificationRequested(true);
-                  window.dispatchEvent(new Event("sparecash-quiz-started"));
-                  const index = config.questions.findIndex(
-                    (q: any) => q.id === question.id,
-                  );
-                  const preceding = new Set(
-                    config.questions.slice(0, index).map((q: any) => q.id),
-                  );
-                  const nextAnswers = {
-                    ...Object.fromEntries(
-                      Object.entries(answers).filter(([id]) =>
-                        preceding.has(id),
-                      ),
-                    ),
-                    [question.id]: option,
-                  };
-                  trackEngagement.current(session.visitToken, preview, {
-                    kind: "QUESTION_ANSWERED",
-                    questionId: question.id,
-                    answers: nextAnswers,
-                  });
-                  setAnswers(nextAnswers);
-                  setStep(step + 1);
-                }}
+                onClick={() => chooseAnswer(question, option)}
               >
                 {option}
                 <ChevronRight size={18} />
@@ -615,7 +734,7 @@ function Landing({ preview }: { preview: boolean }) {
               {questions.length > 0 && (
                 <button
                   className="text-button back-link"
-                  onClick={() => setStep(step - 1)}
+                  onClick={backToQuestions}
                 >
                   <ArrowLeft size={15} /> Back to questions
                 </button>
@@ -745,7 +864,7 @@ function Landing({ preview }: { preview: boolean }) {
                 <button
                   type="button"
                   className="text-button back-link"
-                  onClick={() => setStep(step - 1)}
+                  onClick={backToQuestions}
                 >
                   <ArrowLeft size={15} />
                   Back
@@ -795,6 +914,11 @@ function Landing({ preview }: { preview: boolean }) {
           Preview · Try the quiz and channel choices. Submissions are disabled.
         </div>
       )}
+      <RecentActivityNotice
+        enabled={config.activityNotice?.enabled === true}
+        preview={preview}
+        items={session.recentActivity}
+      />
       <PublicHeader logoImage={config.logoImage} />
       {config.customLanding ? (
         <CustomLanding source={config.customLanding} funnel={funnel} />
