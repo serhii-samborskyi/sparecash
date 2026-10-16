@@ -893,7 +893,7 @@ export async function statisticsReport(input: StatisticsInput = {}) {
       suspectedBots:
         "Unverified visits with bot score ≥70 from recorded abuse evidence. Failed checks, timeouts and unfinished checks alone do not mean bots.",
       engagement:
-        "Unique visits with a quiz answer, a server-recorded application click, or a confirmed subscription, divided by all visits. Opening updates alone is excluded.",
+        "Unique visits with a quiz answer, a server-recorded application click, or a recorded opt-in, divided by all visits. Opening updates alone is excluded.",
       preQuizActivity:
         "First-party page behavior before the first quiz answer. Time counts only while the page is visible; clicks count meaningful controls outside the quiz; scrolls count separate scroll gestures. Older visits without this measurement are excluded from the average rather than counted as zero.",
       subscriptions:

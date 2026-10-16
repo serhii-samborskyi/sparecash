@@ -631,7 +631,7 @@ function makeServer() {
   );
   register(
     "enroll_existing",
-    "Enroll existing confirmed subscribers in an active SUBSCRIBED chain for their channel.",
+    "Enroll existing consented email/text contacts or confirmed push subscribers in an active SUBSCRIBED chain for their channel.",
     { channel: z.enum(["EMAIL", "SMS", "PUSH"]) },
     async ({ channel }) => {
       await audit("mcp", "chain.enroll_existing", channel);

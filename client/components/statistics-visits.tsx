@@ -74,6 +74,14 @@ function outcome(visit: Visit) {
     )
   )
     return "Subscribed";
+  if (
+    visit.leads.some((lead) =>
+      lead.subscriptions.some(
+        (subscription) => subscription.status === "PENDING",
+      ),
+    )
+  )
+    return "Pending opt-in";
   if (visit.events.some((event) => event.kind === "QUIZ_COMPLETED"))
     return "Quiz completed";
   if (visit.events.some((event) => event.kind === "QUESTION_ANSWERED"))
