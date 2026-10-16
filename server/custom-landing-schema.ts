@@ -6,7 +6,7 @@ export const customLandingReferenceSchema = z.object({
     .min(20)
     .max(40)
     .describe(
-      "Immutable source id returned by create_custom_landing_source. The source supplies all authored HTML and CSS around the protected funnel.",
+      "Immutable source id returned by create_custom_landing_source. A v2 source may own the complete bound form presentation; a legacy source surrounds the protected funnel.",
     ),
 });
 

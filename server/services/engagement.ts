@@ -1,6 +1,10 @@
 import { z } from "zod";
 import { db } from "../db.js";
-import { landingSchema, visibleQuestions } from "../domain.js";
+import {
+  landingSchema,
+  validateCustomFormAnswers,
+  visibleQuestions,
+} from "../domain.js";
 import { hasVisitorProof } from "./visitor-verification.js";
 
 export const engagementSchema = z.discriminatedUnion("kind", [
@@ -20,6 +24,14 @@ export const engagementSchema = z.discriminatedUnion("kind", [
       answers: z
         .record(z.string().max(40), z.string().max(100))
         .refine((value) => Object.keys(value).length <= 8, "Too many answers"),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("FORM_COMPLETED"),
+      answers: z
+        .record(z.string().max(40), z.string().max(200))
+        .refine((value) => Object.keys(value).length <= 12, "Too many answers"),
     })
     .strict(),
 ]);
@@ -57,6 +69,21 @@ export function engagementEvents(
       },
     ];
   const config = landingSchema.parse(configInput);
+  if (event.kind === "FORM_COMPLETED") {
+    if (!config.customForm)
+      throw new Error("This landing does not define a custom form.");
+    const answers = validateCustomFormAnswers(config.customForm, event.answers);
+    return [
+      ...config.customForm.fields
+        .filter((field) => answers[field.id] !== undefined)
+        .map((field) => ({
+          kind: "QUESTION_ANSWERED",
+          questionId: field.id,
+          answer: answers[field.id],
+        })),
+      { kind: "QUIZ_COMPLETED", questionId: "" },
+    ];
+  }
   const questions = visibleQuestions(config.questions, event.answers);
   const index = questions.findIndex((q) => q.id === event.questionId);
   const prefix = questions.slice(0, index + 1);

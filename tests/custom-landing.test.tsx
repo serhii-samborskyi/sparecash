@@ -109,4 +109,42 @@ describe("custom landing sources", () => {
     });
     expect(parsed.success).toBe(false);
   });
+
+  it("accepts a fully authored bound form and renders it without the legacy funnel", async () => {
+    const prepared = await prepareCustomLandingSource({
+      name: "Slider request",
+      html: `<main><h1>Request funds</h1><form data-sc-form="lead"><label for="amount">Amount</label><output data-sc-output="amount" data-sc-format="currency"></output><input id="amount" type="range" data-sc-field="amount"><input type="text" data-sc-contact="name"><input type="tel" data-sc-contact="phone"><input type="email" data-sc-contact="email"><div data-sc-consent>Consent text and <a href="/terms">terms</a>.</div><p data-sc-errors role="alert"></p><button data-sc-action="submit">Check options</button></form></main>`,
+      css: `main{min-height:100vh;padding:2rem}[data-sc-activity]{position:fixed;top:1rem;left:1rem;z-index:4}`,
+    });
+    expect(prepared.version).toBe(2);
+    expect(prepared.htmlAfter).toBe("");
+    expect(prepared.htmlBefore).toContain('type="range"');
+    expect(prepared.htmlBefore).toContain('type="submit"');
+    const html = renderToStaticMarkup(
+      <CustomLanding
+        source={{ ...prepared, name: "Slider request" }}
+        form={{
+          fields: [
+            {
+              id: "amount",
+              valueType: "integer",
+              required: true,
+              min: 500,
+              max: 50000,
+              step: 500,
+              defaultValue: 10000,
+            },
+          ],
+          contacts: {
+            name: "optional",
+            phone: "required",
+            email: "optional",
+          },
+        }}
+        funnel={<section id="legacy-funnel">Legacy</section>}
+      />,
+    );
+    expect(html).toContain('data-sc-form="lead"');
+    expect(html).not.toContain("legacy-funnel");
+  });
 });

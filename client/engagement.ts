@@ -12,6 +12,10 @@ type EngagementEvent =
       kind: "QUESTION_ANSWERED";
       questionId: string;
       answers: Record<string, string>;
+    }
+  | {
+      kind: "FORM_COMPLETED";
+      answers: Record<string, string>;
     };
 
 // Dispatch immediately so a slow earlier request cannot hold the final quiz event

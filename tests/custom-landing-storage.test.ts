@@ -108,4 +108,63 @@ describe("custom landing storage", () => {
       await db.landingSource.deleteMany({ where: { id: source.id } });
     }
   });
+
+  it("requires a bound source and form contract to agree", async () => {
+    const marker = randomUUID();
+    const source = await createCustomLandingSource(
+      {
+        name: `Bound form ${marker}`,
+        html: `<main><h1>Request funds</h1><form data-sc-form="lead"><input type="range" data-sc-field="amount"><input type="tel" data-sc-contact="phone"><div data-sc-consent>Text message consent and terms apply.</div><p data-sc-errors></p><button data-sc-action="submit">Continue</button></form></main>`,
+        css: "main{max-width:60rem;margin:0 auto}",
+      },
+      "test",
+    );
+    let experimentId = "";
+    try {
+      const experiment = await saveExperiment(
+        {
+          name: `Bound source ${marker}`,
+          slug: `bound-source-${marker}`,
+          status: "DRAFT",
+          objective: "SUBSCRIPTIONS",
+          variants: [
+            {
+              name: "Slider",
+              weight: 100,
+              config: {
+                title: "Fast loan request",
+                description: "Choose an amount, then enter a mobile number.",
+                customLanding: { sourceId: source.id },
+                customForm: {
+                  fields: [
+                    {
+                      id: "amount",
+                      valueType: "integer",
+                      min: 500,
+                      max: 50000,
+                      step: 500,
+                    },
+                  ],
+                  contacts: { phone: "required" },
+                },
+              },
+            },
+          ],
+        },
+        "test",
+      );
+      experimentId = experiment.id;
+      const hydrated = await getExperiment(experiment.id);
+      expect(hydrated.variants[0].config.customLanding?.version).toBe(2);
+      expect(hydrated.variants[0].config.customForm?.contacts.phone).toBe(
+        "required",
+      );
+    } finally {
+      if (experimentId) {
+        await db.variant.deleteMany({ where: { experimentId } });
+        await db.experiment.delete({ where: { id: experimentId } });
+      }
+      await db.landingSource.deleteMany({ where: { id: source.id } });
+    }
+  });
 });

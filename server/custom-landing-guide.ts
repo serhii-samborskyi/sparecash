@@ -1,66 +1,84 @@
 export function customLandingGuide() {
   return {
-    version: 1,
+    version: 2,
     purpose:
-      "Build an original page-body fragment for an advertorial, comparison guide, visual story, quiz introduction or privacy-enhanced embedded video. SpareCash renders the protected quiz, opt-in, verification and application flow at one required slot.",
+      "Create independent HTML/CSS landings whose presentation is fully authored while SpareCash owns validation, attribution, engagement events, contact consent, subscriptions and application handoff.",
+    modes: {
+      boundForm:
+        'For a unique form page, author exactly one <form data-sc-form="lead"> and no sparecash-funnel slot. Declare its data contract in config.customForm.',
+      legacy:
+        "Existing editorial pages remain supported with exactly one top-level <sparecash-funnel></sparecash-funnel>. They continue to use the protected fixed funnel.",
+    },
     workflow: [
-      "Create and upload public artwork with create_landing_asset_upload. Use only returned /media/landing/...webp sources or exact bundled /landing-assets/... image paths returned by list_landing_assets.",
-      "Author one HTML body fragment and one CSS string. Put exactly one top-level <sparecash-funnel></sparecash-funnel> between authored sections and exactly one h1 anywhere in the fragment.",
-      "Call validate_custom_landing_source, then create_custom_landing_source. Sources are sanitized, content-addressed and immutable; editing means creating a new source.",
-      "Set config.customLanding.sourceId to the returned id in save_experiment. Keep config.title and description as fallback metadata; questions, offerFirst and consent fields continue to configure the protected funnel.",
-      "Save as DRAFT, call get_experiment, then inspect every preview URL at desktop and mobile sizes. Create a new variant when a visited variant needs a new source.",
+      "Decide the fields, their validation and the contact requirements for this landing. The requested workflow belongs in config.customForm, not a global quiz template.",
+      "Author the complete form layout in HTML and CSS using the bindings below. Custom colors, card structure, sliders, copy and responsive layout are permitted.",
+      "Call validate_custom_landing_source and create_custom_landing_source. Reference the returned source id from config.customLanding.sourceId and include the matching config.customForm.",
+      "Save a DRAFT or zero-weight variant, inspect desktop and mobile previews, then assign traffic. Sources are immutable, so design edits create a new source.",
     ],
-    slot: "The funnel token must be a direct child of the submitted fragment. Content before and after it is rendered in separately scoped authored sections, so custom CSS cannot style or conceal protected controls.",
-    actions:
-      'Use <a href="#application"> or <button type="button" data-sc-action="open-funnel"> to scroll and focus the protected funnel. Custom forms and JavaScript are not accepted.',
+    bindings: {
+      form: '<form data-sc-form="lead">',
+      field:
+        '<input data-sc-field="amount"> binds a value defined in customForm.fields.',
+      contact:
+        '<input data-sc-contact="phone|name|email"> binds a non-hidden customForm.contacts entry.',
+      output:
+        '<output data-sc-output="amount" data-sc-format="currency"> mirrors a bound field. Omit the format for plain text or numbers.',
+      submit:
+        '<button data-sc-action="submit"> submits through the SpareCash workflow.',
+      errors:
+        "Add one element with data-sc-errors for validation, verification and delivery messages.",
+      consent:
+        "Add an element with data-sc-consent whenever phone or email is collected. Put the requested disclosure and links there.",
+      activity:
+        'An optional data-sc-activity container may contain data-sc-bind="location" and data-sc-bind="amount". SpareCash fills it only from anonymized recent activity and hides it when none exists.',
+    },
+    configExample: {
+      customForm: {
+        fields: [
+          {
+            id: "amount",
+            valueType: "integer",
+            required: true,
+            min: 500,
+            max: 50000,
+            step: 500,
+            defaultValue: 10000,
+          },
+          {
+            id: "term_days",
+            valueType: "integer",
+            required: true,
+            min: 7,
+            max: 30,
+            step: 1,
+            defaultValue: 15,
+          },
+        ],
+        contacts: { name: "optional", phone: "required", email: "optional" },
+        continueToApplication: true,
+      },
+    },
+    htmlExample: `<main class="request-page">
+  <h1>Check personal loan options</h1>
+  <form class="request-card" data-sc-form="lead">
+    <label for="amount">Loan amount</label>
+    <output data-sc-output="amount" data-sc-format="currency"></output>
+    <input id="amount" type="range" data-sc-field="amount">
+    <label for="term">Loan term</label>
+    <output data-sc-output="term_days"></output>
+    <input id="term" type="range" data-sc-field="term_days">
+    <input type="text" data-sc-contact="name" autocomplete="name" placeholder="Your name (optional)">
+    <input type="tel" data-sc-contact="phone" autocomplete="tel" placeholder="Mobile number">
+    <input type="email" data-sc-contact="email" autocomplete="email" placeholder="Email (optional)">
+    <div data-sc-consent>By continuing, you accept the <a href="/terms">Terms</a> and <a href="/privacy">Privacy Policy</a> and agree to receive recurring automated marketing texts. Consent is not a condition of purchase. Message and data rates may apply. Reply STOP to opt out.</div>
+    <p data-sc-errors role="alert"></p>
+    <button type="submit" data-sc-action="submit">Check my loan options</button>
+  </form>
+</main>`,
     personalization:
-      "Use {{region_phrase}} where location is optional. It becomes ' in Texas' when a trusted edge or advertiser region exists and becomes an empty string when it does not. Use {{region}} only when the surrounding sentence remains natural with an empty value.",
-    html: {
-      allowed:
-        "Semantic text/layout elements, tables, details/summary, local media-library images, ordinary HTTPS/mail/tel links, buttons that open the funnel, and privacy-enhanced YouTube or Vimeo iframes.",
-      video:
-        "Embed only https://www.youtube-nocookie.com/embed/... or https://player.vimeo.com/video/... with a descriptive title. Autoplay should be avoided.",
-      blocked:
-        "Scripts, inline event handlers, inline styles, forms and form controls, SVG, metadata, arbitrary embeds, external images, tracking pixels and executable URLs.",
-    },
-    css: {
-      scope:
-        "Selectors are automatically prefixed to .custom-landing-content and apply only to authored sections.",
-      blocked:
-        "@import, external url(), fonts, executable values, document/root selectors, protected funnel selectors, absolute/fixed/sticky overlays and z-index above 10.",
-      responsive:
-        "Use @media rules for mobile layouts and prefers-reduced-motion. @supports and keyframes are supported.",
-    },
-    protectedElements: [
-      "SpareCash header identity and legal footer",
-      "Server-bound Turnstile and advertising privacy controls",
-      "Quiz branching and recorded answers",
-      "Channel availability, consent, optional continuation and confirmation",
-      "Tracked server-generated application redirect",
-      "Non-lender and eligibility disclosures",
-    ],
-    example: {
-      name: "Editorial comparison guide",
-      html: `<main class="guide">
-  <section class="hero">
-    <p class="eyebrow">PERSONAL LOAN GUIDE</p>
-    <h1>Compare the full cost, not only the monthly payment.</h1>
-    <p>Use this short checklist before deciding which option fits your budget.</p>
-    <button type="button" data-sc-action="open-funnel">Start with two questions</button>
-  </section>
-</main>
-<sparecash-funnel></sparecash-funnel>
-<section class="notes">
-  <h2>Three details to review</h2>
-  <ol><li>APR and total repayment</li><li>Fees and the amount received</li><li>Payment dates and term</li></ol>
-</section>`,
-      css: `.guide,.notes{max-width:72rem;margin:0 auto;padding:clamp(1.5rem,5vw,5rem)}
-.hero{display:grid;gap:1.25rem;text-align:center}
-.hero h1{font-size:clamp(2.5rem,7vw,5.5rem);line-height:.96;letter-spacing:-.05em}
-.hero button{min-height:3.25rem;border:0;border-radius:999px;padding:0 1.5rem;background:#173f32;color:white;font:inherit;font-weight:700}
-@media(max-width:700px){.guide,.notes{padding:1.25rem}}`,
-    },
-    limits:
-      "Custom sources control presentation and editorial content, not lender decisions or application delivery. Validation enforces technical boundaries but does not prove claim accuracy, accessibility or provider availability.",
+      "Use {{region_phrase}} where location is optional. It becomes ' in Texas' when a trusted region exists and an empty string otherwise. Use {{city}} only when the sentence remains natural with the fallback 'your area'.",
+    security:
+      "JavaScript, inline handlers/styles, arbitrary embeds and external images remain blocked. Supported inputs are range, text, tel and email. The server overrides required/min/max/step/default constraints from customForm and revalidates every submission.",
+    css: "CSS is scoped to .custom-landing-content. Media queries, supports rules and keyframes are allowed. External url() loads and document/root selectors are blocked. A data-sc-activity selector may use fixed or absolute positioning with z-index up to 10; other overlays remain blocked.",
   };
 }

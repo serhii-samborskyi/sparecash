@@ -11,6 +11,7 @@ import {
   landingSchema,
   visibleQuestions,
   experimentSchema,
+  validateCustomFormAnswers,
 } from "../server/domain";
 describe("traffic decisions", () => {
   const rules = settingsSchema.parse({});
@@ -46,6 +47,38 @@ describe("traffic decisions", () => {
     expect(chooseVariant(variants, 0).id).toBe("a");
     expect(chooseVariant(variants, 0.249).id).toBe("a");
     expect(chooseVariant(variants, 0.25).id).toBe("b");
+  });
+});
+describe("custom landing form contracts", () => {
+  const form = landingSchema.parse({
+    title: "Fast loan request",
+    description: "Choose an amount and term, then enter a mobile number.",
+    customLanding: { sourceId: "cmabcdefghijklmnopqrstuv" },
+    customForm: {
+      fields: [
+        {
+          id: "amount",
+          valueType: "integer",
+          min: 500,
+          max: 50000,
+          step: 500,
+          defaultValue: 10000,
+        },
+      ],
+      contacts: { name: "optional", phone: "required", email: "optional" },
+    },
+  }).customForm!;
+
+  it("keeps field validation independent from presentation", () => {
+    expect(validateCustomFormAnswers(form, { amount: "50000" })).toEqual({
+      amount: "50000",
+    });
+    expect(() =>
+      validateCustomFormAnswers(form, { amount: "50500" }),
+    ).toThrow();
+    expect(() =>
+      validateCustomFormAnswers(form, { amount: "10000", extra: "x" }),
+    ).toThrow();
   });
 });
 describe("conditional landing quizzes", () => {

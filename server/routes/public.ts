@@ -16,6 +16,7 @@ import {
   normalizePhone,
   nextLeadStatus,
   propellerAdContextSchema,
+  validateCustomFormAnswers,
   visibleQuestions,
 } from "../domain.js";
 import {
@@ -428,12 +429,62 @@ publicRouter.post(
         : visit.variant.config,
     );
     const questions = visibleQuestions(config.questions, input.answers);
-    for (const q of questions)
-      if (!q.options.includes(input.answers[q.id])) {
-        res.status(400).json({ error: `Choose an answer for: ${q.label}` });
+    let recordedAnswers: Record<string, string>;
+    if (config.customForm) {
+      try {
+        recordedAnswers = validateCustomFormAnswers(
+          config.customForm,
+          input.answers,
+        );
+      } catch (error) {
+        res.status(400).json({ error: (error as Error).message });
         return;
       }
+    } else {
+      for (const q of questions)
+        if (!q.options.includes(input.answers[q.id])) {
+          res.status(400).json({ error: `Choose an answer for: ${q.label}` });
+          return;
+        }
+      recordedAnswers = Object.fromEntries(
+        questions.map((q) => [q.id, input.answers[q.id]]),
+      );
+    }
     const phone = input.phone ? normalizePhone(input.phone) : null;
+    if (config.customForm) {
+      const requirements = config.customForm.contacts;
+      if (
+        (requirements.name === "required" && !input.name) ||
+        (requirements.phone === "required" && !phone) ||
+        (requirements.email === "required" && !input.email)
+      ) {
+        res
+          .status(400)
+          .json({ error: "Complete each required contact field." });
+        return;
+      }
+      if (
+        (requirements.name === "hidden" && input.name) ||
+        (requirements.phone === "hidden" && input.phone) ||
+        (requirements.email === "hidden" && input.email)
+      ) {
+        res
+          .status(400)
+          .json({ error: "This form contains an unexpected field." });
+        return;
+      }
+      if (
+        (phone && !input.channels.includes("SMS")) ||
+        (input.email && !input.channels.includes("EMAIL"))
+      ) {
+        res
+          .status(400)
+          .json({
+            error: "Contact details must include their update channel.",
+          });
+        return;
+      }
+    }
     if (
       (input.channels.includes("EMAIL") && !input.email) ||
       (input.channels.includes("SMS") && !phone)
@@ -449,9 +500,7 @@ publicRouter.post(
         visitId: visit.id,
         name: input.name,
         ...detected,
-        answers: Object.fromEntries(
-          questions.map((q) => [q.id, input.answers[q.id]]),
-        ),
+        answers: recordedAnswers,
       },
     });
     await db.visit.update({

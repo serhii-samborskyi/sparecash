@@ -10,6 +10,8 @@ import {
   customLandingSourceSchema,
   listLandingSourcesSchema,
 } from "../custom-landing-schema.js";
+import type { z } from "zod";
+import { landingSchema } from "../domain.js";
 
 const SLOT = "<sparecash-funnel></sparecash-funnel>";
 const SCOPE = ".custom-landing-content";
@@ -63,10 +65,15 @@ const allowedTags = [
   "td",
   "caption",
   "iframe",
+  "form",
+  "input",
+  "label",
+  "output",
   "sparecash-funnel",
 ];
 const blockedMarkup =
-  /<(?:script|style|form|input|select|textarea|label|meta|link|base|object|embed|svg|math|template)\b|\son[a-z]+\s*=|\sstyle\s*=/i;
+  /<(?:script|style|select|textarea|meta|link|base|object|embed|svg|math|template)\b|\son[a-z]+\s*=|\sstyle\s*=/i;
+const v1FormMarkup = /<(?:form|input|label|output)\b/i;
 const protectedNames =
   /(?:id|class)\s*=\s*["'][^"']*\b(?:application|optional-updates|application-card|public-header|public-footer|custom-landing-funnel)\b/i;
 const assetPath =
@@ -95,13 +102,60 @@ function directSlotCount(html: string) {
   ).length;
 }
 
-function cleanFragment(html: string) {
+function isBoundForm(html: string) {
+  return /\bdata-sc-form\s*=\s*["']lead["']/i.test(html);
+}
+
+function cleanFragment(html: string, version: 1 | 2) {
   return sanitizeHtml(html, {
     allowedTags,
     allowedAttributes: {
-      "*": ["id", "class", "title", "role", "aria-*", "data-sc-action"],
+      "*": [
+        "id",
+        "class",
+        "title",
+        "role",
+        "aria-*",
+        "data-sc-action",
+        "data-sc-form",
+        "data-sc-field",
+        "data-sc-contact",
+        "data-sc-output",
+        "data-sc-format",
+        "data-sc-errors",
+        "data-sc-consent",
+        "data-sc-activity",
+        "data-sc-bind",
+      ],
       a: ["href", "target", "rel"],
       button: ["type", "data-sc-action", "aria-*", "class", "id"],
+      form: ["class", "id", "data-sc-form", "aria-*"],
+      input: [
+        "type",
+        "class",
+        "id",
+        "placeholder",
+        "autocomplete",
+        "inputmode",
+        "min",
+        "max",
+        "step",
+        "value",
+        "maxlength",
+        "required",
+        "data-sc-field",
+        "data-sc-contact",
+        "aria-*",
+      ],
+      label: ["for", "class", "id"],
+      output: [
+        "for",
+        "class",
+        "id",
+        "data-sc-output",
+        "data-sc-format",
+        "aria-*",
+      ],
       img: [
         "src",
         "alt",
@@ -146,12 +200,36 @@ function cleanFragment(html: string) {
         tagName: "button",
         attribs: {
           ...attributes,
-          type: "button",
-          ...(attributes["data-sc-action"] === "open-funnel"
+          type:
+            version === 2 && attributes["data-sc-action"] === "submit"
+              ? "submit"
+              : "button",
+          ...(["open-funnel", "submit"].includes(
+            attributes["data-sc-action"] ?? "",
+          )
             ? {}
             : { "data-sc-action": "" }),
         },
       }),
+      form: (_tag, attributes) => ({
+        tagName: "form",
+        attribs: {
+          class: attributes.class ?? "",
+          id: attributes.id ?? "",
+          "data-sc-form": attributes["data-sc-form"] ?? "",
+        },
+      }),
+      input: (_tag, attributes) => {
+        const type = ["range", "text", "tel", "email"].includes(
+          attributes.type ?? "",
+        )
+          ? attributes.type
+          : "text";
+        return {
+          tagName: "input",
+          attribs: { ...attributes, type },
+        };
+      },
       iframe: (_tag, attributes) => ({
         tagName: "iframe",
         attribs: {
@@ -168,13 +246,15 @@ function cleanFragment(html: string) {
       if (frame.tag === "img") return !assetPath.test(frame.attribs.src ?? "");
       if (frame.tag === "iframe") return !videoFrame(frame.attribs.src ?? "");
       if (frame.tag === "button")
-        return frame.attribs["data-sc-action"] !== "open-funnel";
+        return !["open-funnel", "submit"].includes(
+          frame.attribs["data-sc-action"] ?? "",
+        );
       return false;
     },
   }).trim();
 }
 
-async function scopeCss(css: string) {
+async function scopeCss(css: string, version: 1 | 2) {
   if (!css.trim()) return "";
   const root = postcss.parse(css, { from: undefined });
   root.walkAtRules((rule) => {
@@ -195,6 +275,10 @@ async function scopeCss(css: string) {
   });
   root.walkDecls((declaration) => {
     const value = declaration.value;
+    const activityRule =
+      version === 2 &&
+      declaration.parent?.type === "rule" &&
+      /\[data-sc-activity\]/.test(declaration.parent.selector);
     if (
       /url\s*\(|expression\s*\(|javascript:|behavior\s*:|-moz-binding/i.test(
         value,
@@ -205,7 +289,8 @@ async function scopeCss(css: string) {
       );
     if (
       declaration.prop === "position" &&
-      /^(?:fixed|sticky|absolute)$/i.test(value.trim())
+      /^(?:fixed|sticky|absolute)$/i.test(value.trim()) &&
+      !activityRule
     )
       throw declaration.error("Positioned overlays are not supported");
     if (declaration.prop === "z-index" && Number(value) > 10)
@@ -213,7 +298,8 @@ async function scopeCss(css: string) {
     if (
       /^(?:transform|translate|scale|rotate|inset|top|right|bottom|left|clip-path)$/i.test(
         declaration.prop,
-      )
+      ) &&
+      !activityRule
     )
       throw declaration.error(
         "CSS that can move content over protected controls is not supported",
@@ -238,29 +324,62 @@ async function scopeCss(css: string) {
 
 export async function prepareCustomLandingSource(input: unknown) {
   const data = customLandingSourceSchema.parse(input);
+  const version: 1 | 2 = isBoundForm(data.html) ? 2 : 1;
   if (blockedMarkup.test(data.html))
     throw new Error(
-      "Custom HTML cannot contain scripts, styles, forms, form controls, inline styles or event handlers. Use the protected funnel slot for interaction.",
+      "Custom HTML cannot contain scripts, styles, unsupported controls, metadata, inline styles or event handlers.",
+    );
+  if (version === 1 && v1FormMarkup.test(data.html))
+    throw new Error(
+      'Legacy custom HTML cannot contain forms or form controls. Use data-sc-form="lead" for a bound custom form.',
     );
   if (protectedNames.test(data.html))
     throw new Error(
       "Custom HTML cannot reuse protected SpareCash ids or classes",
     );
   const occurrences = data.html.split(SLOT).length - 1;
-  if (occurrences !== 1 || directSlotCount(data.html) !== 1)
+  if (
+    (version === 1 &&
+      (occurrences !== 1 || directSlotCount(data.html) !== 1)) ||
+    (version === 2 && occurrences !== 0)
+  )
     throw new Error(
-      `HTML must contain exactly one top-level ${SLOT} slot between authored sections`,
+      version === 1
+        ? `HTML must contain exactly one top-level ${SLOT} slot between authored sections`
+        : "Bound custom forms replace the funnel slot and cannot include sparecash-funnel",
     );
-  const [before, after] = data.html.split(SLOT);
-  const htmlBefore = cleanFragment(before);
-  const htmlAfter = cleanFragment(after);
+  const [before, after = ""] =
+    version === 1 ? data.html.split(SLOT) : [data.html, ""];
+  const htmlBefore = cleanFragment(before, version);
+  const htmlAfter = cleanFragment(after, version);
   if (protectedNames.test(htmlBefore + htmlAfter))
     throw new Error(
       "Custom HTML cannot reuse protected SpareCash ids or classes",
     );
   if (((htmlBefore + htmlAfter).match(/<h1\b/gi) ?? []).length !== 1)
     throw new Error("Custom HTML must contain exactly one h1 heading");
-  const css = await scopeCss(data.css);
+  if (version === 2) {
+    if ((htmlBefore.match(/<form\b/gi) ?? []).length !== 1)
+      throw new Error("Bound custom HTML must contain exactly one form");
+    if (!/<form\b[^>]*data-sc-form="lead"/i.test(htmlBefore))
+      throw new Error('The bound form must use data-sc-form="lead"');
+    if ((htmlBefore.match(/data-sc-action="submit"/gi) ?? []).length !== 1)
+      throw new Error(
+        'The bound form needs exactly one button with data-sc-action="submit"',
+      );
+    if (!/data-sc-(?:field|contact)="[a-z][a-z0-9_]*"/i.test(htmlBefore))
+      throw new Error("The bound form must contain at least one data binding");
+    if (!/data-sc-errors(?:="")?/i.test(htmlBefore))
+      throw new Error("The bound form needs a data-sc-errors message element");
+    if (
+      /data-sc-contact="(?:phone|email)"/i.test(htmlBefore) &&
+      !/data-sc-consent(?:="")?/i.test(htmlBefore)
+    )
+      throw new Error(
+        "Forms that collect phone or email need a data-sc-consent element",
+      );
+  }
+  const css = await scopeCss(data.css, version);
   if (!(htmlBefore + htmlAfter).trim())
     throw new Error("Custom HTML must contain visible authored content");
   return {
@@ -268,6 +387,7 @@ export async function prepareCustomLandingSource(input: unknown) {
     htmlBefore,
     htmlAfter,
     css,
+    version,
     changed:
       htmlBefore !== before.trim() ||
       htmlAfter !== after.trim() ||
@@ -293,6 +413,7 @@ function sourceView(source: {
       Buffer.byteLength(source.htmlAfter),
     cssBytes: Buffer.byteLength(source.css),
     createdAt: source.createdAt,
+    version: isBoundForm(source.htmlBefore) ? 2 : 1,
   };
 }
 
@@ -333,7 +454,7 @@ export async function createCustomLandingSource(input: unknown, actor: string) {
     .update(prepared.css)
     .digest("hex");
   const source = await db.$transaction(async (tx) => {
-    const { changed: _changed, ...content } = prepared;
+    const { changed: _changed, version: _version, ...content } = prepared;
     const stored = await tx.landingSource.upsert({
       where: { sha256 },
       update: {},
@@ -377,7 +498,9 @@ export async function getCustomLandingSource(id: string) {
   const source = await db.landingSource.findUniqueOrThrow({ where: { id } });
   return {
     ...sourceView(source),
-    html: `${source.htmlBefore}\n${SLOT}\n${source.htmlAfter}`,
+    html: isBoundForm(source.htmlBefore)
+      ? source.htmlBefore
+      : `${source.htmlBefore}\n${SLOT}\n${source.htmlAfter}`,
     css: source.css,
     reference: { sourceId: source.id },
   };
@@ -415,7 +538,10 @@ async function assertCustomLandingAssetMarkup(
 }
 
 export async function assertCustomLandingSources(
-  configs: { customLanding?: { sourceId: string } }[],
+  configs: {
+    customLanding?: { sourceId: string };
+    customForm?: z.infer<typeof landingSchema>["customForm"];
+  }[],
   client: Pick<typeof db, "landingSource"> = db,
 ) {
   const ids = [
@@ -425,14 +551,55 @@ export async function assertCustomLandingSources(
       ),
     ),
   ];
-  if (
-    ids.length &&
-    (await client.landingSource.count({ where: { id: { in: ids } } })) !==
-      ids.length
-  )
+  const sources = ids.length
+    ? await client.landingSource.findMany({
+        where: { id: { in: ids } },
+        select: { id: true, htmlBefore: true },
+      })
+    : [];
+  if (sources.length !== ids.length)
     throw new Error(
       "A custom landing source is missing. Create it before saving the experiment.",
     );
+  const byId = new Map(sources.map((source) => [source.id, source]));
+  for (const config of configs) {
+    if (!config.customLanding) continue;
+    const source = byId.get(config.customLanding.sourceId)!;
+    const version = isBoundForm(source.htmlBefore) ? 2 : 1;
+    if (Boolean(config.customForm) !== (version === 2))
+      throw new Error(
+        version === 2
+          ? "A bound custom landing source requires config.customForm."
+          : "config.customForm requires a v2 bound custom landing source.",
+      );
+    if (!config.customForm) continue;
+    const fieldBindings = [
+      ...source.htmlBefore.matchAll(/data-sc-field="([a-z][a-z0-9_]*)"/gi),
+    ].map((match) => match[1]);
+    const contactBindings = [
+      ...source.htmlBefore.matchAll(/data-sc-contact="(name|phone|email)"/gi),
+    ].map((match) => match[1]);
+    const expectedFields = config.customForm.fields.map((field) => field.id);
+    if (
+      new Set(fieldBindings).size !== fieldBindings.length ||
+      fieldBindings.length !== expectedFields.length ||
+      expectedFields.some((id) => !fieldBindings.includes(id))
+    )
+      throw new Error(
+        "Custom form field bindings must match config.customForm.fields exactly.",
+      );
+    const expectedContacts = Object.entries(config.customForm.contacts)
+      .filter(([, requirement]) => requirement !== "hidden")
+      .map(([name]) => name);
+    if (
+      new Set(contactBindings).size !== contactBindings.length ||
+      contactBindings.length !== expectedContacts.length ||
+      expectedContacts.some((name) => !contactBindings.includes(name))
+    )
+      throw new Error(
+        "Custom contact bindings must match the non-hidden customForm contacts exactly.",
+      );
+  }
 }
 
 export type CustomLandingRuntime = {
@@ -441,6 +608,7 @@ export type CustomLandingRuntime = {
   htmlBefore: string;
   htmlAfter: string;
   css: string;
+  version: 1 | 2;
 };
 
 const cityPattern = /^[\p{L}\p{M} .'-]{2,80}$/u;
@@ -546,6 +714,7 @@ export async function hydrateCustomLandingConfig<
           region ? ` in ${escapeHtml(region)}` : "",
         ),
       css: source.css,
+      version: isBoundForm(source.htmlBefore) ? 2 : 1,
     },
   };
 }

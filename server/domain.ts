@@ -23,6 +23,133 @@ export const questionSchema = z.object({
   options: z.array(z.string().min(1).max(100)).min(2).max(8),
   showWhen: z.object({ questionId: z.string(), equals: z.string() }).optional(),
 });
+
+const customFormFieldSchema = z
+  .object({
+    id: z
+      .string()
+      .regex(/^[a-z][a-z0-9_]*$/)
+      .max(40),
+    valueType: z.enum(["integer", "decimal", "text"]),
+    required: z.boolean().default(true),
+    min: z.number().finite().optional(),
+    max: z.number().finite().optional(),
+    step: z.number().positive().finite().optional(),
+    defaultValue: z
+      .union([z.string().max(200), z.number().finite()])
+      .optional(),
+    maxLength: z.number().int().min(1).max(200).optional(),
+  })
+  .strict()
+  .superRefine((field, context) => {
+    if (field.valueType === "text") {
+      if (
+        field.min !== undefined ||
+        field.max !== undefined ||
+        field.step !== undefined
+      )
+        context.addIssue({
+          code: "custom",
+          message: "Text fields cannot define numeric bounds",
+        });
+      return;
+    }
+    if (field.min === undefined || field.max === undefined)
+      context.addIssue({
+        code: "custom",
+        message: "Numeric fields require min and max",
+      });
+    else if (field.max <= field.min)
+      context.addIssue({
+        code: "custom",
+        message: "Field max must be greater than min",
+      });
+    if (field.defaultValue !== undefined) {
+      const value = Number(field.defaultValue);
+      if (
+        !Number.isFinite(value) ||
+        (field.min !== undefined && value < field.min) ||
+        (field.max !== undefined && value > field.max)
+      )
+        context.addIssue({
+          code: "custom",
+          path: ["defaultValue"],
+          message: "Default value must be inside the configured range",
+        });
+    }
+  });
+
+const contactRequirementSchema = z.enum(["hidden", "optional", "required"]);
+export const customFormSchema = z
+  .object({
+    fields: z.array(customFormFieldSchema).max(12).default([]),
+    contacts: z
+      .object({
+        name: contactRequirementSchema.default("hidden"),
+        phone: contactRequirementSchema.default("hidden"),
+        email: contactRequirementSchema.default("hidden"),
+      })
+      .strict()
+      .default({}),
+    continueToApplication: z.boolean().default(true),
+  })
+  .strict()
+  .superRefine((form, context) => {
+    const ids = new Set<string>();
+    for (const [index, field] of form.fields.entries()) {
+      if (ids.has(field.id))
+        context.addIssue({
+          code: "custom",
+          path: ["fields", index, "id"],
+          message: "Custom form field IDs must be unique",
+        });
+      ids.add(field.id);
+    }
+    if (Object.values(form.contacts).every((value) => value === "hidden"))
+      context.addIssue({
+        code: "custom",
+        path: ["contacts"],
+        message: "A custom lead form must collect at least one contact method",
+      });
+  });
+
+export function validateCustomFormAnswers(
+  form: z.infer<typeof customFormSchema>,
+  answers: Record<string, string>,
+) {
+  const result: Record<string, string> = {};
+  const expected = new Set(form.fields.map((field) => field.id));
+  if (Object.keys(answers).some((id) => !expected.has(id)))
+    throw new Error("The submitted form contains an unknown field.");
+  for (const field of form.fields) {
+    const raw = answers[field.id]?.trim() ?? "";
+    if (!raw) {
+      if (field.required) throw new Error(`Complete the ${field.id} field.`);
+      continue;
+    }
+    if (field.valueType === "text") {
+      if (raw.length > (field.maxLength ?? 200))
+        throw new Error(`The ${field.id} field is too long.`);
+      result[field.id] = raw;
+      continue;
+    }
+    const value = Number(raw);
+    if (
+      !Number.isFinite(value) ||
+      (field.valueType === "integer" && !Number.isInteger(value)) ||
+      value < field.min! ||
+      value > field.max!
+    )
+      throw new Error(`Choose a valid ${field.id} value.`);
+    if (field.step) {
+      const steps = (value - field.min!) / field.step;
+      if (Math.abs(steps - Math.round(steps)) > 1e-7)
+        throw new Error(`Choose a valid ${field.id} increment.`);
+    }
+    result[field.id] = String(value);
+  }
+  return result;
+}
 export const landingSchema = z
   .object({
     eyebrow: z.string().max(80).default("A little breathing room"),
@@ -69,6 +196,11 @@ export const landingSchema = z
       .optional()
       .describe(
         "Optional immutable custom HTML/CSS source. Mutually exclusive with design and the classic template story. The app still owns the quiz, opt-in and application funnel.",
+      ),
+    customForm: customFormSchema
+      .optional()
+      .describe(
+        "Data and validation contract for a bound custom HTML form. The landing source controls the complete form markup and CSS through data-sc bindings.",
       ),
     offerFirst: z.boolean().default(false),
     funnelMode: z
@@ -161,6 +293,19 @@ export const landingSchema = z
         code: "custom",
         path: ["customLanding"],
         message: "Choose either a composable canvas or a custom HTML source",
+      });
+    if (config.customForm && !config.customLanding)
+      context.addIssue({
+        code: "custom",
+        path: ["customForm"],
+        message: "A bound custom form requires a custom landing source",
+      });
+    if (config.customForm && config.questions.length)
+      context.addIssue({
+        code: "custom",
+        path: ["questions"],
+        message:
+          "A bound custom form owns its fields and cannot also use the fixed quiz",
       });
     const prior = new Map<string, z.infer<typeof questionSchema>>();
     for (const [index, question] of config.questions.entries()) {

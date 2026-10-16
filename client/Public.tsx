@@ -5,7 +5,7 @@ import { clarityEvent, clarityTag, initializeClarity } from "./clarity";
 import { propellerVisitAttribution } from "../shared/propeller-attribution";
 import { VisitorGate } from "./VisitorGate";
 import { LandingCanvas } from "./LandingCanvas";
-import { CustomLanding } from "./CustomLanding";
+import { CustomLanding, type BoundFormSubmission } from "./CustomLanding";
 import { beforeApplicationNavigation } from "./retargeting";
 import { visibleQuestions } from "../server/domain";
 import {
@@ -137,6 +137,7 @@ function Landing({ preview }: { preview: boolean }) {
     [pushStatus, setPushStatus] = useState("");
   const pixelRunner = useRef<(() => Promise<void>) | undefined>(undefined);
   const pushAttempt = useRef<AbortController | null>(null);
+  const pendingCustomSubmission = useRef<BoundFormSubmission | null>(null);
   const trackEngagement = useRef(createEngagementTracker());
   const updatesRecorded = useRef(false);
   const searchStarted = useRef(false);
@@ -291,6 +292,76 @@ function Landing({ preview }: { preview: boolean }) {
       setBusy(false);
     }
   }
+  async function submitBoundForm(submission: BoundFormSubmission) {
+    if (preview) {
+      setError("Preview only. This form was not submitted.");
+      return;
+    }
+    if (!visitorVerified) {
+      pendingCustomSubmission.current = submission;
+      setVerificationRequested(true);
+      setError("Completing the secure browser check…");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      const customChannels = [
+        ...(submission.phone ? ["SMS"] : []),
+        ...(submission.email ? ["EMAIL"] : []),
+      ];
+      trackEngagement.current(session.visitToken, preview, {
+        kind: "FORM_COMPLETED",
+        answers: submission.answers,
+      });
+      const subscribed = await post("/public/subscribe", {
+        visitToken: session.visitToken,
+        timezone: (() => {
+          try {
+            return Intl.DateTimeFormat().resolvedOptions().timeZone;
+          } catch {
+            return undefined;
+          }
+        })(),
+        answers: submission.answers,
+        channels: customChannels,
+        name: submission.name,
+        email: submission.email,
+        phone: submission.phone,
+        consent: true,
+        adultUS: true,
+        company: "",
+      });
+      pendingCustomSubmission.current = null;
+      setAnswers(submission.answers);
+      setResult(subscribed);
+      clarityTag(
+        "submitted_channels",
+        customChannels.map((channel) => channel.toLowerCase()),
+      );
+      clarityEvent("subscription_submitted");
+      void pixelRunner.current?.();
+      if (session.config.customForm?.continueToApplication) {
+        const application = await post("/public/application", {
+          leadToken: subscribed.leadToken,
+        });
+        await beforeApplicationNavigation(pixelRunner.current);
+        location.assign(application.url);
+      }
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  useEffect(() => {
+    if (!visitorVerified || !pendingCustomSubmission.current || busy) return;
+    const submission = pendingCustomSubmission.current;
+    pendingCustomSubmission.current = null;
+    void submitBoundForm(submission);
+    // Submission resumes once after the managed browser check succeeds.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visitorVerified]);
   async function push() {
     if (pushAttempt.current) return;
     const attempt = new AbortController();
@@ -915,13 +986,42 @@ function Landing({ preview }: { preview: boolean }) {
         </div>
       )}
       <RecentActivityNotice
-        enabled={config.activityNotice?.enabled === true}
+        enabled={
+          config.activityNotice?.enabled === true &&
+          config.customLanding?.version !== 2
+        }
         preview={preview}
         items={session.recentActivity}
       />
       <PublicHeader logoImage={config.logoImage} />
       {config.customLanding ? (
-        <CustomLanding source={config.customLanding} funnel={funnel} />
+        <CustomLanding
+          source={config.customLanding}
+          funnel={funnel}
+          form={config.customForm}
+          busy={busy}
+          error={error}
+          activity={
+            preview && config.activityNotice?.enabled
+              ? [{ location: "Nashville", amount: "$2,500–$5,000" }]
+              : session.recentActivity
+          }
+          verification={
+            !preview && config.customLanding.version === 2 ? (
+              <VisitorGate
+                session={session}
+                active={verificationRequested}
+                onVerified={setVisitorVerified}
+                runner={pixelRunner}
+              />
+            ) : null
+          }
+          onBegin={() => {
+            setVerificationRequested(true);
+            window.dispatchEvent(new Event("sparecash-quiz-started"));
+          }}
+          onSubmit={submitBoundForm}
+        />
       ) : config.design ? (
         <LandingCanvas
           design={config.design}

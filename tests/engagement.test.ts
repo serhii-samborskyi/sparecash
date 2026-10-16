@@ -26,6 +26,42 @@ const config = landingSchema.parse({
 afterEach(() => vi.unstubAllGlobals());
 
 describe("anonymous engagement", () => {
+  it("records a completed bound form using its declared data fields", () => {
+    const custom = landingSchema.parse({
+      title: "Fast loan request",
+      description: "Choose an amount and term, then enter a mobile number.",
+      customLanding: { sourceId: "cmabcdefghijklmnopqrstuv" },
+      customForm: {
+        fields: [
+          {
+            id: "amount",
+            valueType: "integer",
+            min: 500,
+            max: 50000,
+            step: 500,
+          },
+          {
+            id: "term_days",
+            valueType: "integer",
+            min: 7,
+            max: 30,
+            step: 1,
+          },
+        ],
+        contacts: { phone: "required" },
+      },
+    });
+    expect(
+      engagementEvents(custom, {
+        kind: "FORM_COMPLETED",
+        answers: { amount: "10000", term_days: "15" },
+      }),
+    ).toEqual([
+      { kind: "QUESTION_ANSWERED", questionId: "amount", answer: "10000" },
+      { kind: "QUESTION_ANSWERED", questionId: "term_days", answer: "15" },
+      { kind: "QUIZ_COMPLETED", questionId: "" },
+    ]);
+  });
   it("counts only a complete visible quiz path as completed", () => {
     expect(
       engagementEvents(config, {
