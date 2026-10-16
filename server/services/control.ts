@@ -14,6 +14,7 @@ import {
   landingSchema,
 } from "../domain.js";
 import { env } from "../config.js";
+import { isDeepStrictEqual } from "node:util";
 export const audit = (
   actor: string,
   action: string,
@@ -108,8 +109,10 @@ export async function saveExperiment(input: unknown, actor: string) {
       const previous = existing?.variants.find((v) => v.id === variant.id);
       if (
         previous &&
-        JSON.stringify(landingSchema.parse(previous.config)) !==
-          JSON.stringify(variant.config) &&
+        !isDeepStrictEqual(
+          landingSchema.parse(previous.config),
+          variant.config,
+        ) &&
         (await tx.visit.count({ where: { variantId: previous.id } }))
       )
         throw new Error(
