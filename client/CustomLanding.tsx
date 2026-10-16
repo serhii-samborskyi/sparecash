@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useRef,
+  useState,
   type FormEvent,
   type MouseEvent,
   type ReactNode,
@@ -76,6 +77,7 @@ export function CustomLanding({
 }) {
   const content = useRef<HTMLDivElement>(null);
   const bound = source.version === 2;
+  const [activityVisible, setActivityVisible] = useState(false);
   const openFunnel = useCallback((event: MouseEvent<HTMLDivElement>) => {
     const target = (event.target as Element | null)?.closest(
       '[data-sc-action="open-funnel"]',
@@ -113,12 +115,22 @@ export function CustomLanding({
   }, [bound, form, source.htmlBefore]);
 
   useEffect(() => {
+    if (!bound || activity.length === 0) return;
+    const show = window.setTimeout(() => setActivityVisible(true), 900);
+    const hide = window.setTimeout(() => setActivityVisible(false), 7200);
+    return () => {
+      window.clearTimeout(show);
+      window.clearTimeout(hide);
+    };
+  }, [activity.length, bound]);
+
+  useEffect(() => {
     if (!bound || !content.current) return;
     const notice =
       content.current.querySelector<HTMLElement>("[data-sc-activity]");
     if (!notice) return;
     const item = activity[0];
-    notice.hidden = !item;
+    notice.hidden = !item || !activityVisible;
     if (!item) return;
     notice
       .querySelectorAll<HTMLElement>('[data-sc-bind="location"]')
@@ -126,7 +138,7 @@ export function CustomLanding({
     notice
       .querySelectorAll<HTMLElement>('[data-sc-bind="amount"]')
       .forEach((element) => (element.textContent = item.amount ?? ""));
-  }, [activity, bound, source.htmlBefore]);
+  }, [activity, activityVisible, bound, source.htmlBefore]);
 
   useEffect(() => {
     if (!bound || !content.current) return;

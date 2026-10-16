@@ -29,6 +29,10 @@
 .custom-landing-content iframe {
   border: 0;
 }
+.custom-landing-content [data-sc-activity] p {
+  min-width: 0;
+  flex: 1;
+}
 .custom-landing-bound > .visitor-controls {
   width: min(100% - 32px, 680px);
   margin: 0 auto 32px;
