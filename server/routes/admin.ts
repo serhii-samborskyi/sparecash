@@ -211,20 +211,38 @@ adminRouter.get("/leads", async (req, res) => {
         }
       : {}),
   };
-  const [items, total] = await Promise.all([
-    db.lead.findMany({
-      where,
-      include: {
-        subscriptions: true,
-        visit: { include: { variant: true, source: true } },
-      },
-      orderBy: { createdAt: "desc" },
-      take: 30,
-      skip: (query.page - 1) * 30,
-    }),
-    db.lead.count({ where }),
-  ]);
-  res.json({ items, total, page: query.page });
+  const [items, total, optIns, activeOptIns, pendingOptIns] = await Promise.all(
+    [
+      db.lead.findMany({
+        where,
+        include: {
+          subscriptions: true,
+          visit: { include: { variant: true, source: true } },
+        },
+        orderBy: { createdAt: "desc" },
+        take: 30,
+        skip: (query.page - 1) * 30,
+      }),
+      db.lead.count({ where }),
+      db.subscription.count({
+        where: { status: { in: ["ACTIVE", "PENDING"] }, lead: where },
+      }),
+      db.subscription.count({
+        where: { status: "ACTIVE", lead: where },
+      }),
+      db.subscription.count({
+        where: { status: "PENDING", lead: where },
+      }),
+    ],
+  );
+  res.json({
+    items,
+    total,
+    optIns,
+    activeOptIns,
+    pendingOptIns,
+    page: query.page,
+  });
 });
 adminRouter.get("/leads/:id", async (req, res) => {
   const lead = await db.lead.findUniqueOrThrow({

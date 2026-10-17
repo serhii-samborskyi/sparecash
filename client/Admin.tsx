@@ -709,7 +709,14 @@ export function Admin() {
                   />
                 </div>
                 <span className="muted">
-                  {extra?.total ?? 0} contacts {loading && <Spinner />}
+                  {extra?.total ?? 0} contacts · {extra?.optIns ?? 0} opt-ins
+                  {extra && (
+                    <small className="block">
+                      {extra.activeOptIns} active · {extra.pendingOptIns}{" "}
+                      pending
+                    </small>
+                  )}{" "}
+                  {loading && <Spinner />}
                 </span>
               </div>
               {extra?.items?.length ? (
