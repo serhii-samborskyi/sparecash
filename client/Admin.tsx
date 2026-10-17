@@ -124,7 +124,7 @@ export function Admin() {
           ),
         );
       else if (page === "traffic") setExtra(await api("/admin/sources"));
-      else if (page === "journeys") setExtra(await api("/admin/deliveries"));
+      else if (page === "journeys") setExtra(await api("/admin/followups"));
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -851,12 +851,39 @@ export function Admin() {
           )}
           {page === "journeys" && (
             <>
+              <div className="stats-grid">
+                <Metric
+                  label="People in follow-up"
+                  value={number(extra?.summary?.people ?? 0)}
+                  caption={`${number(extra?.summary?.activePeople ?? 0)} active across ${number(extra?.summary?.enrollments ?? 0)} channel enrollments`}
+                  icon={Users}
+                />
+                <Metric
+                  label="Message queue"
+                  value={number(extra?.summary?.active ?? 0)}
+                  caption={`${number(extra?.summary?.due ?? 0)} due now · ${number(extra?.summary?.scheduled ?? 0)} scheduled · ${number(extra?.summary?.stopped ?? 0)} stopped`}
+                  icon={Clock}
+                />
+                <Metric
+                  label="Messages accepted"
+                  value={number(extra?.summary?.sent ?? 0)}
+                  caption={`${number(extra?.summary?.failed ?? 0)} failed · ${number(extra?.summary?.uncertain ?? 0)} uncertain`}
+                  icon={Check}
+                />
+                <Metric
+                  label="Follow-up link clicks"
+                  value={number(extra?.summary?.linkClicks ?? 0)}
+                  caption={`${number(extra?.summary?.applications ?? 0)} application continuations`}
+                  icon={MousePointer2}
+                />
+              </div>
               <div className="notice subtle">
                 <Workflow size={20} />
                 <span>
-                  Each channel follows its own chain. Clicked, declined, and
-                  elapsed-time branches start only when you activate a chain for
-                  that condition.
+                  Each channel follows its own chain. Opens and reads are not
+                  available from the current providers. “Accepted” means the
+                  provider accepted the send; link clicks are measured through
+                  SpareCash follow-up links.
                 </span>
               </div>
               <div className="chain-grid">
@@ -954,6 +981,73 @@ export function Admin() {
               <section className="panel table-panel">
                 <div className="section-heading">
                   <div>
+                    <h2>Enrollment queue</h2>
+                    <p>
+                      Every person placed in a chain, including scheduled,
+                      completed, and stopped journeys.
+                    </p>
+                  </div>
+                </div>
+                {Array.isArray(extra?.queue) && extra.queue.length ? (
+                  <div className="table-scroll">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Person</th>
+                          <th>Chain</th>
+                          <th>State</th>
+                          <th>Progress</th>
+                          <th>Next message</th>
+                          <th>Lead outcome</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {extra.queue.map((item: any) => (
+                          <tr key={item.id}>
+                            <td>
+                              <b>
+                                {item.subscription.lead.name ||
+                                  "Unnamed visitor"}
+                              </b>
+                              <small className="block muted">
+                                {item.subscription.channel} ·{" "}
+                                {item.subscription.address}
+                              </small>
+                            </td>
+                            <td>{item.chain.name}</td>
+                            <td>
+                              <Badge tone={stateTone(item.status)}>
+                                {item.status.toLowerCase()}
+                              </Badge>
+                            </td>
+                            <td>
+                              Step{" "}
+                              {Math.min(item.step + 1, item.chain._count.steps)}{" "}
+                              of {item.chain._count.steps}
+                            </td>
+                            <td>
+                              {item.status === "ACTIVE"
+                                ? date(item.deferredUntil || item.nextAt)
+                                : "—"}
+                            </td>
+                            <td>
+                              {item.subscription.lead.status.toLowerCase()}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <Empty
+                    title="No one is queued yet"
+                    description="New consented contacts will appear here as soon as they enter an active follow-up chain."
+                  />
+                )}
+              </section>
+              <section className="panel table-panel">
+                <div className="section-heading">
+                  <div>
                     <h2>Delivery log</h2>
                     <p>
                       Every attempt, including provider failures and uncertain
@@ -974,7 +1068,7 @@ export function Admin() {
                     <RefreshCw size={14} />
                   </button>
                 </div>
-                {Array.isArray(extra) && extra.length ? (
+                {Array.isArray(extra?.deliveries) && extra.deliveries.length ? (
                   <div className="table-scroll">
                     <table>
                       <thead>
@@ -982,13 +1076,13 @@ export function Admin() {
                           <th>Recipient</th>
                           <th>Message</th>
                           <th>State</th>
-                          <th>Clicked</th>
+                          <th>Link clicks</th>
                           <th>Created</th>
                           <th />
                         </tr>
                       </thead>
                       <tbody>
-                        {extra.map((d: any) => (
+                        {extra.deliveries.map((d: any) => (
                           <tr key={d.id}>
                             <td>
                               {d.subscription.lead.name}

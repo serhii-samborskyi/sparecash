@@ -300,6 +300,80 @@ adminRouter.get("/deliveries", async (_req, res) => {
     }),
   );
 });
+adminRouter.get("/followups", async (_req, res) => {
+  const [
+    queue,
+    enrollmentFacts,
+    deliveries,
+    deliveryStatuses,
+    deliveryClicks,
+    applications,
+  ] = await db.$transaction([
+    db.enrollment.findMany({
+      take: 100,
+      orderBy: [{ status: "asc" }, { nextAt: "asc" }],
+      include: {
+        subscription: { include: { lead: true } },
+        chain: { include: { _count: { select: { steps: true } } } },
+      },
+    }),
+    db.enrollment.findMany({
+      select: {
+        status: true,
+        nextAt: true,
+        deferredUntil: true,
+        subscription: { select: { leadId: true } },
+      },
+    }),
+    db.delivery.findMany({
+      take: 100,
+      orderBy: { createdAt: "desc" },
+      include: {
+        subscription: { include: { lead: true } },
+        enrollment: { include: { chain: true } },
+      },
+    }),
+    db.delivery.groupBy({
+      by: ["status"],
+      _count: true,
+      orderBy: { status: "asc" },
+    }),
+    db.delivery.aggregate({ _sum: { clickCount: true } }),
+    db.applicationClick.count({ where: { deliveryId: { not: null } } }),
+  ]);
+  const now = Date.now();
+  const active = enrollmentFacts.filter((item) => item.status === "ACTIVE");
+  const due = active.filter(
+    (item) =>
+      item.nextAt.getTime() <= now &&
+      (!item.deferredUntil || item.deferredUntil.getTime() <= now),
+  );
+  const deliveryCount = (status: string) =>
+    deliveryStatuses.find((item) => item.status === status)?._count ?? 0;
+  res.json({
+    summary: {
+      people: new Set(enrollmentFacts.map((item) => item.subscription.leadId))
+        .size,
+      activePeople: new Set(active.map((item) => item.subscription.leadId))
+        .size,
+      enrollments: enrollmentFacts.length,
+      active: active.length,
+      due: due.length,
+      scheduled: active.length - due.length,
+      stopped: enrollmentFacts.filter((item) => item.status === "STOPPED")
+        .length,
+      completed: enrollmentFacts.filter((item) => item.status === "COMPLETED")
+        .length,
+      sent: deliveryCount("SENT"),
+      failed: deliveryCount("FAILED"),
+      uncertain: deliveryCount("UNCERTAIN"),
+      linkClicks: deliveryClicks._sum.clickCount ?? 0,
+      applications,
+    },
+    queue,
+    deliveries,
+  });
+});
 adminRouter.post("/deliveries/:id/resolve", async (req, res) => {
   const input = z
     .object({
