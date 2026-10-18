@@ -305,7 +305,14 @@ function makeServer() {
         take: 50,
         skip: (page - 1) * 50,
         orderBy: { createdAt: "desc" },
-        include: { _count: { select: { variants: true, visits: true } } },
+        include: {
+          _count: {
+            select: {
+              variants: { where: { archivedAt: null } },
+              visits: true,
+            },
+          },
+        },
       }),
     true,
   );

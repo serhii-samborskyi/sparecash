@@ -597,7 +597,7 @@ export async function followupReport(
 export async function getExperiment(id: string) {
   const experiment = await db.experiment.findUniqueOrThrow({
     where: { id },
-    include: { variants: true },
+    include: { variants: { where: { archivedAt: null } } },
   });
   const configs = experiment.variants.map((variant) =>
     landingSchema.parse(variant.config),
@@ -722,7 +722,7 @@ export async function setAllocation(input: {
         "Experiment changed. Read get_experiment again before updating allocation.",
       );
     const before = await tx.variant.findMany({
-      where: { experimentId: input.id },
+      where: { experimentId: input.id, archivedAt: null },
     });
     if (
       new Set(input.weights.map((w) => w.variantId)).size !==
@@ -757,7 +757,7 @@ export async function setAllocation(input: {
     });
     return tx.experiment.findUniqueOrThrow({
       where: { id: input.id },
-      include: { variants: true },
+      include: { variants: { where: { archivedAt: null } } },
     });
   });
   return result;

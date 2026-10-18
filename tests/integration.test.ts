@@ -18,6 +18,7 @@ import {
   saveSettings,
   settings,
   saveExperiment,
+  dashboard,
 } from "../server/services/control";
 import {
   trafficReport,
@@ -282,6 +283,86 @@ it("keeps paused experiments out of the owner workspace without deleting them", 
   } finally {
     await db.variant.deleteMany({ where: { experimentId: paused.id } });
     await db.experiment.delete({ where: { id: paused.id } });
+  }
+});
+it("removes a landing from an experiment while preserving its traffic history", async () => {
+  const experiment = await saveExperiment(
+    {
+      name: "Landing removal test",
+      slug: "landing-removal-test",
+      status: "ACTIVE",
+      variants: [
+        {
+          name: "Keep",
+          weight: 50,
+          config: {
+            title: "Keep this landing",
+            description: "This landing remains active.",
+          },
+        },
+        {
+          name: "Remove",
+          weight: 50,
+          config: {
+            title: "Remove this landing",
+            description: "This landing is archived after saving.",
+          },
+        },
+      ],
+    },
+    "test",
+  );
+  const removedVariant = experiment.variants[1];
+  try {
+    const visit = await db.visit.create({
+      data: {
+        experimentId: experiment.id,
+        variantId: removedVariant.id,
+        ipHash: "landing-removal-ip",
+        userAgent: "landing-removal-test",
+      },
+    });
+    const saved = await saveExperiment(
+      {
+        id: experiment.id,
+        name: experiment.name,
+        slug: experiment.slug,
+        status: experiment.status,
+        objective: experiment.objective,
+        variants: [experiment.variants[0]],
+      },
+      "test",
+    );
+
+    expect(saved.variants.map((variant) => variant.id)).toEqual([
+      experiment.variants[0].id,
+    ]);
+    expect(
+      await db.variant.findUniqueOrThrow({ where: { id: removedVariant.id } }),
+    ).toMatchObject({ weight: 0 });
+    expect(
+      (
+        await db.variant.findUniqueOrThrow({
+          where: { id: removedVariant.id },
+        })
+      ).archivedAt,
+    ).not.toBeNull();
+    expect(
+      await db.visit.findUnique({ where: { id: visit.id } }),
+    ).not.toBeNull();
+
+    const workspace = await dashboard();
+    const card = workspace.experiments.find(
+      (item: any) => item.id === experiment.id,
+    );
+    expect(card).toBeDefined();
+    expect(card!.variants.map((variant: any) => variant.id)).toEqual([
+      experiment.variants[0].id,
+    ]);
+  } finally {
+    await db.visit.deleteMany({ where: { experimentId: experiment.id } });
+    await db.variant.deleteMany({ where: { experimentId: experiment.id } });
+    await db.experiment.delete({ where: { id: experiment.id } });
   }
 });
 it("duplicates every landing as a draft and removes an experiment with its data", async () => {

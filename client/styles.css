@@ -164,6 +164,9 @@ p {
   font-weight: 600;
   text-decoration: none;
 }
+.text-button.danger-text-button {
+  color: #9d4444;
+}
 .icon-button {
   display: inline-flex;
   align-items: center;

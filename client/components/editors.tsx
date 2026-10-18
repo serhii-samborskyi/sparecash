@@ -320,6 +320,33 @@ export function ExperimentEditor({
           <Copy size={15} />
           Duplicate this variant
         </button>
+        <button
+          type="button"
+          className="text-button danger-text-button"
+          disabled={form.variants.length === 1}
+          title={
+            form.variants.length === 1
+              ? "An experiment must have at least one landing"
+              : undefined
+          }
+          onClick={() => {
+            if (
+              v.id &&
+              !window.confirm(
+                `Remove “${v.name}” from this experiment? Existing visits and statistics will be preserved. Save the experiment to apply this change.`,
+              )
+            )
+              return;
+            const next = form.variants.filter(
+              (_item: any, index: number) => index !== selected,
+            );
+            set("variants", next);
+            setSelected(Math.min(selected, next.length - 1));
+          }}
+        >
+          <Trash2 size={15} />
+          Remove this landing
+        </button>
         <div className="form-grid">
           <Field label="Variant name">
             <input

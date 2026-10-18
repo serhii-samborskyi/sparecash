@@ -130,19 +130,24 @@ export async function saveExperiment(input: unknown, actor: string) {
         update: {
           name: variant.name,
           weight: variant.weight,
+          archivedAt: null,
           config: variant.preserveConfig
             ? (previous!.config as Prisma.InputJsonValue)
             : variant.config,
         },
       });
     }
-    // Preserve historical attribution when a variant is removed from traffic.
+    // Preserve historical attribution while removing the landing from the
+    // editable experiment and future traffic allocation.
     for (const old of existing?.variants ?? [])
       if (!data.variants.some((v) => v.id === old.id))
-        await tx.variant.update({ where: { id: old.id }, data: { weight: 0 } });
+        await tx.variant.update({
+          where: { id: old.id },
+          data: { weight: 0, archivedAt: new Date() },
+        });
     return tx.experiment.findUniqueOrThrow({
       where: { id: experiment.id },
-      include: { variants: true },
+      include: { variants: { where: { archivedAt: null } } },
     });
   });
   await audit(actor, "experiment.saved", result.id);
@@ -159,7 +164,7 @@ export async function duplicateExperiment(id: string, actor: string) {
   const result = await db.$transaction(async (tx) => {
     const source = await tx.experiment.findUniqueOrThrow({
       where: { id },
-      include: { variants: true },
+      include: { variants: { where: { archivedAt: null } } },
     });
     let attempt = 1;
     let slug = copiedExperimentSlug(source.slug, attempt);
@@ -455,7 +460,10 @@ export async function dashboard() {
     db.experiment.findMany({
       where: { status: { not: "PAUSED" } },
       include: {
-        variants: { include: { _count: { select: { visits: true } } } },
+        variants: {
+          where: { archivedAt: null },
+          include: { _count: { select: { visits: true } } },
+        },
         _count: { select: { visits: true } },
       },
       orderBy: { createdAt: "desc" },

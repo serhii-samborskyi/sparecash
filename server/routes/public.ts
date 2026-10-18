@@ -85,7 +85,7 @@ publicRouter.post("/visit", async (req, res) => {
     .parse(req.body);
   const experiment = await db.experiment.findUnique({
     where: { slug: input.slug },
-    include: { variants: true },
+    include: { variants: { where: { archivedAt: null } } },
   });
   if (!experiment || experiment.status !== "ACTIVE") {
     res.status(404).json({ error: "This page is not accepting visitors yet." });

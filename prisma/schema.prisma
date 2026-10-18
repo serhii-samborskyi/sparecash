@@ -120,7 +120,10 @@ model Variant {
   name         String
   weight       Int        @default(50)
   config       Json
+  archivedAt   DateTime?
   visits       Visit[]
+
+  @@index([experimentId, archivedAt])
 }
 
 model TrafficSource {
