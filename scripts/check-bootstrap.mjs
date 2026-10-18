@@ -15,6 +15,7 @@ const directory = await mkdtemp(resolve(".local/bootstrap-check-"));
 const childEnv = {
   DATABASE_URL: database.toString(),
   OWNER_PASSWORD: randomBytes(24).toString("base64url"),
+  SEED_DEMO_DATA: "true",
   NODE_ENV: "production",
   PATH: process.env.PATH,
   HOME: process.env.HOME,

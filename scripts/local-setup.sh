@@ -34,5 +34,5 @@ PGPASSWORD="$(cat .local/db-password)" "$PG_BIN/psql" -h 127.0.0.1 -p 55432 -U s
 npm run db:generate
 npm run db:migrate
 npx tsx scripts/local-settings.ts
-npm run db:seed
+SEED_DEMO_DATA=true npm run db:seed
 printf 'Local PostgreSQL and environment are ready. Owner password: OWNER_PASSWORD in .env\n'

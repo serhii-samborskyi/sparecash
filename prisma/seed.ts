@@ -7,7 +7,23 @@ await db.setting.upsert({
   create: { key: "general", value: settingsSchema.parse({}) },
   update: {},
 });
-if (!(await db.experiment.findUnique({ where: { slug: "us-loans" } })))
+const seedDemoData = process.env.SEED_DEMO_DATA === "true";
+const starterExperiment = await db.experiment.findUnique({
+  where: { slug: "us-loans" },
+  include: { _count: { select: { visits: true } } },
+});
+if (
+  !seedDemoData &&
+  starterExperiment?.name === "A little breathing room" &&
+  starterExperiment.status === "DRAFT" &&
+  starterExperiment._count.visits === 0
+) {
+  await db.variant.deleteMany({
+    where: { experimentId: starterExperiment.id },
+  });
+  await db.experiment.delete({ where: { id: starterExperiment.id } });
+}
+if (seedDemoData && !starterExperiment)
   await db.experiment.create({
     data: {
       name: "A little breathing room",
@@ -60,44 +76,45 @@ if (!(await db.experiment.findUnique({ where: { slug: "us-loans" } })))
       },
     },
   });
-for (const channel of ["EMAIL", "SMS", "PUSH"] as const) {
-  if (
-    !(await db.chain.findFirst({
-      where: {
-        name: `${channel === "EMAIL" ? "Email" : channel === "SMS" ? "Text" : "Push"} · a thoughtful start`,
-      },
-    }))
-  )
-    await db.chain.create({
-      data: {
-        name: `${channel === "EMAIL" ? "Email" : channel === "SMS" ? "Text" : "Push"} · a thoughtful start`,
-        channel,
-        status: "DRAFT",
-        trigger: "SUBSCRIBED",
-        maxDays: 30,
-        steps: {
-          create: [
-            {
-              position: 0,
-              delayHours: 24,
-              subject: "A next step, when you’re ready",
-              body: "Hi {{name}}, take a look at loan options when the time is right for you. Review any lender’s terms before deciding. {{link}}",
-            },
-            {
-              position: 1,
-              delayHours: 24,
-              subject: "A little preparation goes a long way",
-              body: "Hi {{name}}, knowing your monthly budget can help you consider what payments may fit. Explore your options here: {{link}}",
-            },
-            {
-              position: 2,
-              delayHours: 24,
-              subject: "Keep your choices open",
-              body: "Hi {{name}}, still exploring? You can revisit loan options here. Approval and terms are determined by the lender. {{link}}",
-            },
-          ],
+if (seedDemoData)
+  for (const channel of ["EMAIL", "SMS", "PUSH"] as const) {
+    if (
+      !(await db.chain.findFirst({
+        where: {
+          name: `${channel === "EMAIL" ? "Email" : channel === "SMS" ? "Text" : "Push"} · a thoughtful start`,
         },
-      },
-    });
-}
+      }))
+    )
+      await db.chain.create({
+        data: {
+          name: `${channel === "EMAIL" ? "Email" : channel === "SMS" ? "Text" : "Push"} · a thoughtful start`,
+          channel,
+          status: "DRAFT",
+          trigger: "SUBSCRIBED",
+          maxDays: 30,
+          steps: {
+            create: [
+              {
+                position: 0,
+                delayHours: 24,
+                subject: "A next step, when you’re ready",
+                body: "Hi {{name}}, take a look at loan options when the time is right for you. Review any lender’s terms before deciding. {{link}}",
+              },
+              {
+                position: 1,
+                delayHours: 24,
+                subject: "A little preparation goes a long way",
+                body: "Hi {{name}}, knowing your monthly budget can help you consider what payments may fit. Explore your options here: {{link}}",
+              },
+              {
+                position: 2,
+                delayHours: 24,
+                subject: "Keep your choices open",
+                body: "Hi {{name}}, still exploring? You can revisit loan options here. Approval and terms are determined by the lender. {{link}}",
+              },
+            ],
+          },
+        },
+      });
+  }
 await db.$disconnect();
