@@ -127,6 +127,13 @@ function cleanFragment(html: string, version: 1 | 2) {
         "data-sc-consent",
         "data-sc-activity",
         "data-sc-bind",
+        "data-sc-form-view",
+        "data-sc-match-percent",
+        "data-sc-match-strength",
+        "data-sc-provider-search",
+        "data-sc-provider-count",
+        "data-sc-provider-progress",
+        "data-sc-provider-status",
       ],
       a: ["href", "target", "rel"],
       button: ["type", "data-sc-action", "aria-*", "class", "id"],
@@ -205,7 +212,7 @@ function cleanFragment(html: string, version: 1 | 2) {
             version === 2 && attributes["data-sc-action"] === "submit"
               ? "submit"
               : "button",
-          ...(["open-funnel", "submit"].includes(
+          ...(["open-funnel", "submit", "continue"].includes(
             attributes["data-sc-action"] ?? "",
           )
             ? {}
@@ -247,7 +254,7 @@ function cleanFragment(html: string, version: 1 | 2) {
       if (frame.tag === "img") return !assetPath.test(frame.attribs.src ?? "");
       if (frame.tag === "iframe") return !videoFrame(frame.attribs.src ?? "");
       if (frame.tag === "button")
-        return !["open-funnel", "submit"].includes(
+        return !["open-funnel", "submit", "continue"].includes(
           frame.attribs["data-sc-action"] ?? "",
         );
       return false;

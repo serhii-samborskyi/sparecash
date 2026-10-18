@@ -156,4 +156,14 @@ describe("custom landing sources", () => {
     expect(html).toContain('data-sc-form="lead"');
     expect(html).not.toContain("legacy-funnel");
   });
+
+  it("keeps bound estimate and provider-search controls", async () => {
+    const prepared = await prepareCustomLandingSource({
+      name: "Animated request",
+      html: `<main><div data-sc-form-view><h1>Request funds</h1><form data-sc-form="lead"><input type="range" data-sc-field="amount"><input type="range" data-sc-field="credit_score"><output data-sc-match-percent></output><span data-sc-match-strength></span><input type="email" data-sc-contact="email"><div data-sc-consent>Consent and terms apply.</div><p data-sc-errors></p><button data-sc-action="submit">Check options</button></form></div><section data-sc-provider-search hidden><strong data-sc-provider-count></strong><span data-sc-provider-status></span><span data-sc-provider-progress></span><button data-sc-action="continue">See my loan options</button></section></main>`,
+    });
+    expect(prepared.htmlBefore).toContain("data-sc-match-percent");
+    expect(prepared.htmlBefore).toContain("data-sc-provider-search");
+    expect(prepared.htmlBefore).toContain('data-sc-action="continue"');
+  });
 });

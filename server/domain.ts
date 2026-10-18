@@ -80,6 +80,26 @@ const customFormFieldSchema = z
   });
 
 const contactRequirementSchema = z.enum(["hidden", "optional", "required"]);
+const matchEstimateSchema = z
+  .object({
+    amountFieldId: z
+      .string()
+      .regex(/^[a-z][a-z0-9_]*$/)
+      .max(40),
+    scoreFieldId: z
+      .string()
+      .regex(/^[a-z][a-z0-9_]*$/)
+      .max(40),
+  })
+  .strict();
+const providerSearchSchema = z
+  .object({
+    minDurationMs: z.number().int().min(4000).max(10000),
+    maxDurationMs: z.number().int().min(4000).max(10000),
+    minProviderCount: z.number().int().min(1).max(500),
+    maxProviderCount: z.number().int().min(1).max(500),
+  })
+  .strict();
 export const customFormSchema = z
   .object({
     fields: z.array(customFormFieldSchema).max(12).default([]),
@@ -92,6 +112,8 @@ export const customFormSchema = z
       .strict()
       .default({}),
     continueToApplication: z.boolean().default(true),
+    matchEstimate: matchEstimateSchema.optional(),
+    providerSearch: providerSearchSchema.optional(),
   })
   .strict()
   .superRefine((form, context) => {
@@ -104,6 +126,48 @@ export const customFormSchema = z
           message: "Custom form field IDs must be unique",
         });
       ids.add(field.id);
+    }
+    if (form.matchEstimate) {
+      const numericIds = new Set(
+        form.fields
+          .filter((field) => field.valueType !== "text")
+          .map((field) => field.id),
+      );
+      if (!numericIds.has(form.matchEstimate.amountFieldId))
+        context.addIssue({
+          code: "custom",
+          path: ["matchEstimate", "amountFieldId"],
+          message: "The amount estimate binding must reference a numeric field",
+        });
+      if (!numericIds.has(form.matchEstimate.scoreFieldId))
+        context.addIssue({
+          code: "custom",
+          path: ["matchEstimate", "scoreFieldId"],
+          message: "The score estimate binding must reference a numeric field",
+        });
+    }
+    if (form.providerSearch) {
+      if (form.providerSearch.maxDurationMs < form.providerSearch.minDurationMs)
+        context.addIssue({
+          code: "custom",
+          path: ["providerSearch", "maxDurationMs"],
+          message: "Maximum search duration must be at least the minimum",
+        });
+      if (
+        form.providerSearch.maxProviderCount <
+        form.providerSearch.minProviderCount
+      )
+        context.addIssue({
+          code: "custom",
+          path: ["providerSearch", "maxProviderCount"],
+          message: "Maximum provider count must be at least the minimum",
+        });
+      if (!form.continueToApplication)
+        context.addIssue({
+          code: "custom",
+          path: ["providerSearch"],
+          message: "Provider search requires application continuation",
+        });
     }
     if (Object.values(form.contacts).every((value) => value === "hidden"))
       context.addIssue({

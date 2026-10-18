@@ -31,6 +31,10 @@ export function customLandingGuide() {
         "Add an element with data-sc-consent whenever phone or email is collected. Put the requested disclosure and links there.",
       activity:
         'An optional data-sc-activity container may contain data-sc-bind="location" and data-sc-bind="amount". SpareCash fills it only from anonymized recent activity and hides it when none exists.',
+      matchEstimate:
+        "When customForm.matchEstimate is configured, data-sc-match-percent and data-sc-match-strength receive the clearly labeled estimate. Wrap the ordinary page in data-sc-form-view.",
+      providerSearch:
+        'When customForm.providerSearch is configured, add a hidden data-sc-provider-search stage with data-sc-provider-count, data-sc-provider-progress, data-sc-provider-status and a data-sc-action="continue" button. SpareCash controls timing and application handoff.',
     },
     configExample: {
       customForm: {
@@ -56,6 +60,16 @@ export function customLandingGuide() {
         ],
         contacts: { name: "optional", phone: "required", email: "optional" },
         continueToApplication: true,
+        matchEstimate: {
+          amountFieldId: "amount",
+          scoreFieldId: "credit_score",
+        },
+        providerSearch: {
+          minDurationMs: 5000,
+          maxDurationMs: 10000,
+          minProviderCount: 104,
+          maxProviderCount: 135,
+        },
       },
     },
     htmlExample: `<main class="request-page">

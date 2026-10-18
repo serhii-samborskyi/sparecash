@@ -80,6 +80,61 @@ describe("custom landing form contracts", () => {
       validateCustomFormAnswers(form, { amount: "10000", extra: "x" }),
     ).toThrow();
   });
+
+  it("validates match estimates and bounded provider-search presentation", () => {
+    const parsed = landingSchema.parse({
+      title: "Fast loan request",
+      description: "Choose an amount and score, then enter an email address.",
+      customLanding: { sourceId: "cmabcdefghijklmnopqrstuv" },
+      customForm: {
+        fields: [
+          {
+            id: "amount",
+            valueType: "integer",
+            min: 500,
+            max: 50000,
+          },
+          {
+            id: "credit_score",
+            valueType: "integer",
+            min: 300,
+            max: 850,
+          },
+        ],
+        contacts: { email: "required" },
+        matchEstimate: {
+          amountFieldId: "amount",
+          scoreFieldId: "credit_score",
+        },
+        providerSearch: {
+          minDurationMs: 5000,
+          maxDurationMs: 10000,
+          minProviderCount: 104,
+          maxProviderCount: 135,
+        },
+      },
+    });
+    expect(parsed.customForm?.providerSearch).toEqual({
+      minDurationMs: 5000,
+      maxDurationMs: 10000,
+      minProviderCount: 104,
+      maxProviderCount: 135,
+    });
+    expect(
+      landingSchema.safeParse({
+        ...parsed,
+        customForm: {
+          ...parsed.customForm,
+          providerSearch: {
+            minDurationMs: 10000,
+            maxDurationMs: 5000,
+            minProviderCount: 135,
+            maxProviderCount: 104,
+          },
+        },
+      }).success,
+    ).toBe(false);
+  });
 });
 describe("conditional landing quizzes", () => {
   const questions = [

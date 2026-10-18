@@ -20,6 +20,17 @@ type CustomField = {
   maxLength?: number;
 };
 type ContactRequirement = "hidden" | "optional" | "required";
+type BoundForm = {
+  fields: CustomField[];
+  contacts: Record<"name" | "phone" | "email", ContactRequirement>;
+  matchEstimate?: { amountFieldId: string; scoreFieldId: string };
+};
+type ProviderSearchView = {
+  active: boolean;
+  ready: boolean;
+  durationMs: number;
+  providerCount: number;
+};
 const ACTIVITY_NOTICE_MIN_DELAY_MS = 5_000;
 const ACTIVITY_NOTICE_MAX_DELAY_MS = 15_000;
 const ACTIVITY_NOTICE_VISIBLE_MS = 6_300;
@@ -60,6 +71,62 @@ function setOutput(root: HTMLElement, input: HTMLInputElement) {
     });
 }
 
+function rangeRatio(input: HTMLInputElement) {
+  const min = Number(input.min);
+  const max = Number(input.max);
+  const value = Number(input.value);
+  if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min) return 0;
+  return Math.min(1, Math.max(0, (value - min) / (max - min)));
+}
+
+export function approvalMatchEstimate(amountRatio: number, scoreRatio: number) {
+  const normalizedAmount = Math.min(1, Math.max(0, amountRatio));
+  const normalizedScore = Math.min(1, Math.max(0, scoreRatio));
+  const percent = Math.round(
+    40 + normalizedScore * 45 + (1 - normalizedAmount) * 10,
+  );
+  const strength =
+    percent < 55
+      ? "Low"
+      : percent < 70
+        ? "Fair"
+        : percent < 82
+          ? "Good"
+          : "Strong";
+  const hue = Math.round(28 + ((percent - 40) / 55) * 117);
+  return { percent, strength, color: `hsl(${hue} 55% 39%)` };
+}
+
+function updateBoundPresentation(root: HTMLElement, form: BoundForm) {
+  root
+    .querySelectorAll<HTMLInputElement>("[data-sc-field]")
+    .forEach((input) => {
+      const ratio = rangeRatio(input);
+      const isAmount =
+        input.dataset.scField === form.matchEstimate?.amountFieldId;
+      const hue = Math.round(isAmount ? 145 - ratio * 95 : 28 + ratio * 117);
+      input.style.setProperty("--sc-range-fill", `${Math.round(ratio * 100)}%`);
+      input.style.setProperty("--sc-range-color", `hsl(${hue} 58% 42%)`);
+    });
+  if (!form.matchEstimate) return;
+  const amount = root.querySelector<HTMLInputElement>(
+    `[data-sc-field="${form.matchEstimate.amountFieldId}"]`,
+  );
+  const score = root.querySelector<HTMLInputElement>(
+    `[data-sc-field="${form.matchEstimate.scoreFieldId}"]`,
+  );
+  if (!amount || !score) return;
+  const estimate = approvalMatchEstimate(rangeRatio(amount), rangeRatio(score));
+  root.style.setProperty("--sc-match-color", estimate.color);
+  root.style.setProperty("--sc-match-fill", `${estimate.percent}%`);
+  root
+    .querySelectorAll<HTMLElement>("[data-sc-match-percent]")
+    .forEach((element) => (element.textContent = `${estimate.percent}%`));
+  root
+    .querySelectorAll<HTMLElement>("[data-sc-match-strength]")
+    .forEach((element) => (element.textContent = estimate.strength));
+}
+
 export function CustomLanding({
   source,
   funnel,
@@ -67,9 +134,11 @@ export function CustomLanding({
   busy = false,
   error = "",
   activity = [],
+  providerSearch,
   verification,
   onBegin,
   onSubmit,
+  onContinue,
 }: {
   source: {
     name: string;
@@ -79,16 +148,15 @@ export function CustomLanding({
     version?: 1 | 2;
   };
   funnel: ReactNode;
-  form?: {
-    fields: CustomField[];
-    contacts: Record<"name" | "phone" | "email", ContactRequirement>;
-  };
+  form?: BoundForm;
   busy?: boolean;
   error?: string;
   activity?: { location: string; amount?: string }[];
+  providerSearch?: ProviderSearchView;
   verification?: ReactNode;
   onBegin?: () => void;
   onSubmit?: (submission: BoundFormSubmission) => void | Promise<void>;
+  onContinue?: () => void | Promise<void>;
 }) {
   const content = useRef<HTMLDivElement>(null);
   const bound = source.version === 2;
@@ -127,7 +195,58 @@ export function CustomLanding({
       );
       if (input) input.required = requirement === "required";
     }
+    updateBoundPresentation(root, form);
   }, [bound, form, source.htmlBefore]);
+
+  useEffect(() => {
+    if (!bound || !content.current || !providerSearch) return;
+    const root = content.current;
+    root
+      .querySelectorAll<HTMLElement>("[data-sc-form-view]")
+      .forEach((element) => (element.hidden = providerSearch.active));
+    root
+      .querySelectorAll<HTMLElement>("[data-sc-provider-search]")
+      .forEach((element) => {
+        element.hidden = !providerSearch.active;
+        element.setAttribute(
+          "aria-busy",
+          providerSearch.active && !providerSearch.ready ? "true" : "false",
+        );
+      });
+    root
+      .querySelectorAll<HTMLElement>("[data-sc-provider-count]")
+      .forEach(
+        (element) =>
+          (element.textContent = String(providerSearch.providerCount)),
+      );
+    root
+      .querySelectorAll<HTMLElement>("[data-sc-provider-status]")
+      .forEach(
+        (element) =>
+          (element.textContent = providerSearch.ready
+            ? "Your next step is ready"
+            : "Checking participating providers…"),
+      );
+    root
+      .querySelectorAll<HTMLElement>("[data-sc-provider-progress]")
+      .forEach((element) => {
+        element.style.setProperty(
+          "--sc-search-duration",
+          `${providerSearch.durationMs}ms`,
+        );
+        element.classList.toggle(
+          "is-active",
+          providerSearch.active && !providerSearch.ready,
+        );
+        element.classList.toggle("is-complete", providerSearch.ready);
+      });
+    root
+      .querySelectorAll<HTMLButtonElement>('[data-sc-action="continue"]')
+      .forEach((button) => {
+        button.hidden = !providerSearch.ready;
+        button.disabled = busy || !providerSearch.ready;
+      });
+  }, [bound, busy, providerSearch, source.htmlBefore]);
 
   useEffect(() => {
     if (!bound || activity.length === 0) return;
@@ -178,10 +297,26 @@ export function CustomLanding({
       if (!bound || !content.current) return;
       const input = event.target as HTMLInputElement;
       if (!input.matches("[data-sc-field],[data-sc-contact]")) return;
-      if (input.dataset.scField) setOutput(content.current, input);
+      if (input.dataset.scField) {
+        setOutput(content.current, input);
+        if (form) updateBoundPresentation(content.current, form);
+      }
       onBegin?.();
     },
-    [bound, onBegin],
+    [bound, form, onBegin],
+  );
+
+  const clickBoundForm = useCallback(
+    (event: MouseEvent<HTMLDivElement>) => {
+      if (!bound || !onContinue) return;
+      const target = (event.target as Element | null)?.closest(
+        '[data-sc-action="continue"]',
+      );
+      if (!target) return;
+      event.preventDefault();
+      void onContinue();
+    },
+    [bound, onContinue],
   );
 
   const submitBoundForm = useCallback(
@@ -223,6 +358,7 @@ export function CustomLanding({
         <div
           ref={content}
           className="custom-landing-content"
+          onClick={clickBoundForm}
           onInput={changeBoundForm}
           onSubmit={submitBoundForm}
           dangerouslySetInnerHTML={{ __html: source.htmlBefore }}

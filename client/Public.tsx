@@ -130,6 +130,13 @@ function Landing({ preview }: { preview: boolean }) {
     [verificationRequested, setVerificationRequested] = useState(false),
     [searchStep, setSearchStep] = useState(-1),
     [searchFinished, setSearchFinished] = useState(false),
+    [customProviderSearch, setCustomProviderSearch] = useState<{
+      active: boolean;
+      ready: boolean;
+      durationMs: number;
+      providerCount: number;
+      leadToken: string;
+    } | null>(null),
     [busy, setBusy] = useState(false),
     [result, setResult] = useState<any>(null),
     [code, setCode] = useState(""),
@@ -137,6 +144,7 @@ function Landing({ preview }: { preview: boolean }) {
     [pushStatus, setPushStatus] = useState("");
   const pixelRunner = useRef<(() => Promise<void>) | undefined>(undefined);
   const pushAttempt = useRef<AbortController | null>(null);
+  const customSearchTimer = useRef<number | null>(null);
   const pendingCustomSubmission = useRef<BoundFormSubmission | null>(null);
   const trackEngagement = useRef(createEngagementTracker());
   const updatesRecorded = useRef(false);
@@ -212,6 +220,13 @@ function Landing({ preview }: { preview: boolean }) {
     return () => timers.forEach((timer: number) => window.clearTimeout(timer));
   }, [session, preview, answers, step, searchFinished]);
   useEffect(() => () => pushAttempt.current?.abort(), []);
+  useEffect(
+    () => () => {
+      if (customSearchTimer.current !== null)
+        window.clearTimeout(customSearchTimer.current);
+    },
+    [],
+  );
   useEffect(() => {
     let current = true;
     async function init() {
@@ -342,6 +357,38 @@ function Landing({ preview }: { preview: boolean }) {
       clarityEvent("subscription_submitted");
       void pixelRunner.current?.();
       if (session.config.customForm?.continueToApplication) {
+        const providerSearch = session.config.customForm.providerSearch;
+        if (providerSearch) {
+          const randomInteger = (min: number, max: number) =>
+            Math.floor(Math.random() * (max - min + 1)) + min;
+          const durationMs = randomInteger(
+            providerSearch.minDurationMs,
+            providerSearch.maxDurationMs,
+          );
+          const providerCount = randomInteger(
+            providerSearch.minProviderCount,
+            providerSearch.maxProviderCount,
+          );
+          setCustomProviderSearch({
+            active: true,
+            ready: false,
+            durationMs,
+            providerCount,
+            leadToken: subscribed.leadToken,
+          });
+          trackEngagement.current(session.visitToken, preview, {
+            kind: "SEARCH_STARTED",
+          });
+          customSearchTimer.current = window.setTimeout(() => {
+            trackEngagement.current(session.visitToken, preview, {
+              kind: "SEARCH_COMPLETED",
+            });
+            setCustomProviderSearch((current) =>
+              current ? { ...current, ready: true } : current,
+            );
+          }, durationMs);
+          return;
+        }
         const application = await post("/public/application", {
           leadToken: subscribed.leadToken,
         });
@@ -351,6 +398,21 @@ function Landing({ preview }: { preview: boolean }) {
     } catch (e) {
       setError((e as Error).message);
     } finally {
+      setBusy(false);
+    }
+  }
+  async function continueBoundFormApplication() {
+    if (!customProviderSearch?.ready || busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      const application = await post("/public/application", {
+        leadToken: customProviderSearch.leadToken,
+      });
+      await beforeApplicationNavigation(pixelRunner.current);
+      location.assign(application.url);
+    } catch (e) {
+      setError((e as Error).message);
       setBusy(false);
     }
   }
@@ -1006,6 +1068,7 @@ function Landing({ preview }: { preview: boolean }) {
               ? [{ location: "Nashville", amount: "$2,500–$5,000" }]
               : session.recentActivity
           }
+          providerSearch={customProviderSearch ?? undefined}
           verification={
             !preview && config.customLanding.version === 2 ? (
               <VisitorGate
@@ -1021,6 +1084,7 @@ function Landing({ preview }: { preview: boolean }) {
             window.dispatchEvent(new Event("sparecash-quiz-started"));
           }}
           onSubmit={submitBoundForm}
+          onContinue={continueBoundFormApplication}
         />
       ) : config.design ? (
         <LandingCanvas
