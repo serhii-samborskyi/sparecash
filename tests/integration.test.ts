@@ -19,6 +19,7 @@ import {
   settings,
   saveExperiment,
   dashboard,
+  experimentResults,
 } from "../server/services/control";
 import {
   trafficReport,
@@ -357,6 +358,10 @@ it("removes a landing from an experiment while preserving its traffic history", 
     );
     expect(card).toBeDefined();
     expect(card!.variants.map((variant: any) => variant.id)).toEqual([
+      experiment.variants[0].id,
+    ]);
+    const results = await experimentResults(experiment.id);
+    expect(results.variants.map((variant) => variant.id)).toEqual([
       experiment.variants[0].id,
     ]);
   } finally {

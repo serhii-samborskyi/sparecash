@@ -520,7 +520,7 @@ export async function dashboard() {
 export async function experimentResults(id: string) {
   const experiment = await db.experiment.findUniqueOrThrow({
     where: { id },
-    include: { variants: true },
+    include: { variants: { where: { archivedAt: null } } },
   });
   const variants = await Promise.all(
     experiment.variants.map(async (v) => {
