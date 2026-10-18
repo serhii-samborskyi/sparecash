@@ -22,6 +22,7 @@ import {
   recordRetargetingSpend,
 } from "./services/retargeting-report.js";
 import { db } from "./db.js";
+import { browserContext } from "./services/visit-context.js";
 import { requireMcp } from "./security.js";
 import { experimentSchema, chainSchema, settingsSchema } from "./domain.js";
 import {
@@ -505,7 +506,14 @@ function makeServer() {
           visit: { include: { source: true, variant: true } },
         },
       });
-      return { ...lead, timing: await leadTiming(lead) };
+      return {
+        ...lead,
+        visit: {
+          ...lead.visit,
+          browserContext: browserContext(lead.visit.userAgent),
+        },
+        timing: await leadTiming(lead),
+      };
     },
     true,
   );

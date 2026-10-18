@@ -37,7 +37,11 @@ import {
 import { settings } from "../services/control.js";
 import { detectTimezone } from "../timezones.js";
 import { trustedIpTimezone } from "../services/timezones.js";
-import { trustedVisitLocation } from "../services/visit-context.js";
+import {
+  lookupIpLocation,
+  requestIpAddress,
+  trustedVisitLocation,
+} from "../services/visit-context.js";
 import {
   ProviderError,
   sendVerification,
@@ -139,7 +143,8 @@ publicRouter.post("/visit", async (req, res) => {
             update: {},
           })
         : null;
-    const fingerprint = ipHash(req.ip ?? "unknown");
+    const ipAddress = requestIpAddress(req);
+    const fingerprint = ipHash(ipAddress || "unknown");
     const recent = await db.visit.count({
       where: {
         ipHash: fingerprint,
@@ -147,6 +152,7 @@ publicRouter.post("/visit", async (req, res) => {
       },
     });
     const ua = (req.headers["user-agent"] ?? "").slice(0, 500),
+      location = trustedVisitLocation(req),
       evidence: string[] = [];
     let score = 0;
     if (recent >= 15) {
@@ -174,13 +180,24 @@ publicRouter.post("/visit", async (req, res) => {
         sourceId: source?.id,
         externalClickId: input.clickId,
         adContext: input.adContext,
+        ipAddress,
         ipHash: fingerprint,
         userAgent: ua,
-        ...trustedVisitLocation(req),
+        ...location,
         botScore: score,
         evidence,
       },
     });
+    if (!location.country)
+      void lookupIpLocation(ipAddress)
+        .then(async (resolved) => {
+          if (resolved)
+            await db.visit.updateMany({
+              where: { id: visit!.id, country: null },
+              data: resolved,
+            });
+        })
+        .catch(() => undefined);
   }
   const selected = experiment.variants.find((v) => v.id === visit.variantId)!;
   const visitToken = token("visit", visit.id, 86400);
@@ -477,11 +494,9 @@ publicRouter.post(
         (phone && !input.channels.includes("SMS")) ||
         (input.email && !input.channels.includes("EMAIL"))
       ) {
-        res
-          .status(400)
-          .json({
-            error: "Contact details must include their update channel.",
-          });
+        res.status(400).json({
+          error: "Contact details must include their update channel.",
+        });
         return;
       }
     }

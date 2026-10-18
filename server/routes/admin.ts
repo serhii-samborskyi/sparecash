@@ -39,6 +39,7 @@ import {
 import { sources, blockSource } from "../services/traffic.js";
 import { statisticsReport, statisticsVisits } from "../services/statistics.js";
 import { refreshClarityForStatistics } from "../services/clarity.js";
+import { browserContext } from "../services/visit-context.js";
 import { tick } from "../services/engine.js";
 import {
   unsubscribe,
@@ -267,7 +268,14 @@ adminRouter.get("/leads/:id", async (req, res) => {
       applications: { include: { postbacks: true } },
     },
   });
-  res.json({ ...lead, timing: await leadTiming(lead) });
+  res.json({
+    ...lead,
+    visit: {
+      ...lead.visit,
+      browserContext: browserContext(lead.visit.userAgent),
+    },
+    timing: await leadTiming(lead),
+  });
 });
 adminRouter.put("/leads/:id/timezone", async (req, res) => {
   const { timezone } = z.object({ timezone: timezoneSchema }).parse(req.body);

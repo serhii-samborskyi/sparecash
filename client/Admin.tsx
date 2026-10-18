@@ -1856,6 +1856,42 @@ function LeadDetails({
       >
         {savingTimezone && <Spinner />}Save lead time zone
       </button>
+      <h3>Acquisition and submitted answers</h3>
+      <div className="subscription-detail">
+        <div>
+          <b>
+            {[lead.visit.city, lead.visit.region, lead.visit.country]
+              .filter(Boolean)
+              .join(", ") || "Unknown location"}
+          </b>
+          <span>{lead.visit.ipAddress || "IP unavailable"}</span>
+        </div>
+        <p>
+          {lead.visit.browserContext.device} ·{" "}
+          {lead.visit.browserContext.browser}
+          {" · "}
+          {lead.visit.browserContext.os}
+        </p>
+        <small title={lead.visit.userAgent}>
+          Campaign {lead.visit.source?.campaignId ?? "direct"} · Zone{" "}
+          {lead.visit.source?.zoneId ?? "—"} ·{" "}
+          {lead.visit.userAgent || "No user agent"}
+        </small>
+      </div>
+      <div className="subscription-detail">
+        <div>
+          <b>Form answers</b>
+        </div>
+        {Object.entries(lead.answers ?? {}).length ? (
+          Object.entries(lead.answers).map(([question, answer]) => (
+            <p key={question}>
+              <b>{question.replaceAll("_", " ")}</b>: {String(answer)}
+            </p>
+          ))
+        ) : (
+          <p>No submitted answers.</p>
+        )}
+      </div>
       {lead.subscriptions.map((s: any) => (
         <div className="subscription-detail" key={s.id}>
           <div>

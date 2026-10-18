@@ -96,12 +96,13 @@ recorded visit costs are separate sources and are not added to these snapshots.
 
 ## Geography and device capture
 
-New visits store country, state/region, city and `geoSource=TRUSTED_EDGE` only
-when incoming location headers carry the configured `x-sparecash-geo-token`.
-The existing **Integrations → Cloudflare → IP detection secret** and trusted
-edge rule are reused. The app reads `cf-ipcountry`, `cf-region` and `cf-ipcity`;
-only a valid country permits storing the region/city. No raw IP, coordinates,
-browser location-permission prompt, or external IP lookup is added.
+New visits and initial server hits store the request IP, user agent, and
+approximate country, state/region and city. Trusted edge headers remain the
+first source. When they are unavailable, the server uses ipapi's HTTPS lookup
+and caches the approximate result by the existing one-way IP hash for 30 days.
+Failed lookups are cached for one hour so provider failures never block the
+landing or trigger a request storm. No browser location-permission prompt or
+coordinates are collected.
 
 Cloudflare's **Add visitor location headers** Managed Transform supplies these
 headers; follow the existing [location setup](INTEGRATIONS.md#lead-time-zones)
@@ -127,9 +128,10 @@ The owner-only `POST /api/admin/statistics/visits` endpoint powers the click
 explorer. It additionally requires the selected group and exact segment key,
 returns up to 50 visits per page in the interface, and is limited to 30
 requests/minute. It can return lead names and raw user agents needed for owner
-diagnosis. It deliberately excludes IP hashes, verification token hashes and
-subscription addresses. The service scans at most 50,000 candidate visits so
-macro, device and unknown-value rows match the aggregate report exactly.
+diagnosis. It includes the request IP but deliberately excludes one-way IP
+hashes, verification token hashes and subscription addresses. The service
+scans at most 50,000 candidate visits so macro, device and unknown-value rows
+match the aggregate report exactly.
 
 Deploy migrations `202610110003_traffic_statistics`,
 `202610130002_prequiz_activity`, and

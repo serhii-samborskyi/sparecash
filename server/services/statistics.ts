@@ -984,6 +984,7 @@ export async function statisticsVisits(input: StatisticsVisitsInput) {
         variantId: true,
         externalClickId: true,
         adContext: true,
+        ipAddress: true,
         userAgent: true,
         country: true,
         region: true,
@@ -1030,7 +1031,12 @@ export async function statisticsVisits(input: StatisticsVisitsInput) {
             campaignId: true,
             zoneId: true,
             externalClickId: true,
+            ipAddress: true,
             userAgent: true,
+            country: true,
+            region: true,
+            city: true,
+            geoSource: true,
           },
         },
         advertiserConversions: {
@@ -1164,6 +1170,7 @@ export async function statisticsVisits(input: StatisticsVisitsInput) {
           source: visit.source,
           externalClickId: visit.externalClickId,
           adContext: propellerContext(visit.adContext),
+          ipAddress: visit.ipAddress,
           userAgent: visit.userAgent,
           browserContext: browserContext(visit.userAgent),
           location: {

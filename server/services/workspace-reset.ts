@@ -32,6 +32,7 @@ export async function resetMarketingWorkspace(
       await tx.advertisingPrivacyEvent.deleteMany();
     const landingHits = await tx.landingHit.deleteMany();
     const visits = await tx.visit.deleteMany();
+    const ipLocationCache = await tx.ipLocationCache.deleteMany();
     const visitorJourneys = await tx.visitorJourney.deleteMany();
     const sourceActions = await tx.sourceAction.deleteMany();
     const trafficSources = await tx.trafficSource.deleteMany();
@@ -63,6 +64,7 @@ export async function resetMarketingWorkspace(
       variants: variants.count,
       visits: visits.count,
       landingHits: landingHits.count,
+      ipLocationCache: ipLocationCache.count,
       visitEvents: visitEvents.count,
       visitorVerifications: visitorVerifications.count,
       visitorJourneys: visitorJourneys.count,

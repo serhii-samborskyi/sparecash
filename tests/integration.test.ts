@@ -5057,6 +5057,7 @@ it("captures trusted arrival geography and does not fabricate locations from bro
       const visit = await db.visit.findUniqueOrThrow({
         where: { id: response.data.visitId },
       });
+      expect(visit.ipAddress).toBe(trusted ? "203.0.113.191" : "203.0.113.190");
       expect(visit.country).toBe(trusted ? "US" : null);
       expect(visit.city).toBe(trusted ? "Chicago" : null);
     }

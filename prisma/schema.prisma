@@ -159,6 +159,7 @@ model Visit {
   source                TrafficSource?         @relation(fields: [sourceId], references: [id])
   externalClickId       String?
   adContext             Json                   @default("{}")
+  ipAddress             String                 @default("")
   ipHash                String
   userAgent             String
   country               String?
@@ -200,7 +201,12 @@ model LandingHit {
   zoneId          String?
   externalClickId String?
   userAgent       String
+  ipAddress       String   @default("")
   ipHash          String
+  country         String?
+  region          String?
+  city            String?
+  geoSource       String?
   visitId         String?
   visit           Visit?   @relation(fields: [visitId], references: [id], onDelete: SetNull)
   createdAt       DateTime @default(now())
@@ -208,6 +214,22 @@ model LandingHit {
   @@index([campaignId, zoneId, createdAt])
   @@index([slug, createdAt])
   @@index([visitId])
+}
+
+// Cached approximate location avoids sending the same address to the lookup
+// provider for every page view. Raw IP addresses stay on the owner-only visit
+// and hit records; this cache is keyed by the existing one-way IP hash.
+model IpLocationCache {
+  ipHash    String   @id
+  country   String?
+  region    String?
+  city      String?
+  timezone  String?
+  source    String
+  expiresAt DateTime
+  updatedAt DateTime @updatedAt
+
+  @@index([expiresAt])
 }
 
 // Complete read-only advertiser report snapshots. Never mixed with click costs.

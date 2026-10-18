@@ -152,6 +152,7 @@ function VisitDetails({ visit }: { visit: Visit }) {
             ["Landing slug", `/go/${visit.experiment.slug}`],
             ["Variant", visit.variant.name],
             ["Variant ID", visit.variantId],
+            ["IP address", visit.ipAddress],
             ["Country", visit.location.country],
             ["State / region", visit.location.region],
             ["City", visit.location.city],

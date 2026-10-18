@@ -8,10 +8,18 @@ import { advertiserStatistics } from "../server/services/advertiser-statistics";
 import {
   trustedVisitLocation,
   browserContext,
+  lookupIpLocation,
+  requestIpAddress,
 } from "../server/services/visit-context";
 
 const database = vi.hoisted(() => ({ findUnique: vi.fn(), upsert: vi.fn() }));
-vi.mock("../server/db", () => ({ db: { adStatisticsSnapshot: database } }));
+const locationCache = vi.hoisted(() => ({
+  findUnique: vi.fn(),
+  upsert: vi.fn(),
+}));
+vi.mock("../server/db", () => ({
+  db: { adStatisticsSnapshot: database, ipLocationCache: locationCache },
+}));
 let config: RuntimeConfiguration;
 let fetchMock: ReturnType<typeof vi.fn>;
 const query = { from: "2026-10-01", to: "2026-10-02", campaignIds: ["123"] };
@@ -30,6 +38,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   database.findUnique.mockResolvedValue(null);
   database.upsert.mockResolvedValue({});
+  locationCache.findUnique.mockResolvedValue(null);
+  locationCache.upsert.mockResolvedValue({});
   config = {
     ...defaultRuntimeValues,
     TOKEN_SECRET: "test-secret",
@@ -223,6 +233,36 @@ it("requires a trusted edge secret and a valid country before storing geography"
       "cf-ipcountry": "XX",
     }),
   ).toEqual({});
+});
+
+it("normalizes request IPs and caches approximate lookup locations", async () => {
+  fetchMock.mockResolvedValue(
+    Response.json({
+      ip: "8.8.8.8",
+      city: "Mountain View",
+      region: "California",
+      country_code: "US",
+      timezone: "America/Los_Angeles",
+    }),
+  );
+  const location = await runtimeContext.run(config, () =>
+    lookupIpLocation("8.8.8.8"),
+  );
+  expect(location).toEqual({
+    country: "US",
+    region: "California",
+    city: "Mountain View",
+    geoSource: "IPAPI",
+  });
+  expect(fetchMock).toHaveBeenCalledWith(
+    "https://ipapi.co/8.8.8.8/json/",
+    expect.objectContaining({ signal: expect.any(AbortSignal) }),
+  );
+  expect(locationCache.upsert).toHaveBeenCalledOnce();
+  expect(requestIpAddress({ ip: "::ffff:8.8.8.8" } as any)).toBe("8.8.8.8");
+  expect(
+    await runtimeContext.run(config, () => lookupIpLocation("203.0.113.5")),
+  ).toBeNull();
 });
 
 it("groups browser families without treating their claims as verification", () => {
