@@ -27,6 +27,8 @@ import { engagementReport } from "../services/marketing.js";
 import { requireAdmin, checkOrigin } from "../security.js";
 import {
   dashboard,
+  deleteExperiment,
+  duplicateExperiment,
   saveExperiment,
   experimentResults,
   saveChain,
@@ -172,6 +174,12 @@ adminRouter.get("/experiments/:id/engagement", async (req, res) => {
 });
 adminRouter.post("/experiments", async (req, res) => {
   res.json(await saveExperiment(req.body, "owner"));
+});
+adminRouter.post("/experiments/:id/duplicate", async (req, res) => {
+  res.json(await duplicateExperiment(String(req.params.id), "owner"));
+});
+adminRouter.delete("/experiments/:id", async (req, res) => {
+  res.json(await deleteExperiment(String(req.params.id), "owner"));
 });
 adminRouter.post("/chains", async (req, res) => {
   res.json(await saveChain(req.body, "owner"));

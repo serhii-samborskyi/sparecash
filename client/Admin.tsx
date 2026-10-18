@@ -83,6 +83,10 @@ export function Admin() {
     [query, setQuery] = useState(""),
     [listPage, setListPage] = useState(1),
     [loading, setLoading] = useState(false),
+    [experimentAction, setExperimentAction] = useState<{
+      id: string;
+      type: "duplicate" | "delete";
+    } | null>(null),
     [removingLeadId, setRemovingLeadId] = useState<string | null>(null);
   const notify = useCallback((message: string) => {
     setToast(message);
@@ -659,22 +663,63 @@ export function Admin() {
                       <SlidersHorizontal size={15} />
                       Edit experiment
                     </button>
-                    <button
-                      className="text-button"
-                      onClick={async () => {
-                        try {
-                          setModal({
-                            type: "results",
-                            value: await api(`/admin/experiments/${exp.id}`),
+                    <div className="experiment-card-links">
+                      <button
+                        className="text-button"
+                        disabled={experimentAction?.id === exp.id}
+                        onClick={async () => {
+                          setExperimentAction({
+                            id: exp.id,
+                            type: "duplicate",
                           });
-                        } catch (e) {
-                          notify((e as Error).message);
+                          try {
+                            const copy = await post(
+                              `/admin/experiments/${exp.id}/duplicate`,
+                            );
+                            await refresh();
+                            setModal({ type: "experiment", value: copy });
+                            notify("Experiment duplicated as a draft");
+                          } catch (e) {
+                            notify((e as Error).message);
+                          } finally {
+                            setExperimentAction(null);
+                          }
+                        }}
+                      >
+                        {experimentAction?.id === exp.id &&
+                        experimentAction?.type === "duplicate" ? (
+                          <Spinner />
+                        ) : (
+                          <Copy size={14} />
+                        )}
+                        Duplicate
+                      </button>
+                      <button
+                        className="text-button"
+                        onClick={async () => {
+                          try {
+                            setModal({
+                              type: "results",
+                              value: await api(`/admin/experiments/${exp.id}`),
+                            });
+                          } catch (e) {
+                            notify((e as Error).message);
+                          }
+                        }}
+                      >
+                        Results
+                        <ArrowUpRight size={14} />
+                      </button>
+                      <button
+                        className="text-button remove-experiment-button"
+                        onClick={() =>
+                          setModal({ type: "remove-experiment", value: exp })
                         }
-                      }}
-                    >
-                      Results
-                      <ArrowUpRight size={15} />
-                    </button>
+                      >
+                        <Trash2 size={14} />
+                        Remove
+                      </button>
+                    </div>
                   </div>
                 </section>
               ))}
@@ -1522,6 +1567,63 @@ export function Admin() {
             >
               {removingLeadId === modal.value.id && <Spinner />}
               Remove contact
+            </button>
+          </div>
+        </Modal>
+      )}
+      {modal?.type === "remove-experiment" && (
+        <Modal title="Remove experiment and its landings?" onClose={closeModal}>
+          <div className="modal-body remove-contact-confirmation">
+            <p>
+              This permanently removes the experiment, all of its landing
+              variants, and its attributed visits, contacts, subscriptions,
+              applications, and conversion records.
+            </p>
+            <div className="remove-contact-identity">
+              <b>{modal.value.name}</b>
+              <span>
+                {modal.value.variants.length} landing
+                {modal.value.variants.length === 1 ? "" : "s"} ·{" "}
+                {number(modal.value._count.visits)} recorded visits
+              </span>
+            </div>
+            <p className="help">
+              Traffic sent to /go/{modal.value.slug} will stop working
+              immediately. This cannot be undone.
+            </p>
+          </div>
+          <div className="modal-footer remove-contact-footer">
+            <button
+              type="button"
+              className="button secondary"
+              disabled={experimentAction?.id === modal.value.id}
+              onClick={closeModal}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="button danger-button"
+              disabled={experimentAction?.id === modal.value.id}
+              onClick={async () => {
+                const id = modal.value.id as string;
+                setExperimentAction({ id, type: "delete" });
+                try {
+                  await api(`/admin/experiments/${id}`, {
+                    method: "DELETE",
+                  });
+                  closeModal();
+                  notify("Experiment and its landings removed");
+                  await refresh();
+                } catch (error) {
+                  notify((error as Error).message);
+                } finally {
+                  setExperimentAction(null);
+                }
+              }}
+            >
+              {experimentAction?.id === modal.value.id && <Spinner />}
+              Remove experiment
             </button>
           </div>
         </Modal>

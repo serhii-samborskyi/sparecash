@@ -956,6 +956,19 @@ p {
   min-height: 34px;
   padding: 8px 11px;
 }
+.experiment-card-links {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  min-width: 0;
+}
+.experiment-card-links .text-button {
+  font-size: 10px;
+}
+.remove-experiment-button {
+  color: #a44545;
+}
 .new-card {
   border: 1px dashed #cfdbc4;
   background: #f4f7ef;
@@ -2549,6 +2562,9 @@ summary {
     background: #fbefed;
     color: #8d3434;
   }
+  .remove-experiment-button:hover {
+    color: #8d3434;
+  }
   .button.danger-button:hover {
     background: #873737;
   }
@@ -3008,6 +3024,14 @@ summary {
   .chain-grid,
   .integration-grid {
     grid-template-columns: 1fr;
+  }
+  .experiment-card .card-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .experiment-card-links {
+    justify-content: space-between;
+    width: 100%;
   }
   .stats-grid {
     gap: 10px;

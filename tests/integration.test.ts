@@ -284,6 +284,152 @@ it("keeps paused experiments out of the owner workspace without deleting them", 
     await db.experiment.delete({ where: { id: paused.id } });
   }
 });
+it("duplicates every landing as a draft and removes an experiment with its data", async () => {
+  const original = await saveExperiment(
+    {
+      name: "Experiment action test",
+      slug: "experiment-action-test",
+      status: "ACTIVE",
+      objective: "SOLD",
+      variants: [
+        {
+          name: "Finder",
+          weight: 60,
+          config: {
+            title: "Find an option",
+            description: "First landing in the experiment.",
+          },
+        },
+        {
+          name: "Guide",
+          weight: 40,
+          config: {
+            title: "Read the guide",
+            description: "Second landing in the experiment.",
+          },
+        },
+      ],
+    },
+    "test",
+  );
+  let duplicateId = "";
+  try {
+    const duplicated = await request(
+      `/api/admin/experiments/${original.id}/duplicate`,
+      "POST",
+      {},
+      true,
+    );
+    expect(duplicated.status).toBe(200);
+    expect(duplicated.data).toMatchObject({
+      name: "Experiment action test copy",
+      slug: "experiment-action-test-copy",
+      status: "DRAFT",
+      objective: "SOLD",
+    });
+    expect(duplicated.data.variants).toHaveLength(2);
+    expect(
+      duplicated.data.variants.map((variant: any) => ({
+        name: variant.name,
+        weight: variant.weight,
+        title: variant.config.title,
+      })),
+    ).toEqual(
+      expect.arrayContaining([
+        { name: "Finder", weight: 60, title: "Find an option" },
+        { name: "Guide", weight: 40, title: "Read the guide" },
+      ]),
+    );
+    duplicateId = duplicated.data.id;
+    expect(
+      duplicated.data.variants.map((variant: any) => variant.id),
+    ).not.toEqual(
+      expect.arrayContaining(
+        original.variants.map((variant: any) => variant.id),
+      ),
+    );
+
+    const visit = await db.visit.create({
+      data: {
+        experimentId: duplicateId,
+        variantId: duplicated.data.variants[0].id,
+        ipHash: "experiment-delete-ip",
+        userAgent: "experiment-delete-test",
+      },
+    });
+    const lead = await db.lead.create({
+      data: {
+        visitId: visit.id,
+        name: "Experiment delete lead",
+        answers: {},
+      },
+    });
+    await db.visitEvent.create({
+      data: { visitId: visit.id, kind: "QUIZ_COMPLETED" },
+    });
+    await db.landingHit.create({
+      data: {
+        slug: duplicated.data.slug,
+        visitId: visit.id,
+        ipHash: "experiment-delete-ip",
+        userAgent: "experiment-delete-test",
+      },
+    });
+
+    const removed = await request(
+      `/api/admin/experiments/${duplicateId}`,
+      "DELETE",
+      undefined,
+      true,
+    );
+    expect(removed.status).toBe(200);
+    expect(removed.data).toMatchObject({
+      ok: true,
+      id: duplicateId,
+      deleted: {
+        variants: 2,
+        visits: 1,
+        landingHits: 1,
+        visitEvents: 1,
+        leads: 1,
+      },
+    });
+    expect(
+      await db.experiment.findUnique({ where: { id: duplicateId } }),
+    ).toBeNull();
+    expect(await db.lead.findUnique({ where: { id: lead.id } })).toBeNull();
+    expect(
+      await db.auditLog.count({
+        where: { action: "experiment.duplicated", entityId: duplicateId },
+      }),
+    ).toBe(1);
+    expect(
+      await db.auditLog.count({
+        where: { action: "experiment.deleted", entityId: duplicateId },
+      }),
+    ).toBe(1);
+    duplicateId = "";
+  } finally {
+    if (duplicateId) {
+      const visits = await db.visit.findMany({
+        where: { experimentId: duplicateId },
+        select: { id: true },
+      });
+      const visitIds = visits.map(({ id }) => id);
+      await db.landingHit.deleteMany({ where: { visitId: { in: visitIds } } });
+      await db.visitEvent.deleteMany({ where: { visitId: { in: visitIds } } });
+      await db.leadEvent.deleteMany({
+        where: { lead: { visitId: { in: visitIds } } },
+      });
+      await db.lead.deleteMany({ where: { visitId: { in: visitIds } } });
+      await db.visit.deleteMany({ where: { id: { in: visitIds } } });
+      await db.variant.deleteMany({ where: { experimentId: duplicateId } });
+      await db.experiment.deleteMany({ where: { id: duplicateId } });
+    }
+    await db.variant.deleteMany({ where: { experimentId: original.id } });
+    await db.experiment.delete({ where: { id: original.id } });
+  }
+});
 it("publishes a weighted experiment and keeps visitor assignment stable", async () => {
   const r = await request(
     "/api/admin/experiments",

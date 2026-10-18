@@ -148,6 +148,172 @@ export async function saveExperiment(input: unknown, actor: string) {
   await audit(actor, "experiment.saved", result.id);
   return result;
 }
+
+function copiedExperimentSlug(slug: string, attempt: number) {
+  const suffix = attempt === 1 ? "-copy" : `-copy-${attempt}`;
+  const root = slug.slice(0, 70 - suffix.length).replace(/-+$/, "");
+  return `${root || "experiment"}${suffix}`;
+}
+
+export async function duplicateExperiment(id: string, actor: string) {
+  const result = await db.$transaction(async (tx) => {
+    const source = await tx.experiment.findUniqueOrThrow({
+      where: { id },
+      include: { variants: true },
+    });
+    let attempt = 1;
+    let slug = copiedExperimentSlug(source.slug, attempt);
+    while (await tx.experiment.findUnique({ where: { slug } })) {
+      attempt += 1;
+      slug = copiedExperimentSlug(source.slug, attempt);
+    }
+    return tx.experiment.create({
+      data: {
+        name: `${source.name} copy`.slice(0, 100),
+        slug,
+        status: "DRAFT",
+        objective: source.objective,
+        variants: {
+          create: source.variants.map((variant) => ({
+            name: variant.name,
+            weight: variant.weight,
+            config: variant.config as Prisma.InputJsonValue,
+          })),
+        },
+      },
+      include: { variants: true, _count: { select: { visits: true } } },
+    });
+  });
+  await audit(actor, "experiment.duplicated", result.id, { sourceId: id });
+  return result;
+}
+
+function landingSourceId(config: Prisma.JsonValue) {
+  if (!config || typeof config !== "object" || Array.isArray(config))
+    return null;
+  const customLanding = config.customLanding;
+  if (
+    !customLanding ||
+    typeof customLanding !== "object" ||
+    Array.isArray(customLanding)
+  )
+    return null;
+  return typeof customLanding.sourceId === "string"
+    ? customLanding.sourceId
+    : null;
+}
+
+export async function deleteExperiment(id: string, actor: string) {
+  const result = await db.$transaction(async (tx) => {
+    const experiment = await tx.experiment.findUniqueOrThrow({
+      where: { id },
+      include: { variants: true, _count: { select: { visits: true } } },
+    });
+    const sourceIds = [
+      ...new Set(
+        experiment.variants
+          .map((variant) => landingSourceId(variant.config))
+          .filter((sourceId): sourceId is string => Boolean(sourceId)),
+      ),
+    ];
+    const visitIds = (
+      await tx.visit.findMany({
+        where: { experimentId: id },
+        select: { id: true },
+      })
+    ).map(({ id: visitId }) => visitId);
+    const leadRelation = { visit: { experimentId: id } };
+    const subscriptionRelation = { lead: leadRelation };
+
+    const deliveries = await tx.delivery.deleteMany({
+      where: { subscription: subscriptionRelation },
+    });
+    const enrollments = await tx.enrollment.deleteMany({
+      where: { subscription: subscriptionRelation },
+    });
+    const subscriptions = await tx.subscription.deleteMany({
+      where: subscriptionRelation,
+    });
+    const postbacks = await tx.postback.deleteMany({
+      where: { application: { visit: { experimentId: id } } },
+    });
+    const advertiserConversions = await tx.advertiserConversion.deleteMany({
+      where: { visit: { experimentId: id } },
+    });
+    const applications = await tx.applicationClick.deleteMany({
+      where: { visit: { experimentId: id } },
+    });
+    const leadEvents = await tx.leadEvent.deleteMany({
+      where: { lead: leadRelation },
+    });
+    const leads = await tx.lead.deleteMany({ where: leadRelation });
+    const retargetingPixels = visitIds.length
+      ? await tx.retargetingPixelAttempt.deleteMany({
+          where: { visitId: { in: visitIds } },
+        })
+      : { count: 0 };
+    const landingHits = await tx.landingHit.deleteMany({
+      where: {
+        OR: [{ visit: { experimentId: id } }, { slug: experiment.slug }],
+      },
+    });
+    const visitorVerifications = await tx.visitorVerification.deleteMany({
+      where: { visit: { experimentId: id } },
+    });
+    const visitEvents = await tx.visitEvent.deleteMany({
+      where: { visit: { experimentId: id } },
+    });
+    const visits = await tx.visit.deleteMany({ where: { experimentId: id } });
+    const variants = await tx.variant.deleteMany({
+      where: { experimentId: id },
+    });
+    await tx.experiment.delete({ where: { id } });
+
+    let landingSources = 0;
+    if (sourceIds.length) {
+      const remaining = await tx.variant.findMany({ select: { config: true } });
+      const referenced = new Set(
+        remaining
+          .map(({ config }) => landingSourceId(config))
+          .filter((sourceId): sourceId is string => Boolean(sourceId)),
+      );
+      const removable = sourceIds.filter(
+        (sourceId) => !referenced.has(sourceId),
+      );
+      if (removable.length)
+        landingSources = (
+          await tx.landingSource.deleteMany({
+            where: { id: { in: removable } },
+          })
+        ).count;
+    }
+
+    return {
+      id: experiment.id,
+      name: experiment.name,
+      slug: experiment.slug,
+      deleted: {
+        variants: variants.count,
+        landingSources,
+        visits: visits.count,
+        landingHits: landingHits.count,
+        visitEvents: visitEvents.count,
+        visitorVerifications: visitorVerifications.count,
+        retargetingPixels: retargetingPixels.count,
+        leads: leads.count,
+        leadEvents: leadEvents.count,
+        subscriptions: subscriptions.count,
+        enrollments: enrollments.count,
+        deliveries: deliveries.count,
+        applications: applications.count,
+        postbacks: postbacks.count,
+        advertiserConversions: advertiserConversions.count,
+      },
+    };
+  });
+  await audit(actor, "experiment.deleted", id, result.deleted);
+  return { ok: true, ...result };
+}
 export async function saveChain(input: unknown, actor: string) {
   const data = chainSchema.parse(input);
   const { steps, id, ...fields } = data;
