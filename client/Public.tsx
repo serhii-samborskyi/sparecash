@@ -1079,6 +1079,7 @@ function Landing({ preview }: { preview: boolean }) {
               />
             ) : null
           }
+          verificationPending={verificationRequested && !visitorVerified}
           onBegin={() => {
             setVerificationRequested(true);
             window.dispatchEvent(new Event("sparecash-quiz-started"));

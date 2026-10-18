@@ -7,6 +7,7 @@ import {
   type MouseEvent,
   type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
 import "./custom-landing.css";
 
 type CustomField = {
@@ -139,6 +140,7 @@ export function CustomLanding({
   activity = [],
   providerSearch,
   verification,
+  verificationPending = false,
   onBegin,
   onSubmit,
   onContinue,
@@ -157,6 +159,7 @@ export function CustomLanding({
   activity?: { location: string; amount?: string }[];
   providerSearch?: ProviderSearchView;
   verification?: ReactNode;
+  verificationPending?: boolean;
   onBegin?: () => void;
   onSubmit?: (submission: BoundFormSubmission) => void | Promise<void>;
   onContinue?: () => void | Promise<void>;
@@ -164,6 +167,9 @@ export function CustomLanding({
   const content = useRef<HTMLDivElement>(null);
   const bound = source.version === 2;
   const [activityVisible, setActivityVisible] = useState(false);
+  const [verificationHost, setVerificationHost] = useState<HTMLElement | null>(
+    null,
+  );
   const openFunnel = useCallback((event: MouseEvent<HTMLDivElement>) => {
     const target = (event.target as Element | null)?.closest(
       '[data-sc-action="open-funnel"]',
@@ -213,10 +219,7 @@ export function CustomLanding({
       .querySelectorAll<HTMLElement>("[data-sc-provider-search]")
       .forEach((element) => {
         element.hidden = !active;
-        element.setAttribute(
-          "aria-busy",
-          active && !ready ? "true" : "false",
-        );
+        element.setAttribute("aria-busy", active && !ready ? "true" : "false");
       });
     if (!providerSearch) {
       root
@@ -248,10 +251,7 @@ export function CustomLanding({
           "--sc-search-duration",
           `${providerSearch.durationMs}ms`,
         );
-        element.classList.toggle(
-          "is-active",
-          active && !ready,
-        );
+        element.classList.toggle("is-active", active && !ready);
         element.classList.toggle("is-complete", ready);
       });
     root
@@ -295,6 +295,23 @@ export function CustomLanding({
 
   useEffect(() => {
     if (!bound || !content.current) return;
+    const submit = content.current.querySelector<HTMLButtonElement>(
+      '[data-sc-action="submit"]',
+    );
+    if (!submit) return;
+    const host = document.createElement("div");
+    host.className = "sc-verification-host";
+    host.dataset.scVerificationHost = "";
+    submit.before(host);
+    setVerificationHost(host);
+    return () => {
+      setVerificationHost(null);
+      host.remove();
+    };
+  }, [bound, source.htmlBefore]);
+
+  useEffect(() => {
+    if (!bound || !content.current) return;
     content.current
       .querySelectorAll<HTMLElement>("[data-sc-errors]")
       .forEach((element) => {
@@ -303,8 +320,8 @@ export function CustomLanding({
       });
     content.current
       .querySelectorAll<HTMLButtonElement>('[data-sc-action="submit"]')
-      .forEach((button) => (button.disabled = busy));
-  }, [bound, busy, error]);
+      .forEach((button) => (button.disabled = busy || verificationPending));
+  }, [bound, busy, error, verificationPending]);
 
   const changeBoundForm = useCallback(
     (event: FormEvent<HTMLDivElement>) => {
@@ -377,7 +394,9 @@ export function CustomLanding({
           onSubmit={submitBoundForm}
           dangerouslySetInnerHTML={{ __html: source.htmlBefore }}
         />
-        {verification}
+        {verification && verificationHost
+          ? createPortal(verification, verificationHost)
+          : null}
       </main>
     );
 

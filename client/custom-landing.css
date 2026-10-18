@@ -43,10 +43,13 @@
     left: auto !important;
   }
 }
-.custom-landing-bound > .visitor-controls {
-  width: min(100% - 32px, 680px);
-  margin: 0 auto 32px;
-  padding: 14px 18px;
+.custom-landing-content .sc-verification-host:empty {
+  display: none;
+}
+.custom-landing-content .sc-verification-host .visitor-controls {
+  width: 100%;
+  margin: 0;
+  padding: 14px 16px;
   border: 1px solid #d9e2da;
   border-radius: 14px;
   background: #fff;
@@ -55,6 +58,15 @@
     14px/1.45 "Manrope",
     system-ui,
     sans-serif;
+}
+.custom-landing-content .sc-verification-host .turnstile-container {
+  display: flex;
+  justify-content: center;
+}
+.custom-landing-content .sc-verification-host .visitor-controls > small {
+  display: block;
+  margin-top: 8px;
+  text-align: center;
 }
 .custom-landing-funnel {
   width: min(100% - 24px, 760px);
