@@ -94,7 +94,8 @@ export function approvalMatchEstimate(amountRatio: number, scoreRatio: number) {
           ? "Good"
           : "Strong";
   const hue = Math.round(28 + ((percent - 40) / 55) * 117);
-  return { percent, strength, color: `hsl(${hue} 55% 39%)` };
+  const angle = -180 + percent * 1.8;
+  return { percent, strength, color: `hsl(${hue} 55% 39%)`, angle };
 }
 
 function updateBoundPresentation(root: HTMLElement, form: BoundForm) {
@@ -119,6 +120,8 @@ function updateBoundPresentation(root: HTMLElement, form: BoundForm) {
   const estimate = approvalMatchEstimate(rangeRatio(amount), rangeRatio(score));
   root.style.setProperty("--sc-match-color", estimate.color);
   root.style.setProperty("--sc-match-fill", `${estimate.percent}%`);
+  root.style.setProperty("--sc-match-angle", `${estimate.angle}deg`);
+  root.style.setProperty("--sc-match-sweep", `${estimate.percent * 1.8}deg`);
   root
     .querySelectorAll<HTMLElement>("[data-sc-match-percent]")
     .forEach((element) => (element.textContent = `${estimate.percent}%`));

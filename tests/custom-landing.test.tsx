@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
   activityNotificationDelay,
+  approvalMatchEstimate,
   CustomLanding,
 } from "../client/CustomLanding";
 import { landingSchema } from "../server/domain";
@@ -21,6 +22,19 @@ describe("custom landing sources", () => {
     expect(activityNotificationDelay(0)).toBe(5_000);
     expect(activityNotificationDelay(0.5)).toBe(10_000);
     expect(activityNotificationDelay(0.999999999)).toBe(15_000);
+  });
+
+  it("maps the approval estimate to a semicircle gauge angle", () => {
+    expect(approvalMatchEstimate(0, 1)).toMatchObject({
+      percent: 95,
+      strength: "Strong",
+      angle: -9,
+    });
+    expect(approvalMatchEstimate(1, 0)).toMatchObject({
+      percent: 40,
+      strength: "Low",
+      angle: -108,
+    });
   });
 
   it("sanitizes, scopes and renders authored sections around the protected funnel", async () => {
