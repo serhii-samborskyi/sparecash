@@ -199,20 +199,31 @@ export function CustomLanding({
   }, [bound, form, source.htmlBefore]);
 
   useEffect(() => {
-    if (!bound || !content.current || !providerSearch) return;
+    if (!bound || !content.current) return;
     const root = content.current;
+    const active = providerSearch?.active ?? false;
+    const ready = providerSearch?.ready ?? false;
     root
       .querySelectorAll<HTMLElement>("[data-sc-form-view]")
-      .forEach((element) => (element.hidden = providerSearch.active));
+      .forEach((element) => (element.hidden = active));
     root
       .querySelectorAll<HTMLElement>("[data-sc-provider-search]")
       .forEach((element) => {
-        element.hidden = !providerSearch.active;
+        element.hidden = !active;
         element.setAttribute(
           "aria-busy",
-          providerSearch.active && !providerSearch.ready ? "true" : "false",
+          active && !ready ? "true" : "false",
         );
       });
+    if (!providerSearch) {
+      root
+        .querySelectorAll<HTMLButtonElement>('[data-sc-action="continue"]')
+        .forEach((button) => {
+          button.hidden = true;
+          button.disabled = true;
+        });
+      return;
+    }
     root
       .querySelectorAll<HTMLElement>("[data-sc-provider-count]")
       .forEach(
@@ -223,7 +234,7 @@ export function CustomLanding({
       .querySelectorAll<HTMLElement>("[data-sc-provider-status]")
       .forEach(
         (element) =>
-          (element.textContent = providerSearch.ready
+          (element.textContent = ready
             ? "Your next step is ready"
             : "Checking participating providers…"),
       );
@@ -236,15 +247,15 @@ export function CustomLanding({
         );
         element.classList.toggle(
           "is-active",
-          providerSearch.active && !providerSearch.ready,
+          active && !ready,
         );
-        element.classList.toggle("is-complete", providerSearch.ready);
+        element.classList.toggle("is-complete", ready);
       });
     root
       .querySelectorAll<HTMLButtonElement>('[data-sc-action="continue"]')
       .forEach((button) => {
-        button.hidden = !providerSearch.ready;
-        button.disabled = busy || !providerSearch.ready;
+        button.hidden = !ready;
+        button.disabled = busy || !ready;
       });
   }, [bound, busy, providerSearch, source.htmlBefore]);
 
