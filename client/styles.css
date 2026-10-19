@@ -897,8 +897,10 @@ p {
   color: #654967;
 }
 .mini-label {
-  font-size: 7px;
-  letter-spacing: 1px;
+  min-height: 22px;
+  font-size: 8px;
+  line-height: 1.35;
+  letter-spacing: 0.4px;
   opacity: 0.5;
   margin-bottom: 15px;
 }

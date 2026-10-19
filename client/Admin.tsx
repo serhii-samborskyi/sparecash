@@ -621,7 +621,7 @@ export function Admin() {
                     </button>
                   </div>
                   <div className="variant-miniatures">
-                    {exp.variants.slice(0, 4).map((variant: any, i: number) => (
+                    {exp.variants.slice(0, 4).map((variant: any) => (
                       <a
                         key={variant.id}
                         className={`mini-page theme-${variant.config.theme}`}
@@ -629,9 +629,7 @@ export function Admin() {
                         target="_blank"
                         rel="noreferrer"
                       >
-                        <span className="mini-label">
-                          VARIANT {String.fromCharCode(65 + i)}
-                        </span>
+                        <span className="mini-label">{variant.name}</span>
                         <strong>{variant.config.title}</strong>
                         <span className="mini-line" />
                         <span className="mini-button" />
