@@ -370,6 +370,74 @@ it("removes a landing from an experiment while preserving its traffic history", 
     await db.experiment.delete({ where: { id: experiment.id } });
   }
 });
+it("shows pending opt-ins separately in experiment results", async () => {
+  const experiment = await saveExperiment(
+    {
+      name: "Experiment opt-in results test",
+      slug: "experiment-opt-in-results-test",
+      status: "ACTIVE",
+      objective: "SUBSCRIPTIONS",
+      variants: [
+        {
+          name: "Finder",
+          weight: 100,
+          config: {
+            title: "Find an option",
+            description: "Test pending and confirmed opt-ins.",
+          },
+        },
+      ],
+    },
+    "test",
+  );
+  try {
+    const visit = await db.visit.create({
+      data: {
+        experimentId: experiment.id,
+        variantId: experiment.variants[0].id,
+        ipHash: "experiment-opt-in-results-ip",
+        userAgent: "experiment-opt-in-results-test",
+      },
+    });
+    const lead = await db.lead.create({
+      data: { visitId: visit.id, name: "Results test", answers: {} },
+    });
+    await db.subscription.createMany({
+      data: [
+        {
+          leadId: lead.id,
+          channel: "EMAIL",
+          address: `${lead.id}@active.example`,
+          status: "ACTIVE",
+          consentText: "Test consent",
+          consentVersion: "test",
+          consentIpHash: "test",
+        },
+        {
+          leadId: lead.id,
+          channel: "SMS",
+          address: `+1${lead.id.replace(/\D/g, "").padEnd(10, "0").slice(0, 10)}`,
+          status: "PENDING",
+          consentText: "Test consent",
+          consentVersion: "test",
+          consentIpHash: "test",
+        },
+      ],
+    });
+
+    const results = await experimentResults(experiment.id);
+    expect(results.variants[0]).toMatchObject({
+      subscriptions: 1,
+      pendingOptIns: 1,
+      optIns: 2,
+      score: 1,
+    });
+  } finally {
+    await db.visit.deleteMany({ where: { experimentId: experiment.id } });
+    await db.variant.deleteMany({ where: { experimentId: experiment.id } });
+    await db.experiment.delete({ where: { id: experiment.id } });
+  }
+});
 it("duplicates every landing as a draft and removes an experiment with its data", async () => {
   const original = await saveExperiment(
     {

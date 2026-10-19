@@ -524,7 +524,7 @@ export async function experimentResults(id: string) {
   });
   const variants = await Promise.all(
     experiment.variants.map(async (v) => {
-      const [visits, subs, postbacks] = await Promise.all([
+      const [visits, subscriptionRows, postbacks] = await Promise.all([
         db.visit.findMany({
           where: { variantId: v.id },
           select: {
@@ -534,8 +534,12 @@ export async function experimentResults(id: string) {
             engagementEvents: { select: { kind: true } },
           },
         }),
-        db.subscription.count({
-          where: { status: "ACTIVE", lead: { visit: { variantId: v.id } } },
+        db.subscription.findMany({
+          where: {
+            status: { in: ["PENDING", "ACTIVE"] },
+            lead: { visit: { variantId: v.id } },
+          },
+          select: { status: true },
         }),
         db.postback.findMany({
           where: { application: { visit: { variantId: v.id } } },
@@ -546,10 +550,16 @@ export async function experimentResults(id: string) {
           postbacks.filter((p) => p.event === type).map((p) => p.applicationId),
         ).size;
       const revenue = deduplicateSales(postbacks).commission,
-        spend = visits.reduce((s, v) => s + Number(v.cost), 0);
+        spend = visits.reduce((s, v) => s + Number(v.cost), 0),
+        subscriptions = subscriptionRows.filter(
+          (subscription) => subscription.status === "ACTIVE",
+        ).length,
+        pendingOptIns = subscriptionRows.filter(
+          (subscription) => subscription.status === "PENDING",
+        ).length;
       const value =
         experiment.objective === "SUBSCRIPTIONS"
-          ? subs
+          ? subscriptions
           : experiment.objective === "REVENUE"
             ? revenue
             : converted(experiment.objective);
@@ -558,7 +568,9 @@ export async function experimentResults(id: string) {
         config: await hydrateCustomLandingConfig(landingSchema.parse(v.config)),
         visits: visits.length,
         verified: visits.filter((v) => v.verified).length,
-        subscriptions: subs,
+        subscriptions,
+        pendingOptIns,
+        optIns: subscriptions + pendingOptIns,
         engagement: engagementCounts(visits),
         sold: converted("SOLD"),
         approved: converted("APPROVED"),

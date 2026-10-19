@@ -1645,7 +1645,7 @@ export function Admin() {
                   <tr>
                     <th>Variant</th>
                     <th>Visitors</th>
-                    <th>Subscriptions</th>
+                    <th>Opt-ins</th>
                     <th>Sold</th>
                     <th>Approved</th>
                     <th>Funded</th>
@@ -1658,7 +1658,13 @@ export function Admin() {
                     <tr key={v.id}>
                       <td>{v.name}</td>
                       <td>{v.visits}</td>
-                      <td>{v.subscriptions}</td>
+                      <td>
+                        <b>{v.optIns ?? v.subscriptions}</b>
+                        <small className="block muted">
+                          {v.subscriptions} confirmed · {v.pendingOptIns ?? 0}{" "}
+                          pending
+                        </small>
+                      </td>
                       <td>{v.sold}</td>
                       <td>{v.approved}</td>
                       <td>{v.funded}</td>
