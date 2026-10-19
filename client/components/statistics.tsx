@@ -11,6 +11,7 @@ import {
   ShieldCheck,
   Activity,
   Users,
+  ChevronDown,
 } from "lucide-react";
 import { api, money, number } from "../api";
 import { Empty, Field, Spinner } from "./ui";
@@ -295,7 +296,7 @@ function duration(value: number | null) {
 
 export function Statistics() {
   const [filters, setFilters] = useState<StatisticsInput>(() => ({
-    ...dates(7),
+    ...dates(1),
     groupBy: "zone",
   }));
   const [draft, setDraft] = useState(filters);
@@ -706,120 +707,139 @@ export function Statistics() {
               </a>
             )}
           </div>
-          <section
+          <details
             className="panel statistics-clarity"
             aria-label="Microsoft Clarity"
           >
-            <div className="statistics-clarity-heading">
-              <div>
-                <span
-                  className={`statistics-status ${
-                    report.clarity.status === "empty"
-                      ? "waiting"
-                      : report.clarity.status
-                  }`}
-                />
-                <div>
-                  <h3>Microsoft Clarity</h3>
-                  <p>{report.clarity.message}</p>
-                </div>
-              </div>
-              {report.clarity.status === "unavailable" ? (
-                <a className="button secondary" href="/admin/integrations">
-                  Configure
-                  <ArrowUpRight size={14} />
-                </a>
-              ) : (
-                <button
-                  className="button secondary"
-                  type="button"
-                  disabled={claritySyncing || !report.clarity.refreshAvailable}
-                  onClick={refreshClarity}
-                >
-                  <RefreshCw
-                    size={15}
-                    className={claritySyncing ? "spin" : ""}
-                  />
-                  {claritySyncing ? "Importing…" : "Import latest"}
-                </button>
-              )}
-            </div>
-            {report.clarity.status === "empty" ? (
-              <div className="statistics-clarity-empty">
-                No processed Clarity rows yet. This does not mean zero bots or
-                zero sessions.
-              </div>
-            ) : report.clarity.snapshot ? (
-              <div className="statistics-clarity-metrics">
-                <div>
-                  <span>Attributed sessions</span>
-                  <strong>
-                    {number(report.clarity.summary.attributedSessions)}
-                  </strong>
-                </div>
-                <div>
-                  <span>Estimated human</span>
-                  <strong>
-                    {number(report.clarity.summary.humanSessions)}
-                  </strong>
-                </div>
-                <div>
-                  <span>Estimated bots</span>
-                  <strong>{number(report.clarity.summary.botSessions)}</strong>
-                </div>
-                <div>
-                  <span>Estimated bot rate</span>
-                  <strong>{pct(report.clarity.summary.botRate)}</strong>
-                </div>
-                <div>
-                  <span>Pages / session</span>
-                  <strong>
-                    {report.clarity.summary.pagesPerSession === null
-                      ? "—"
-                      : `${report.clarity.summary.pagesPerSession.toFixed(2)}×`}
-                  </strong>
-                </div>
-                <div>
-                  <span>Unattributed sessions</span>
-                  <strong>
-                    {number(report.clarity.summary.unattributedSessions)}
-                  </strong>
-                </div>
-              </div>
-            ) : null}
-            <div className="statistics-clarity-meta">
-              <span>
-                {report.clarity.snapshot ? (
-                  <>
-                    Rolling window:{" "}
-                    {new Date(
-                      report.clarity.snapshot.windowStart,
-                    ).toLocaleString()}{" "}
-                    –{" "}
-                    {new Date(
-                      report.clarity.snapshot.windowEnd,
-                    ).toLocaleString()}{" "}
-                    · imported{" "}
-                    {new Date(
-                      report.clarity.snapshot.fetchedAt,
-                    ).toLocaleString()}
-                  </>
-                ) : (
-                  "No Clarity export has been imported yet."
-                )}
+            <summary className="statistics-clarity-summary">
+              <span
+                className={`statistics-status ${
+                  report.clarity.status === "empty"
+                    ? "waiting"
+                    : report.clarity.status
+                }`}
+              />
+              <span className="statistics-clarity-summary-copy">
+                <strong>Microsoft Clarity</strong>
+                <small>{report.clarity.message}</small>
               </span>
-              <span>{report.clarity.alignmentMessage}</span>
-              {!report.clarity.refreshAvailable &&
-                report.clarity.nextRefreshAt && (
-                  <span>
-                    Next manual import after{" "}
-                    {new Date(report.clarity.nextRefreshAt).toLocaleString()}.
-                    Clarity allows 10 exports per day.
-                  </span>
+              {report.clarity.snapshot && (
+                <span className="statistics-clarity-summary-metrics">
+                  {number(report.clarity.summary.attributedSessions)} sessions
+                  {report.clarity.summary.botRate !== null && (
+                    <> · {pct(report.clarity.summary.botRate)} estimated bots</>
+                  )}
+                </span>
+              )}
+              <ChevronDown
+                className="statistics-clarity-chevron"
+                size={18}
+                aria-hidden="true"
+              />
+            </summary>
+            <div className="statistics-clarity-body">
+              <div className="statistics-clarity-actions">
+                {report.clarity.status === "unavailable" ? (
+                  <a className="button secondary" href="/admin/integrations">
+                    Configure
+                    <ArrowUpRight size={14} />
+                  </a>
+                ) : (
+                  <button
+                    className="button secondary"
+                    type="button"
+                    disabled={
+                      claritySyncing || !report.clarity.refreshAvailable
+                    }
+                    onClick={refreshClarity}
+                  >
+                    <RefreshCw
+                      size={15}
+                      className={claritySyncing ? "spin" : ""}
+                    />
+                    {claritySyncing ? "Importing…" : "Import latest"}
+                  </button>
                 )}
-              {clarityNotice && <span role="status">{clarityNotice}</span>}
+              </div>
+              {report.clarity.status === "empty" ? (
+                <div className="statistics-clarity-empty">
+                  No processed Clarity rows yet. This does not mean zero bots or
+                  zero sessions.
+                </div>
+              ) : report.clarity.snapshot ? (
+                <div className="statistics-clarity-metrics">
+                  <div>
+                    <span>Attributed sessions</span>
+                    <strong>
+                      {number(report.clarity.summary.attributedSessions)}
+                    </strong>
+                  </div>
+                  <div>
+                    <span>Estimated human</span>
+                    <strong>
+                      {number(report.clarity.summary.humanSessions)}
+                    </strong>
+                  </div>
+                  <div>
+                    <span>Estimated bots</span>
+                    <strong>
+                      {number(report.clarity.summary.botSessions)}
+                    </strong>
+                  </div>
+                  <div>
+                    <span>Estimated bot rate</span>
+                    <strong>{pct(report.clarity.summary.botRate)}</strong>
+                  </div>
+                  <div>
+                    <span>Pages / session</span>
+                    <strong>
+                      {report.clarity.summary.pagesPerSession === null
+                        ? "—"
+                        : `${report.clarity.summary.pagesPerSession.toFixed(2)}×`}
+                    </strong>
+                  </div>
+                  <div>
+                    <span>Unattributed sessions</span>
+                    <strong>
+                      {number(report.clarity.summary.unattributedSessions)}
+                    </strong>
+                  </div>
+                </div>
+              ) : null}
+              <div className="statistics-clarity-meta">
+                <span>
+                  {report.clarity.snapshot ? (
+                    <>
+                      Rolling window:{" "}
+                      {new Date(
+                        report.clarity.snapshot.windowStart,
+                      ).toLocaleString()}{" "}
+                      –{" "}
+                      {new Date(
+                        report.clarity.snapshot.windowEnd,
+                      ).toLocaleString()}{" "}
+                      · imported{" "}
+                      {new Date(
+                        report.clarity.snapshot.fetchedAt,
+                      ).toLocaleString()}
+                    </>
+                  ) : (
+                    "No Clarity export has been imported yet."
+                  )}
+                </span>
+                <span>{report.clarity.alignmentMessage}</span>
+                {!report.clarity.refreshAvailable &&
+                  report.clarity.nextRefreshAt && (
+                    <span>
+                      Next manual import after{" "}
+                      {new Date(report.clarity.nextRefreshAt).toLocaleString()}.
+                      Clarity allows 10 exports per day.
+                    </span>
+                  )}
+                {clarityNotice && <span role="status">{clarityNotice}</span>}
+              </div>
             </div>
-          </section>
+          </details>
           <div className="stats-grid statistics-summary">
             <div className="metric">
               <div>
