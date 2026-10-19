@@ -169,7 +169,8 @@ function Landing({ preview }: { preview: boolean }) {
       !session ||
       preview ||
       updatesRecorded.current ||
-      !session.availableChannels?.length
+      !session.availableChannels?.length ||
+      session.config.customLanding?.version === 2
     )
       return;
     const visible = visibleQuestions(session.config.questions ?? [], answers);
@@ -1083,6 +1084,13 @@ function Landing({ preview }: { preview: boolean }) {
           onBegin={() => {
             setVerificationRequested(true);
             window.dispatchEvent(new Event("sparecash-quiz-started"));
+          }}
+          onUpdatesOpened={() => {
+            if (preview || updatesRecorded.current) return;
+            updatesRecorded.current = true;
+            trackEngagement.current(session.visitToken, preview, {
+              kind: "UPDATES_OPENED",
+            });
           }}
           onSubmit={submitBoundForm}
           onContinue={continueBoundFormApplication}

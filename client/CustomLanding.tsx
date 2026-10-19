@@ -3,6 +3,7 @@ import {
   useEffect,
   useRef,
   useState,
+  type FocusEvent,
   type FormEvent,
   type MouseEvent,
   type ReactNode,
@@ -142,6 +143,7 @@ export function CustomLanding({
   verification,
   verificationPending = false,
   onBegin,
+  onUpdatesOpened,
   onSubmit,
   onContinue,
 }: {
@@ -161,6 +163,7 @@ export function CustomLanding({
   verification?: ReactNode;
   verificationPending?: boolean;
   onBegin?: () => void;
+  onUpdatesOpened?: () => void;
   onSubmit?: (submission: BoundFormSubmission) => void | Promise<void>;
   onContinue?: () => void | Promise<void>;
 }) {
@@ -337,6 +340,16 @@ export function CustomLanding({
     [bound, form, onBegin],
   );
 
+  const focusBoundContact = useCallback(
+    (event: FocusEvent<HTMLDivElement>) => {
+      if (!bound) return;
+      const target = event.target as Element | null;
+      if (!target?.matches("[data-sc-contact]")) return;
+      onUpdatesOpened?.();
+    },
+    [bound, onUpdatesOpened],
+  );
+
   const clickBoundForm = useCallback(
     (event: MouseEvent<HTMLDivElement>) => {
       if (!bound || !onContinue) return;
@@ -390,6 +403,7 @@ export function CustomLanding({
           ref={content}
           className="custom-landing-content"
           onClick={clickBoundForm}
+          onFocusCapture={focusBoundContact}
           onInput={changeBoundForm}
           onSubmit={submitBoundForm}
           dangerouslySetInnerHTML={{ __html: source.htmlBefore }}
