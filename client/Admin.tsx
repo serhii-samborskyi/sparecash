@@ -1549,7 +1549,19 @@ export function Admin() {
             </>
           )}
           {page === "settings" && (
-            <>
+            <div className="settings-page">
+              <nav className="settings-jump-nav" aria-label="Settings sections">
+                <span>Jump to</span>
+                <a href="#settings-delivery">Delivery</a>
+                <a href="#settings-providers">Providers</a>
+                <a href="#settings-access">Access</a>
+                <a href="#settings-workers">Workers</a>
+                <a href="#settings-retargeting">Retargeting</a>
+                <a href="#settings-traffic">Traffic protection</a>
+                <a href="#settings-followups">Follow-up rules</a>
+                <a href="#settings-roundsky">RoundSky offer</a>
+                <a href="#settings-legal">Business & legal</a>
+              </nav>
               <ConnectionSettings notify={notify} onSaved={refresh} />
               <WorkerControls notify={notify} />
               <SettingsView
@@ -1557,7 +1569,7 @@ export function Admin() {
                 ipTimezoneConfigured={data.ipTimezoneConfigured}
                 onSaved={refresh}
               />
-            </>
+            </div>
           )}
           <footer className="page-footer">
             <span>SpareCash · Your relationships, connected.</span>

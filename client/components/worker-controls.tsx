@@ -70,7 +70,10 @@ export function WorkerControls({
     }
   };
   return (
-    <section className="panel worker-controls">
+    <section
+      className="panel worker-controls settings-anchor"
+      id="settings-workers"
+    >
       <div className="panel-heading">
         <Activity size={20} />
         <div>

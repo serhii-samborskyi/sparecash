@@ -30,7 +30,7 @@ export function RetargetingSettings() {
     };
   }, [groupBy, revision]);
   return (
-    <section className="panel">
+    <section className="panel settings-anchor" id="settings-retargeting">
       <div className="panel-heading">
         <ShieldCheck size={20} />
         <div>

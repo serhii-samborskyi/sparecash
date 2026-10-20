@@ -65,7 +65,7 @@ export function SettingsView({
         }}
       />
       <RetargetingSettings />
-      <section className="panel">
+      <section className="panel settings-anchor" id="settings-traffic">
         <div className="panel-heading">
           <ShieldCheck size={20} />
           <div>
@@ -100,7 +100,7 @@ export function SettingsView({
           count as confirmed bot evidence.
         </p>
       </section>
-      <section className="panel">
+      <section className="panel settings-anchor" id="settings-followups">
         <div className="panel-heading">
           <Clock size={20} />
           <div>
@@ -172,7 +172,7 @@ export function SettingsView({
           pixel.
         </p>
       </section>
-      <section className="panel">
+      <section className="panel settings-anchor" id="settings-roundsky">
         <div className="panel-heading">
           <Link2 size={20} />
           <div>
@@ -217,7 +217,7 @@ export function SettingsView({
           />
         </label>
       </section>
-      <section className="panel">
+      <section className="panel settings-anchor" id="settings-legal">
         <div className="panel-heading">
           <FileText size={20} />
           <div>

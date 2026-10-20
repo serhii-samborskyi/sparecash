@@ -1443,6 +1443,50 @@ td small {
   align-items: flex-start;
   margin-bottom: 20px;
 }
+.settings-jump-nav {
+  position: sticky;
+  top: 10px;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  overflow-x: auto;
+  margin-bottom: 16px;
+  padding: 9px;
+  border: 1px solid #dce5d4;
+  border-radius: 12px;
+  background: #fbfcf8f2;
+  box-shadow: 0 3px 14px #173d3212;
+  scrollbar-width: thin;
+  backdrop-filter: blur(10px);
+}
+.settings-jump-nav > span {
+  padding: 0 7px;
+  color: #87947d;
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.settings-jump-nav a {
+  flex-shrink: 0;
+  padding: 7px 10px;
+  border-radius: 8px;
+  color: #4e664c;
+  font-size: 10px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.settings-jump-nav a:hover,
+.settings-jump-nav a:focus-visible {
+  background: #eaf3e2;
+  color: var(--green);
+}
+.settings-page .autosave-status {
+  top: 68px;
+}
+.settings-anchor {
+  scroll-margin-top: 122px;
+}
 .panel-heading > svg {
   color: #90a17a;
   flex-shrink: 0;

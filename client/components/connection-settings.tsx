@@ -314,7 +314,7 @@ export function ConnectionSettings({
             </p>
           </section>
         )}
-        <section className="panel">
+        <section className="panel settings-anchor" id="settings-delivery">
           <div className="panel-heading">
             <Globe size={20} />
             <div>
@@ -373,7 +373,7 @@ export function ConnectionSettings({
             />
           </label>
         </section>
-        <section className="panel">
+        <section className="panel settings-anchor" id="settings-providers">
           <div className="panel-heading">
             <Plug size={20} />
             <div>
@@ -576,7 +576,7 @@ export function ConnectionSettings({
             "PROPELLER_API_URL",
           ])}
         </section>
-        <section className="panel">
+        <section className="panel settings-anchor" id="settings-access">
           <div className="panel-heading">
             <KeyRound size={20} />
             <div>
