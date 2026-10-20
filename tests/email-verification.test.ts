@@ -119,11 +119,11 @@ it("marks provider timeouts as an inconclusive mailbox check", async () => {
   );
 });
 
-it("fails closed without exposing provider responses", async () => {
+it("treats provider failures as inconclusive without exposing responses", async () => {
   fetchMock.mockResolvedValue(
     Response.json({ secret: config.MYEMAILVERIFIER_API_KEY }, { status: 429 }),
   );
-  await expect(run("person@example.com")).rejects.toThrow(
-    "temporarily unavailable",
+  await expect(run("person@example.com")).rejects.toBeInstanceOf(
+    EmailVerificationInconclusiveError,
   );
 });

@@ -108,7 +108,7 @@ function EmailVerificationControl({
   const state = subscription.emailVerificationState ?? "NOT_CHECKED";
   const label =
     state === "VERIFIED"
-      ? "Mailbox verified"
+      ? "Valid mailbox"
       : state === "INVALID"
         ? "Invalid mailbox"
         : state === "CATCH_ALL"
@@ -139,7 +139,7 @@ function EmailVerificationControl({
               );
               notify(
                 result.valid
-                  ? "Email mailbox verified"
+                  ? "Email mailbox is valid"
                   : result.state === "INVALID"
                     ? "Email mailbox is invalid"
                     : "The mailbox could not be verified. Try again later.",

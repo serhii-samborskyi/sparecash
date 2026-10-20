@@ -36,6 +36,13 @@ export class EmailVerificationInconclusiveError extends Error {
   }
 }
 
+export class EmailVerificationConfigurationError extends Error {
+  constructor(message = "Email verification is not configured") {
+    super(message);
+    this.name = "EmailVerificationConfigurationError";
+  }
+}
+
 export function emailVerificationState(result: EmailVerification) {
   if (result.valid) return "VERIFIED";
   const status = result.status
@@ -52,7 +59,7 @@ export async function verifyEmailAddress(
   email: string,
 ): Promise<EmailVerification> {
   if (!env.MYEMAILVERIFIER_API_KEY)
-    throw new Error("Email verification is not configured");
+    throw new EmailVerificationConfigurationError();
   const address = email.trim().toLowerCase();
   const url = new URL(
     `/verifier/validate_single/${encodeURIComponent(address)}/${encodeURIComponent(env.MYEMAILVERIFIER_API_KEY)}`,
@@ -75,15 +82,26 @@ export async function verifyEmailAddress(
       (error.name === "TimeoutError" || error.name === "AbortError")
     )
       throw new EmailVerificationInconclusiveError();
-    throw new Error("Email verification is temporarily unavailable");
+    throw new EmailVerificationInconclusiveError(
+      "The verification service did not return a result",
+    );
   }
-  if (!response.ok)
-    throw new Error("Email verification is temporarily unavailable");
+  if (!response.ok) {
+    if (response.status === 401)
+      throw new EmailVerificationConfigurationError(
+        "The email verifier rejected its credentials",
+      );
+    throw new EmailVerificationInconclusiveError(
+      "The verification provider did not return a mailbox result",
+    );
+  }
   let data: z.infer<typeof responseSchema>;
   try {
     data = responseSchema.parse(await response.json());
   } catch {
-    throw new Error("Email verification returned an unexpected response");
+    throw new EmailVerificationInconclusiveError(
+      "The verification provider returned an inconclusive response",
+    );
   }
   return {
     valid:
