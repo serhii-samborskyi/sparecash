@@ -10,6 +10,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import "./custom-landing.css";
+import { PhoneConsentToggle } from "./components/phone-consent-toggle";
 
 type CustomField = {
   id: string;
@@ -53,6 +54,7 @@ export type BoundFormSubmission = {
   name?: string;
   phone?: string;
   email?: string;
+  phoneConsent?: boolean;
 };
 
 function setOutput(root: HTMLElement, input: HTMLInputElement) {
@@ -142,10 +144,13 @@ export function CustomLanding({
   providerSearch,
   verification,
   verificationPending = false,
+  phoneConsentText = "",
+  phoneConsent = false,
   onBegin,
   onUpdatesOpened,
   onSubmit,
   onContinue,
+  onPhoneConsentChange,
 }: {
   source: {
     name: string;
@@ -162,15 +167,22 @@ export function CustomLanding({
   providerSearch?: ProviderSearchView;
   verification?: ReactNode;
   verificationPending?: boolean;
+  phoneConsentText?: string;
+  phoneConsent?: boolean;
   onBegin?: () => void;
   onUpdatesOpened?: () => void;
   onSubmit?: (submission: BoundFormSubmission) => void | Promise<void>;
   onContinue?: () => void | Promise<void>;
+  onPhoneConsentChange?: (checked: boolean) => void;
 }) {
   const content = useRef<HTMLDivElement>(null);
   const bound = source.version === 2;
   const [activityVisible, setActivityVisible] = useState(false);
+  const [phonePresent, setPhonePresent] = useState(false);
   const [verificationHost, setVerificationHost] = useState<HTMLElement | null>(
+    null,
+  );
+  const [phoneConsentHost, setPhoneConsentHost] = useState<HTMLElement | null>(
     null,
   );
   const openFunnel = useCallback((event: MouseEvent<HTMLDivElement>) => {
@@ -314,6 +326,22 @@ export function CustomLanding({
   }, [bound, source.htmlBefore]);
 
   useEffect(() => {
+    if (!bound || !content.current || !form || form.contacts.phone === "hidden")
+      return;
+    const consent =
+      content.current.querySelector<HTMLElement>("[data-sc-consent]");
+    if (!consent) return;
+    const host = document.createElement("div");
+    host.className = "sc-phone-consent-host";
+    consent.prepend(host);
+    setPhoneConsentHost(host);
+    return () => {
+      setPhoneConsentHost(null);
+      host.remove();
+    };
+  }, [bound, form, source.htmlBefore]);
+
+  useEffect(() => {
     if (!bound || !content.current) return;
     content.current
       .querySelectorAll<HTMLElement>("[data-sc-errors]")
@@ -323,8 +351,26 @@ export function CustomLanding({
       });
     content.current
       .querySelectorAll<HTMLButtonElement>('[data-sc-action="submit"]')
-      .forEach((button) => (button.disabled = busy || verificationPending));
-  }, [bound, busy, error, verificationPending]);
+      .forEach(
+        (button) =>
+          (button.disabled =
+            busy ||
+            verificationPending ||
+            Boolean(
+              form &&
+              (form.contacts.phone === "required" || phonePresent) &&
+              !phoneConsent,
+            )),
+      );
+  }, [
+    bound,
+    busy,
+    error,
+    form,
+    phoneConsent,
+    phonePresent,
+    verificationPending,
+  ]);
 
   const changeBoundForm = useCallback(
     (event: FormEvent<HTMLDivElement>) => {
@@ -335,6 +381,8 @@ export function CustomLanding({
         setOutput(content.current, input);
         if (form) updateBoundPresentation(content.current, form);
       }
+      if (input.dataset.scContact === "phone")
+        setPhonePresent(Boolean(input.value.trim()));
       onBegin?.();
     },
     [bound, form, onBegin],
@@ -387,9 +435,10 @@ export function CustomLanding({
         name: contact("name"),
         phone: contact("phone"),
         email: contact("email"),
+        phoneConsent,
       });
     },
-    [bound, form, onSubmit],
+    [bound, form, onSubmit, phoneConsent],
   );
 
   if (bound)
@@ -410,6 +459,17 @@ export function CustomLanding({
         />
         {verification && verificationHost
           ? createPortal(verification, verificationHost)
+          : null}
+        {phoneConsentHost && phoneConsentText && onPhoneConsentChange
+          ? createPortal(
+              <PhoneConsentToggle
+                checked={phoneConsent}
+                consentText={phoneConsentText}
+                onChange={onPhoneConsentChange}
+                required={form?.contacts.phone === "required" || phonePresent}
+              />,
+              phoneConsentHost,
+            )
           : null}
       </main>
     );

@@ -362,21 +362,36 @@ model AppConfiguration {
 }
 
 model Lead {
-  id             String             @id @default(uuid())
+  id             String                  @id @default(uuid())
   visitId        String
-  visit          Visit              @relation(fields: [visitId], references: [id])
+  visit          Visit                   @relation(fields: [visitId], references: [id])
   name           String
-  status         LeadStatus         @default(NEW)
-  timezone       String             @default("America/Chicago")
-  timezoneSource String             @default("UNKNOWN")
+  status         LeadStatus              @default(NEW)
+  timezone       String                  @default("America/Chicago")
+  timezoneSource String                  @default("UNKNOWN")
   answers        Json
-  notes          String             @default("")
-  createdAt      DateTime           @default(now())
-  updatedAt      DateTime           @updatedAt
+  notes          String                  @default("")
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
   lastClickedAt  DateTime?
   subscriptions  Subscription[]
+  phoneConsents  PhoneMarketingConsent[]
   applications   ApplicationClick[]
   events         LeadEvent[]
+}
+
+model PhoneMarketingConsent {
+  id             String   @id @default(uuid())
+  leadId         String
+  lead           Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  phone          String
+  consentText    String
+  consentVersion String
+  consentAt      DateTime @default(now())
+  consentIpHash  String
+
+  @@index([phone, consentAt])
+  @@index([leadId])
 }
 
 model Subscription {

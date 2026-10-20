@@ -792,8 +792,15 @@ export function ExperimentEditor({
               onChange={(e) => config("consentVersion", e.target.value)}
             />
           </Field>
-          {["emailConsent", "smsConsent", "pushConsent"].map((key) => (
-            <Field key={key} label={key.replace("Consent", " consent")}>
+          {["emailConsent", "phoneConsent", "pushConsent"].map((key) => (
+            <Field
+              key={key}
+              label={
+                key === "phoneConsent"
+                  ? "Phone marketing consent"
+                  : key.replace("Consent", " consent")
+              }
+            >
               <textarea
                 rows={3}
                 value={v.config[key]}
@@ -801,6 +808,12 @@ export function ExperimentEditor({
               />
             </Field>
           ))}
+          <Field label="Phone consent version">
+            <input
+              value={v.config.phoneConsentVersion}
+              onChange={(e) => config("phoneConsentVersion", e.target.value)}
+            />
+          </Field>
         </details>
         {error && (
           <p className="error" role="alert">

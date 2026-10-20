@@ -343,6 +343,18 @@ export const landingSchema = z
       .default(
         "I agree to receive recurring automated marketing texts about loan options from SpareCash at the number I provide, up to one per day. Consent is not a condition of purchase. Message and data rates may apply. Reply STOP to opt out.",
       ),
+    phoneConsentVersion: z
+      .string()
+      .min(1)
+      .max(40)
+      .default("v3-phone-marketing-2026-10-20"),
+    phoneConsent: z
+      .string()
+      .min(20)
+      .max(1000)
+      .default(
+        "By switching this on and submitting, I provide my electronic signature and agree that SpareCash may contact me at the number I provided with recurring marketing calls and messages about personal-loan options, including by SMS, iMessage and RCS, using automated dialing technology and artificial, prerecorded or AI-generated voices. Message frequency varies, and messages may continue until I unsubscribe. Message and data rates may apply. Consent is not a condition of using the service. Reply STOP to messages or contact SpareCash to revoke consent at any time.",
+      ),
     pushConsent: z
       .string()
       .min(20)

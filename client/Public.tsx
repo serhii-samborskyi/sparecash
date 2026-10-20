@@ -24,6 +24,7 @@ import {
 import { api, post } from "./api";
 import { Field, Spinner } from "./components/ui";
 import { BrandMark } from "./components/brand-mark";
+import { PhoneConsentToggle } from "./components/phone-consent-toggle";
 import {
   waitForPushSubscription,
   confirmPushSubscription,
@@ -125,6 +126,7 @@ function Landing({ preview }: { preview: boolean }) {
     [channels, setChannels] = useState<string[]>([]),
     [email, setEmail] = useState(""),
     [phone, setPhone] = useState(""),
+    [phoneConsent, setPhoneConsent] = useState(false),
     [company, setCompany] = useState(""),
     [visitorVerified, setVisitorVerified] = useState(false),
     [verificationRequested, setVerificationRequested] = useState(false),
@@ -260,6 +262,7 @@ function Landing({ preview }: { preview: boolean }) {
   }, [preview]);
   const toggleChannel = (channel: string) => {
     const selected = channels.includes(channel);
+    if (channel === "SMS" && selected) setPhoneConsent(false);
     setChannels((current) =>
       current.includes(channel)
         ? current.filter((item) => item !== channel)
@@ -291,6 +294,7 @@ function Landing({ preview }: { preview: boolean }) {
         channels,
         email: channels.includes("EMAIL") ? email : undefined,
         phone: channels.includes("SMS") ? phone : undefined,
+        phoneConsent: channels.includes("SMS") ? phoneConsent : undefined,
         consent: true,
         adultUS: true,
         company,
@@ -344,6 +348,7 @@ function Landing({ preview }: { preview: boolean }) {
         name: submission.name,
         email: submission.email,
         phone: submission.phone,
+        phoneConsent: submission.phone ? submission.phoneConsent : undefined,
         consent: true,
         adultUS: true,
         company: "",
@@ -968,24 +973,37 @@ function Landing({ preview }: { preview: boolean }) {
                       </a>
                       .
                     </p>
-                    {channels.map((channel) => (
-                      <p key={channel}>
-                        {
-                          config[
-                            channel === "EMAIL"
-                              ? "emailConsent"
-                              : channel === "SMS"
-                                ? "smsConsent"
-                                : "pushConsent"
-                          ]
-                        }
-                      </p>
-                    ))}
+                    {channels
+                      .filter((channel) => channel !== "SMS")
+                      .map((channel) => (
+                        <p key={channel}>
+                          {
+                            config[
+                              channel === "EMAIL"
+                                ? "emailConsent"
+                                : channel === "SMS"
+                                  ? "smsConsent"
+                                  : "pushConsent"
+                            ]
+                          }
+                        </p>
+                      ))}
+                    {channels.includes("SMS") && (
+                      <PhoneConsentToggle
+                        checked={phoneConsent}
+                        consentText={config.phoneConsent}
+                        onChange={setPhoneConsent}
+                      />
+                    )}
                   </div>
                   <button
                     className="button full"
                     disabled={
-                      busy || preview || !channels.length || !visitorVerified
+                      busy ||
+                      preview ||
+                      !channels.length ||
+                      !visitorVerified ||
+                      (channels.includes("SMS") && !phoneConsent)
                     }
                   >
                     {busy ? <Spinner /> : null}
@@ -1062,6 +1080,9 @@ function Landing({ preview }: { preview: boolean }) {
           source={config.customLanding}
           funnel={funnel}
           form={config.customForm}
+          phoneConsentText={config.phoneConsent}
+          phoneConsent={phoneConsent}
+          onPhoneConsentChange={setPhoneConsent}
           busy={busy}
           error={error}
           activity={

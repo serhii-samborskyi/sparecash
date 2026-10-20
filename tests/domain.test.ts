@@ -136,6 +136,18 @@ describe("custom landing form contracts", () => {
     ).toBe(false);
   });
 });
+describe("phone marketing consent defaults", () => {
+  it("uses the reusable calls and messaging disclosure", () => {
+    const config = landingSchema.parse({
+      title: "Phone consent",
+      description: "Request updates about personal-loan options by phone.",
+    });
+    expect(config.phoneConsentVersion).toBe("v3-phone-marketing-2026-10-20");
+    expect(config.phoneConsent).toContain("SMS, iMessage and RCS");
+    expect(config.phoneConsent).toContain("AI-generated voices");
+    expect(config.phoneConsent).toContain("Reply STOP");
+  });
+});
 describe("conditional landing quizzes", () => {
   const questions = [
     { id: "timing", label: "When are you looking?", options: ["Now", "Later"] },

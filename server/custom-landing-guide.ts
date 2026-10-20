@@ -28,7 +28,7 @@ export function customLandingGuide() {
       errors:
         "Add one element with data-sc-errors for validation, verification and delivery messages.",
       consent:
-        "Add an element with data-sc-consent whenever phone or email is collected. Put the requested disclosure and links there.",
+        "Add an element with data-sc-consent whenever phone or email is collected. SpareCash automatically inserts its required calls-and-messages toggle there whenever the form collects a phone number; keep Terms, Privacy Policy and any email disclosure in the authored element.",
       activity:
         'An optional data-sc-activity container may contain data-sc-bind="location" and data-sc-bind="amount". SpareCash fills it only from anonymized recent activity and hides it when none exists.',
       matchEstimate:
@@ -84,7 +84,7 @@ export function customLandingGuide() {
     <input type="text" data-sc-contact="name" autocomplete="name" placeholder="Your name (optional)">
     <input type="tel" data-sc-contact="phone" autocomplete="tel" placeholder="Mobile number">
     <input type="email" data-sc-contact="email" autocomplete="email" placeholder="Email (optional)">
-    <div data-sc-consent>By continuing, you accept the <a href="/terms">Terms</a> and <a href="/privacy">Privacy Policy</a> and agree to receive recurring automated marketing texts. Consent is not a condition of purchase. Message and data rates may apply. Reply STOP to opt out.</div>
+    <div data-sc-consent>By continuing, you accept the <a href="/terms">Terms</a> and <a href="/privacy">Privacy Policy</a>. The required calls-and-messages toggle is inserted here automatically when a phone number is collected.</div>
     <p data-sc-errors role="alert"></p>
     <button type="submit" data-sc-action="submit">Check my loan options</button>
   </form>

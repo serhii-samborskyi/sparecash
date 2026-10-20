@@ -46,6 +46,13 @@
 .custom-landing-content .sc-verification-host:empty {
   display: none;
 }
+.custom-landing-content .sc-phone-consent-host {
+  display: block;
+  width: 100%;
+  margin-bottom: 12px;
+  color: #234d3e;
+  font-family: "Manrope", system-ui, sans-serif;
+}
 .custom-landing-content .sc-verification-host .visitor-controls {
   width: 100%;
   margin: 0;

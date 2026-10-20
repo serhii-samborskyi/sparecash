@@ -341,6 +341,7 @@ publicRouter.post(
         answers: z.record(z.string().max(200)),
         email: z.string().email().max(254).optional(),
         phone: z.string().max(30).optional(),
+        phoneConsent: z.boolean().optional(),
         channels: z
           .array(z.enum(["EMAIL", "SMS", "PUSH"]))
           .min(1)
@@ -469,6 +470,12 @@ publicRouter.post(
       );
     }
     const phone = input.phone ? normalizePhone(input.phone) : null;
+    if (phone && input.phoneConsent !== true) {
+      res.status(400).json({
+        error: "Turn on calls and messages consent to use this phone number.",
+      });
+      return;
+    }
     if (config.customForm) {
       const requirements = config.customForm.contacts;
       if (
@@ -538,6 +545,16 @@ publicRouter.post(
         answers: recordedAnswers,
       },
     });
+    if (phone)
+      await db.phoneMarketingConsent.create({
+        data: {
+          leadId: lead.id,
+          phone,
+          consentText: config.phoneConsent,
+          consentVersion: config.phoneConsentVersion,
+          consentIpHash: ipHash(req.ip ?? "unknown"),
+        },
+      });
     await db.visit.update({
       where: { id: visit.id },
       data: { verified: true, challenged: true },
@@ -566,8 +583,11 @@ publicRouter.post(
             channel,
             address,
             consentText:
-              channel === "EMAIL" ? config.emailConsent : config.smsConsent,
-            consentVersion: config.consentVersion,
+              channel === "EMAIL" ? config.emailConsent : config.phoneConsent,
+            consentVersion:
+              channel === "EMAIL"
+                ? config.consentVersion
+                : config.phoneConsentVersion,
             consentIpHash: ipHash(req.ip ?? "unknown"),
             verificationHash: hash(`${env.TOKEN_SECRET}:${code}`),
             verificationExpiresAt: new Date(Date.now() + 600000),
