@@ -20,6 +20,7 @@ import {
 } from "./runtime-config.js";
 import { runtimeContext } from "./config.js";
 import { recordLandingHit } from "./services/landing-hits.js";
+import { startAdvertiserConversionDispatcher } from "./services/advertiser-conversion-dispatcher.js";
 export const app = express();
 app.disable("x-powered-by");
 // Coolify terminates TLS; only trust its loopback/private reverse-proxy hop.
@@ -224,9 +225,12 @@ if (env.NODE_ENV !== "test") {
   const server = app.listen(env.PORT, "0.0.0.0", () =>
     console.log(`SpareCash: ${env.APP_URL}`),
   );
-  process.on("SIGTERM", () =>
+  const stopAdvertiserConversionDispatcher =
+    startAdvertiserConversionDispatcher();
+  process.on("SIGTERM", () => {
+    stopAdvertiserConversionDispatcher();
     server.close(() => {
       void db.$disconnect();
-    }),
-  );
+    });
+  });
 }
