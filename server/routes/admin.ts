@@ -46,7 +46,9 @@ import {
   managedWorkerActionSchema,
   managedWorkerIdSchema,
   managedWorkerStatuses,
+  runManagedWorker,
 } from "../services/managed-workers.js";
+import { requeueAdvertiserConversions } from "../services/advertiser-conversions.js";
 import {
   unsubscribe,
   transitionLead,
@@ -483,3 +485,35 @@ adminRouter.post("/workers/:id/:action", async (req, res) => {
     .set("Cache-Control", "no-store")
     .json(await controlManagedWorker(id, action, "owner"));
 });
+adminRouter.post(
+  "/advertiser-conversions/retry",
+  rateLimit({
+    windowMs: 60_000,
+    limit: 3,
+    standardHeaders: "draft-8",
+    legacyHeaders: false,
+  }),
+  async (req, res) => {
+    const input = z
+      .object({
+        goal: z.union([z.literal(1), z.literal(2), z.literal(3)]),
+        externalClickIds: z
+          .array(z.string().regex(/^[A-Za-z0-9._:-]{6,200}$/))
+          .min(1)
+          .max(20),
+        reason: z.string().min(10).max(500),
+        confirmation: z.literal("REPLAY ADVERTISER CONVERSIONS"),
+      })
+      .parse(req.body);
+    const requeue = await requeueAdvertiserConversions({
+      goal: input.goal,
+      externalClickIds: input.externalClickIds,
+      actor: "owner",
+      reason: input.reason,
+    });
+    res.set("Cache-Control", "no-store").json({
+      requeue,
+      delivery: await runManagedWorker("advertiser-conversions"),
+    });
+  },
+);
