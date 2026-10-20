@@ -1143,6 +1143,11 @@ td small {
 .email-verification.error > span {
   color: #a44545;
 }
+.email-verification.unknown > span,
+.email-verification.catch_all > span,
+.email-verification.greylisted > span {
+  color: #98752f;
+}
 .email-verification .text-button {
   padding: 2px 0;
   font-size: 10px;

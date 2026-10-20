@@ -49,7 +49,11 @@ import {
   runManagedWorker,
 } from "../services/managed-workers.js";
 import { requeueAdvertiserConversions } from "../services/advertiser-conversions.js";
-import { verifyEmailAddress } from "../services/email-verification.js";
+import {
+  EmailVerificationInconclusiveError,
+  emailVerificationState,
+  verifyEmailAddress,
+} from "../services/email-verification.js";
 import {
   unsubscribe,
   transitionLead,
@@ -329,10 +333,11 @@ adminRouter.post("/subscriptions/:id/verify-email", async (req, res) => {
   }
   try {
     const result = await verifyEmailAddress(subscription.address);
+    const state = emailVerificationState(result);
     const updated = await db.subscription.update({
       where: { id },
       data: {
-        emailVerificationState: result.valid ? "VERIFIED" : "INVALID",
+        emailVerificationState: state,
         emailVerificationCheckedAt: new Date(),
         emailVerificationDiagnosis: result.diagnosis || result.status,
       },
@@ -342,9 +347,29 @@ adminRouter.post("/subscriptions/:id/verify-email", async (req, res) => {
     });
     res.set("Cache-Control", "no-store").json({
       valid: result.valid,
+      state,
       subscription: updated,
     });
-  } catch {
+  } catch (error) {
+    if (error instanceof EmailVerificationInconclusiveError) {
+      const updated = await db.subscription.update({
+        where: { id },
+        data: {
+          emailVerificationState: "UNKNOWN",
+          emailVerificationCheckedAt: new Date(),
+          emailVerificationDiagnosis: error.message,
+        },
+      });
+      await audit("owner", "subscription.email_checked", id, {
+        state: updated.emailVerificationState,
+      });
+      res.set("Cache-Control", "no-store").json({
+        valid: false,
+        state: "UNKNOWN",
+        subscription: updated,
+      });
+      return;
+    }
     await db.subscription.update({
       where: { id },
       data: {

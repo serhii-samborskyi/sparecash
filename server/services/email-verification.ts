@@ -29,6 +29,25 @@ export type EmailVerification = {
   diagnosis: string;
 };
 
+export class EmailVerificationInconclusiveError extends Error {
+  constructor(message = "The mailbox server did not respond in time") {
+    super(message);
+    this.name = "EmailVerificationInconclusiveError";
+  }
+}
+
+export function emailVerificationState(result: EmailVerification) {
+  if (result.valid) return "VERIFIED";
+  const status = result.status
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+  if (status === "invalid") return "INVALID";
+  if (status === "catch_all" || status === "catchall") return "CATCH_ALL";
+  if (status === "grey_listed" || status === "greylisted") return "GREYLISTED";
+  return "UNKNOWN";
+}
+
 export async function verifyEmailAddress(
   email: string,
 ): Promise<EmailVerification> {
@@ -43,11 +62,19 @@ export async function verifyEmailAddress(
   try {
     response = await fetch(url, {
       method: "GET",
-      headers: { Accept: "application/json" },
+      headers: {
+        Accept: "application/json",
+        "User-Agent": "SpareCash/1.0 (+https://sparecash.fit)",
+      },
       redirect: "error",
       signal: AbortSignal.timeout(12_000),
     });
-  } catch {
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      (error.name === "TimeoutError" || error.name === "AbortError")
+    )
+      throw new EmailVerificationInconclusiveError();
     throw new Error("Email verification is temporarily unavailable");
   }
   if (!response.ok)

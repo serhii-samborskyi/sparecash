@@ -111,9 +111,15 @@ function EmailVerificationControl({
       ? "Mailbox verified"
       : state === "INVALID"
         ? "Invalid mailbox"
-        : state === "ERROR"
-          ? "Check failed"
-          : "Not checked";
+        : state === "CATCH_ALL"
+          ? "Catch-all domain"
+          : state === "GREYLISTED"
+            ? "Retry later"
+            : state === "UNKNOWN"
+              ? "Could not verify"
+              : state === "ERROR"
+                ? "Check failed"
+                : "Not checked";
   return (
     <div className={`email-verification ${state.toLowerCase()}`}>
       <span>
@@ -134,7 +140,9 @@ function EmailVerificationControl({
               notify(
                 result.valid
                   ? "Email mailbox verified"
-                  : "Email mailbox is invalid",
+                  : result.state === "INVALID"
+                    ? "Email mailbox is invalid"
+                    : "The mailbox could not be verified. Try again later.",
               );
               onVerified();
             } catch (error) {

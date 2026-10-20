@@ -4,7 +4,11 @@ import {
   defaultRuntimeValues,
   type RuntimeConfiguration,
 } from "../server/runtime-schema";
-import { verifyEmailAddress } from "../server/services/email-verification";
+import {
+  EmailVerificationInconclusiveError,
+  emailVerificationState,
+  verifyEmailAddress,
+} from "../server/services/email-verification";
 
 let config: RuntimeConfiguration;
 let fetchMock: ReturnType<typeof vi.fn>;
@@ -80,6 +84,39 @@ it("rejects non-valid and mismatched provider results", async () => {
     );
   await expect(run("bad@example.com")).resolves.toMatchObject({ valid: false });
   await expect(run("bad@example.com")).resolves.toMatchObject({ valid: false });
+});
+
+it("classifies provider outcomes without calling inconclusive results invalid", () => {
+  expect(
+    emailVerificationState({
+      valid: false,
+      status: "Invalid",
+      diagnosis: "Mailbox does not exist",
+    }),
+  ).toBe("INVALID");
+  expect(
+    emailVerificationState({
+      valid: false,
+      status: "Unknown",
+      diagnosis: "Mailbox server did not respond",
+    }),
+  ).toBe("UNKNOWN");
+  expect(
+    emailVerificationState({
+      valid: false,
+      status: "Catch-all",
+      diagnosis: "Domain accepts every address",
+    }),
+  ).toBe("CATCH_ALL");
+});
+
+it("marks provider timeouts as an inconclusive mailbox check", async () => {
+  const timeout = new Error("timed out");
+  timeout.name = "TimeoutError";
+  fetchMock.mockRejectedValue(timeout);
+  await expect(run("person@example.com")).rejects.toBeInstanceOf(
+    EmailVerificationInconclusiveError,
+  );
 });
 
 it("fails closed without exposing provider responses", async () => {
