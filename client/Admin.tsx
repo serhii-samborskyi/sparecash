@@ -116,7 +116,7 @@ function EmailVerificationControl({
           : state === "GREYLISTED"
             ? "Retry later"
             : state === "UNKNOWN"
-              ? "Could not verify"
+              ? "Unverified — suppressed"
               : state === "ERROR"
                 ? "Check failed"
                 : "Not checked";
@@ -142,7 +142,7 @@ function EmailVerificationControl({
                   ? "Email mailbox is valid"
                   : result.state === "INVALID"
                     ? "Email mailbox is invalid"
-                    : "The mailbox could not be verified. Try again later.",
+                    : "Email unverified; follow-ups suppressed. Try again later.",
               );
               onVerified();
             } catch (error) {

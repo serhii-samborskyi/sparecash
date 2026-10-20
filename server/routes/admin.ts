@@ -322,6 +322,29 @@ adminRouter.post("/subscriptions/:id/unsubscribe", async (req, res) => {
 });
 adminRouter.post("/subscriptions/:id/verify-email", async (req, res) => {
   const id = String(req.params.id);
+  async function saveResult(state: string, diagnosis: string) {
+    return db.$transaction(async (tx) => {
+      const updated = await tx.subscription.update({
+        where: { id },
+        data: {
+          emailVerificationState: state,
+          emailVerificationCheckedAt: new Date(),
+          emailVerificationDiagnosis: diagnosis,
+        },
+      });
+      if (state !== "VERIFIED") {
+        await tx.enrollment.updateMany({
+          where: { subscriptionId: id, status: "ACTIVE" },
+          data: { status: "STOPPED" },
+        });
+        await tx.delivery.updateMany({
+          where: { subscriptionId: id, status: "PENDING" },
+          data: { status: "CANCELLED" },
+        });
+      }
+      return updated;
+    });
+  }
   const subscription = await db.subscription.findUniqueOrThrow({
     where: { id },
   });
@@ -334,14 +357,7 @@ adminRouter.post("/subscriptions/:id/verify-email", async (req, res) => {
   try {
     const result = await verifyEmailAddress(subscription.address);
     const state = emailVerificationState(result);
-    const updated = await db.subscription.update({
-      where: { id },
-      data: {
-        emailVerificationState: state,
-        emailVerificationCheckedAt: new Date(),
-        emailVerificationDiagnosis: result.diagnosis || result.status,
-      },
-    });
+    const updated = await saveResult(state, result.diagnosis || result.status);
     await audit("owner", "subscription.email_checked", id, {
       state: updated.emailVerificationState,
     });
@@ -352,14 +368,7 @@ adminRouter.post("/subscriptions/:id/verify-email", async (req, res) => {
     });
   } catch (error) {
     if (error instanceof EmailVerificationInconclusiveError) {
-      const updated = await db.subscription.update({
-        where: { id },
-        data: {
-          emailVerificationState: "UNKNOWN",
-          emailVerificationCheckedAt: new Date(),
-          emailVerificationDiagnosis: error.message,
-        },
-      });
+      const updated = await saveResult("UNKNOWN", error.message);
       await audit("owner", "subscription.email_checked", id, {
         state: updated.emailVerificationState,
       });
