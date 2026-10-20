@@ -69,6 +69,30 @@ const stateTone = (state: string) =>
     : ["PENDING", "DRAFT", "RECOMMENDED", "UNCERTAIN"].includes(state)
       ? "amber"
       : "neutral";
+function landingCardDetails(variant: any) {
+  const config = variant.config ?? {};
+  const fields = config.customForm?.fields ?? [];
+  const contacts = config.customForm?.contacts ?? {};
+  const requiredContact = Object.entries(contacts).find(
+    ([, value]) => value === "required",
+  )?.[0];
+  const contact = requiredContact
+    ? ` · ${requiredContact === "phone" ? "phone" : requiredContact} required`
+    : "";
+  if (config.customForm?.matchEstimate) {
+    return { kind: "gauge", label: `Approval gauge${contact}` };
+  }
+  if (fields.some((field: any) => field.id === "term_days")) {
+    return { kind: "slider", label: `Amount + term sliders${contact}` };
+  }
+  if ((config.questions?.length ?? 0) > 0) {
+    return {
+      kind: "guide",
+      label: `${config.questions.length}-question worker guide`,
+    };
+  }
+  return { kind: "custom", label: `Custom landing${contact}` };
+}
 export function Admin() {
   const [page, setPage] = useState(
       location.pathname.split("/")[2] || "overview",
@@ -621,25 +645,29 @@ export function Admin() {
                     </button>
                   </div>
                   <div className="variant-miniatures">
-                    {exp.variants.slice(0, 4).map((variant: any) => (
-                      <a
-                        key={variant.id}
-                        className={`mini-page theme-${variant.config.theme}`}
-                        href={`/preview/${exp.id}?variant=${variant.id}`}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        <span className="mini-label">{variant.name}</span>
-                        <strong>{variant.config.title}</strong>
-                        <span className="mini-line" />
-                        <span className="mini-button" />
-                        {variant.config.questions.length > 0 && (
-                          <span className="mini-quiz">
-                            {variant.config.questions.length} question quiz
+                    {exp.variants.slice(0, 4).map((variant: any) => {
+                      const details = landingCardDetails(variant);
+                      return (
+                        <a
+                          key={variant.id}
+                          className={`mini-page theme-${variant.config.theme} kind-${details.kind}`}
+                          href={`/preview/${exp.id}?variant=${variant.id}`}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          <span className="mini-label">
+                            {variant.weight}% traffic
                           </span>
-                        )}
-                      </a>
-                    ))}
+                          <strong>{variant.name}</strong>
+                          <span className="mini-description">
+                            {details.label}
+                          </span>
+                          <span className="mini-preview-link">
+                            Open preview <ArrowUpRight size={11} />
+                          </span>
+                        </a>
+                      );
+                    })}
                   </div>
                   <div className="experiment-facts">
                     <span>

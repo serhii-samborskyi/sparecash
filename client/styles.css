@@ -896,41 +896,48 @@ p {
   border-color: #e9deeb;
   color: #654967;
 }
+.mini-page.kind-gauge {
+  background: #edf6ea;
+  border-color: #cfe0c8;
+}
+.mini-page.kind-slider {
+  background: #eef5f1;
+  border-color: #cddfd7;
+}
+.mini-page.kind-guide {
+  background: #f6f3e9;
+  border-color: #e3dcc8;
+}
 .mini-label {
-  min-height: 22px;
   font-size: 8px;
   line-height: 1.35;
-  letter-spacing: 0.4px;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
   opacity: 0.5;
-  margin-bottom: 15px;
+  margin-bottom: 12px;
 }
 .mini-page strong {
   font-family: "Manrope", sans-serif;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 750;
   letter-spacing: -0.5px;
   line-height: 1.35;
-  max-width: 145px;
+  max-width: 180px;
 }
-.mini-line {
-  width: 75%;
-  height: 3px;
-  background: currentColor;
-  opacity: 0.12;
-  margin-top: 12px;
-}
-.mini-button {
-  width: 44%;
-  height: 13px;
-  border-radius: 2px;
-  background: currentColor;
-  opacity: 0.75;
-  margin-top: 12px;
-}
-.mini-quiz {
-  font-size: 7px;
-  opacity: 0.6;
+.mini-description {
   margin-top: 9px;
+  color: #627267;
+  font-size: 9px;
+  line-height: 1.45;
+}
+.mini-preview-link {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: auto;
+  padding-top: 18px;
+  font-size: 9px;
+  font-weight: 700;
 }
 .experiment-facts {
   display: flex;
