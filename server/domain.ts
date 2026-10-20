@@ -334,7 +334,7 @@ export const landingSchema = z
       .min(20)
       .max(1000)
       .default(
-        "I agree to receive daily marketing emails about loan options from SpareCash. I can unsubscribe at any time.",
+        "I agree to receive recurring marketing emails about personal-loan options from SpareCash at the email address I provide. Frequency may vary, and messages may continue until I unsubscribe. Consent is not a condition of using the service. I can unsubscribe at any time.",
       ),
     smsConsent: z
       .string()
