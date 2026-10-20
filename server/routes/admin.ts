@@ -49,6 +49,7 @@ import {
   runManagedWorker,
 } from "../services/managed-workers.js";
 import { requeueAdvertiserConversions } from "../services/advertiser-conversions.js";
+import { verifyEmailAddress } from "../services/email-verification.js";
 import {
   unsubscribe,
   transitionLead,
@@ -314,6 +315,50 @@ adminRouter.post("/subscriptions/:id/unsubscribe", async (req, res) => {
   await unsubscribe(String(req.params.id), "Owner unsubscribed this contact");
   await audit("owner", "subscription.unsubscribed", String(req.params.id));
   res.json({ ok: true });
+});
+adminRouter.post("/subscriptions/:id/verify-email", async (req, res) => {
+  const id = String(req.params.id);
+  const subscription = await db.subscription.findUniqueOrThrow({
+    where: { id },
+  });
+  if (subscription.channel !== "EMAIL") {
+    res
+      .status(400)
+      .json({ error: "This subscription is not an email address." });
+    return;
+  }
+  try {
+    const result = await verifyEmailAddress(subscription.address);
+    const updated = await db.subscription.update({
+      where: { id },
+      data: {
+        emailVerificationState: result.valid ? "VERIFIED" : "INVALID",
+        emailVerificationCheckedAt: new Date(),
+        emailVerificationDiagnosis: result.diagnosis || result.status,
+      },
+    });
+    await audit("owner", "subscription.email_checked", id, {
+      state: updated.emailVerificationState,
+    });
+    res.set("Cache-Control", "no-store").json({
+      valid: result.valid,
+      subscription: updated,
+    });
+  } catch {
+    await db.subscription.update({
+      where: { id },
+      data: {
+        emailVerificationState: "ERROR",
+        emailVerificationCheckedAt: new Date(),
+        emailVerificationDiagnosis: "Verification service unavailable",
+      },
+    });
+    await audit("owner", "subscription.email_verification_failed", id);
+    res.status(503).set("Cache-Control", "no-store").json({
+      error:
+        "Email verification is unavailable. Check the MyEmailVerifier connection in Settings and retry.",
+    });
+  }
 });
 adminRouter.get("/sources", async (_req, res) => {
   res.json(await sources());

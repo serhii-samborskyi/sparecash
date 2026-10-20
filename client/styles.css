@@ -1120,6 +1120,33 @@ td small {
   background: #ecf3e4;
   color: #6b8a51;
 }
+.email-verification {
+  display: flex;
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 98px;
+}
+.email-verification > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #87947d;
+  font-size: 10px;
+  white-space: nowrap;
+}
+.email-verification.verified > span {
+  color: #527a40;
+  font-weight: 600;
+}
+.email-verification.invalid > span,
+.email-verification.error > span {
+  color: #a44545;
+}
+.email-verification .text-button {
+  padding: 2px 0;
+  font-size: 10px;
+}
 .audience-actions-cell {
   width: 84px;
   padding-left: 8px;

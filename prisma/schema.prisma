@@ -395,25 +395,28 @@ model PhoneMarketingConsent {
 }
 
 model Subscription {
-  id                    String             @id @default(uuid())
-  leadId                String
-  lead                  Lead               @relation(fields: [leadId], references: [id])
-  channel               Channel
-  address               String
-  status                SubscriptionStatus @default(PENDING)
-  consentText           String
-  consentVersion        String
-  consentAt             DateTime           @default(now())
-  consentIpHash         String
-  confirmedAt           DateTime?
-  stoppedAt             DateTime?
-  providerListId        Int?
-  verificationHash      String?
-  verificationExpiresAt DateTime?
-  verificationAttempts  Int                @default(0)
-  lastSentAt            DateTime?
-  enrollments           Enrollment[]
-  deliveries            Delivery[]
+  id                         String             @id @default(uuid())
+  leadId                     String
+  lead                       Lead               @relation(fields: [leadId], references: [id])
+  channel                    Channel
+  address                    String
+  status                     SubscriptionStatus @default(PENDING)
+  consentText                String
+  consentVersion             String
+  consentAt                  DateTime           @default(now())
+  consentIpHash              String
+  confirmedAt                DateTime?
+  stoppedAt                  DateTime?
+  providerListId             Int?
+  verificationHash           String?
+  verificationExpiresAt      DateTime?
+  verificationAttempts       Int                @default(0)
+  emailVerificationState     String             @default("NOT_CHECKED")
+  emailVerificationCheckedAt DateTime?
+  emailVerificationDiagnosis String?
+  lastSentAt                 DateTime?
+  enrollments                Enrollment[]
+  deliveries                 Delivery[]
 
   @@unique([channel, address])
   @@index([leadId])

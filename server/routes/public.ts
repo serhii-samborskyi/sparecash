@@ -509,11 +509,13 @@ publicRouter.post(
         .json({ error: "Enter a valid address for each selected channel." });
       return;
     }
+    let emailVerification:
+      Awaited<ReturnType<typeof verifyEmailAddress>> | undefined;
     if (input.email) {
       if (env.MYEMAILVERIFIER_API_KEY) {
         try {
-          const verification = await verifyEmailAddress(input.email);
-          if (!verification.valid) {
+          emailVerification = await verifyEmailAddress(input.email);
+          if (!emailVerification.valid) {
             res.status(400).json({
               error:
                 "We could not verify this email address. Check it and try again.",
@@ -581,6 +583,13 @@ publicRouter.post(
             consentIpHash: ipHash(req.ip ?? "unknown"),
             verificationHash: hash(`${env.TOKEN_SECRET}:${code}`),
             verificationExpiresAt: new Date(Date.now() + 600000),
+            ...(channel === "EMAIL" && emailVerification
+              ? {
+                  emailVerificationState: "VERIFIED",
+                  emailVerificationCheckedAt: new Date(),
+                  emailVerificationDiagnosis: emailVerification.diagnosis,
+                }
+              : {}),
           },
         });
         await tx.leadEvent.create({

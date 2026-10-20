@@ -94,6 +94,63 @@ function landingCardDetails(variant: any) {
   }
   return { kind: "custom", label: `Custom landing${contact}` };
 }
+function EmailVerificationControl({
+  subscription,
+  notify,
+  onVerified,
+}: {
+  subscription?: any;
+  notify: (message: string) => void;
+  onVerified: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  if (!subscription) return <span className="muted">—</span>;
+  const state = subscription.emailVerificationState ?? "NOT_CHECKED";
+  const label =
+    state === "VERIFIED"
+      ? "Mailbox verified"
+      : state === "INVALID"
+        ? "Invalid mailbox"
+        : state === "ERROR"
+          ? "Check failed"
+          : "Not checked";
+  return (
+    <div className={`email-verification ${state.toLowerCase()}`}>
+      <span>
+        {state === "VERIFIED" && <Check size={13} />}
+        {label}
+      </span>
+      {state !== "VERIFIED" && (
+        <button
+          type="button"
+          className="text-button"
+          disabled={busy}
+          onClick={async () => {
+            setBusy(true);
+            try {
+              const result = await post(
+                `/admin/subscriptions/${subscription.id}/verify-email`,
+              );
+              notify(
+                result.valid
+                  ? "Email mailbox verified"
+                  : "Email mailbox is invalid",
+              );
+              onVerified();
+            } catch (error) {
+              notify((error as Error).message);
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          {busy && <Spinner />}
+          {state === "NOT_CHECKED" ? "Verify email" : "Verify again"}
+        </button>
+      )}
+    </div>
+  );
+}
 export function Admin() {
   const [page, setPage] = useState(
       location.pathname.split("/")[2] || "overview",
@@ -802,6 +859,7 @@ export function Admin() {
                         <tr>
                           <th>Contact</th>
                           <th>Channels</th>
+                          <th>Email verification</th>
                           <th>Stage</th>
                           <th>Source</th>
                           <th>Added</th>
@@ -861,6 +919,16 @@ export function Admin() {
                                   );
                                 })}
                               </div>
+                            </td>
+                            <td>
+                              <EmailVerificationControl
+                                subscription={lead.subscriptions.find(
+                                  (subscription: any) =>
+                                    subscription.channel === "EMAIL",
+                                )}
+                                notify={notify}
+                                onVerified={() => void loadPage()}
+                              />
                             </td>
                             <td>
                               <Badge tone={stateTone(lead.status)}>
@@ -1540,6 +1608,7 @@ export function Admin() {
             onSaved={() => {
               setModal(null);
               void refresh();
+              void loadPage();
             }}
           />
         </Modal>
@@ -1942,6 +2011,13 @@ function LeadDetails({
             Consent {s.consentVersion} · {date(s.consentAt)}
             {s.confirmedAt ? ` · Confirmed ${date(s.confirmedAt)}` : ""}
           </small>
+          {s.channel === "EMAIL" && (
+            <EmailVerificationControl
+              subscription={s}
+              notify={notify}
+              onVerified={onSaved}
+            />
+          )}
           {s.status !== "UNSUBSCRIBED" && (
             <button
               className="text-button danger"

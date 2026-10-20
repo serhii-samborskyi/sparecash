@@ -808,6 +808,8 @@ it("records consent, starts warm-up, and keeps email confirmation optional", asy
   });
   emailId = sub.id;
   expect(sub.status).toBe("PENDING");
+  expect(sub.emailVerificationState).toBe("VERIFIED");
+  expect(sub.emailVerificationCheckedAt).toBeInstanceOf(Date);
   expect(sub.consentText).toBe(oldConsent);
   expect(
     await db.advertiserConversion.findUniqueOrThrow({
@@ -872,6 +874,34 @@ it("records consent, starts warm-up, and keeps email confirmation optional", asy
   expect(offer.status).toBe(200);
   applicationId = new URL(offer.data.url).searchParams.get("subId3")!;
   expect(applicationId).toBeTruthy();
+});
+it("lets the owner verify an unchecked email mailbox", async () => {
+  await db.subscription.update({
+    where: { id: emailId },
+    data: {
+      emailVerificationState: "NOT_CHECKED",
+      emailVerificationCheckedAt: null,
+      emailVerificationDiagnosis: null,
+    },
+  });
+  expect(
+    (await request(`/api/admin/subscriptions/${emailId}/verify-email`, "POST"))
+      .status,
+  ).toBe(401);
+  const response = await request(
+    `/api/admin/subscriptions/${emailId}/verify-email`,
+    "POST",
+    {},
+    true,
+  );
+  expect(response.status).toBe(200);
+  expect(response.data.valid).toBe(true);
+  expect(
+    await db.subscription.findUniqueOrThrow({ where: { id: emailId } }),
+  ).toMatchObject({
+    emailVerificationState: "VERIFIED",
+    emailVerificationDiagnosis: "Mailbox Exists and Active",
+  });
 });
 it("sends a due email once and enforces the next-day cap", async () => {
   const timezone = daytimeTimezone();
