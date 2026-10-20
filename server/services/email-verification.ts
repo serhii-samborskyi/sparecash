@@ -2,8 +2,16 @@ import { z } from "zod";
 import { env } from "../config.js";
 
 const booleanText = z
-  .union([z.boolean(), z.enum(["true", "false"])])
-  .transform((value) => value === true || value === "true");
+  .union([
+    z.boolean(),
+    z.literal(0),
+    z.literal(1),
+    z.enum(["true", "false", "0", "1"]),
+  ])
+  .transform(
+    (value) =>
+      value === true || value === 1 || value === "true" || value === "1",
+  );
 const responseSchema = z.object({
   Address: z.string().email().max(254),
   Status: z.string().min(1).max(100),

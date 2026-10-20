@@ -43,6 +43,25 @@ it("accepts a matching address with Valid status", async () => {
   expect(options).toMatchObject({ method: "GET", redirect: "error" });
 });
 
+it("accepts numeric boolean flags returned by the live API", async () => {
+  fetchMock.mockResolvedValue(
+    Response.json({
+      Address: "person@example.com",
+      Status: "Valid",
+      Diagnosis: "Mailbox Exists and Active",
+      catch_all: 0,
+      Disposable_Domain: 0,
+      Role_Based: 0,
+      Free_Domain: 1,
+      Greylisted: 0,
+    }),
+  );
+  await expect(run("person@example.com")).resolves.toMatchObject({
+    valid: true,
+    status: "Valid",
+  });
+});
+
 it("rejects non-valid and mismatched provider results", async () => {
   fetchMock
     .mockResolvedValueOnce(
