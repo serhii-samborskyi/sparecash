@@ -189,11 +189,7 @@ export async function testProviderConnection(provider: Provider) {
         "Save your MyEmailVerifier API key first.",
       );
       const result = await verifyEmailAddress("support@myemailverifier.com");
-      requireValue(
-        result.valid,
-        "The API key was accepted, but the provider did not validate its test mailbox.",
-      );
-      return "API key accepted and mailbox validation succeeded.";
+      return `API key accepted. The provider returned ${result.status} for its support mailbox.`;
     });
   } else if (provider === "bluebubbles") {
     function url(path: string) {

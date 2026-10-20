@@ -87,12 +87,13 @@ it("checks MyEmailVerifier with its documented provider mailbox", async () => {
   fetchMock.mockResolvedValue(
     Response.json({
       Address: "support@myemailverifier.com",
-      Status: "Valid",
-      Diagnosis: "Mailbox Exists and Active",
+      Status: "Catch-all",
+      Diagnosis: "Catch all",
     }),
   );
   const result = await run("myemailverifier");
   expect(result.status).toBe("success");
+  expect(result.checks[0].message).toContain("Catch-all");
   expect(new URL(fetchMock.mock.calls[0][0]).hostname).toBe(
     "client.myemailverifier.com",
   );
