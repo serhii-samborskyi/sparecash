@@ -147,6 +147,7 @@ beforeAll(async () => {
     LIVE_DELIVERY: "true",
     LIVE_SOURCE_BLOCKING: "false",
     BREVO_API_KEY: "test-brevo",
+    MYEMAILVERIFIER_API_KEY: "test-email-verifier",
     BREVO_SENDER_EMAIL: "test@example.com",
     BREVO_FOLDER_ID: 1,
     BLUEBUBBLES_URL: "https://bluebubbles.example.test",
@@ -162,6 +163,19 @@ beforeAll(async () => {
       providerCalls.push({ url, ...init });
       if (url === "https://challenges.cloudflare.com/turnstile/v0/siteverify")
         return Response.json({ success: true, hostname: "localhost" });
+      if (url.startsWith("https://client.myemailverifier.com/")) {
+        const address = decodeURIComponent(
+          new URL(url).pathname.split("/").at(-2)!,
+        );
+        const valid = !address.startsWith("invalid@");
+        return Response.json({
+          Address: address,
+          Status: valid ? "Valid" : "Invalid",
+          Diagnosis: valid
+            ? "Mailbox Exists and Active"
+            : "Mailbox Does Not Exist",
+        });
+      }
       if (url.includes("/smtp/email"))
         return Response.json({ messageId: "confirmation-test" });
       if (url.includes("/contacts/lists")) return Response.json({ id: 42 });
@@ -692,6 +706,36 @@ it("rejects honeypots without sending a verification message", async () => {
   expect(
     (await db.visit.findUniqueOrThrow({ where: { id: visitId } })).botScore,
   ).toBe(100);
+});
+it("rejects an invalid mailbox before storing the contact", async () => {
+  await db.visit.update({
+    where: { id: visitId },
+    data: {
+      verified: true,
+      verificationState: "VERIFIED",
+      verificationExpiresAt: new Date(Date.now() + 30 * 60_000),
+    },
+  });
+  const leads = await db.lead.count();
+  const subscriptions = await db.subscription.count();
+  const before = providerCalls.length;
+  const response = await request("/api/public/subscribe", "POST", {
+    visitToken,
+    name: "Invalid Mailbox",
+    timezone: "America/Chicago",
+    answers: {},
+    email: "invalid@example.com",
+    channels: ["EMAIL"],
+    consent: true,
+    adultUS: true,
+    company: "",
+  });
+  expect(response.status).toBe(400);
+  expect(response.data.error).toContain("could not verify");
+  expect(await db.lead.count()).toBe(leads);
+  expect(await db.subscription.count()).toBe(subscriptions);
+  expect(providerCalls.slice(before)).toHaveLength(1);
+  expect(providerCalls.at(-1)?.url).toContain("client.myemailverifier.com");
 });
 it("rejects subscriptions without storing contacts or contacting providers when delivery is paused", async () => {
   const previous = await readRuntimeConfiguration();

@@ -403,12 +403,13 @@ export function Admin() {
                 </div>
                 <div>
                   <b>
-                    {connected === 6
+                    {connected === data.integrations.length
                       ? "Your connections are configured"
                       : "Let’s get your funnel ready"}
                   </b>
                   <p>
-                    {connected} of 6 integrations configured.{" "}
+                    {connected} of {data.integrations.length} integrations
+                    configured.{" "}
                     {data.liveDelivery
                       ? "Live message delivery is enabled."
                       : "Message delivery is paused while you set up."}

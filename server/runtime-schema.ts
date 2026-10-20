@@ -42,6 +42,7 @@ export const secretRuntimeSchema = z
     CLARITY_EXPORT_TOKEN: optionalSecret,
     ONESIGNAL_API_KEY: optionalSecret,
     BREVO_API_KEY: optionalSecret,
+    MYEMAILVERIFIER_API_KEY: optionalSecret,
     BLUEBUBBLES_PASSWORD: optionalSecret,
     PROPELLER_API_TOKEN: optionalSecret,
     PROPELLER_POSTBACK_URL: optionalSecret,

@@ -4,15 +4,16 @@ All provider values and credentials below are configured in the owner **Settings
 
 ## Connection tests
 
-Settings auto-save when you leave a field; switches and selects save immediately. Wait for **All changes saved**, then use **Test connection** under Microsoft Clarity, OneSignal, Brevo, BlueBubbles, or PropellerAds. Tests work with live delivery and source exclusions disabled. Each result distinguishes credential access from incomplete setup; edits invalidate results and require saving before another test. Provider response bodies, credentials, and account data are not returned or included in the audit entry.
+Settings auto-save when you leave a field; switches and selects save immediately. Wait for **All changes saved**, then use **Test connection** under Microsoft Clarity, OneSignal, Brevo, MyEmailVerifier, BlueBubbles, or PropellerAds. Tests work with live delivery and source exclusions disabled. Each result distinguishes credential access from incomplete setup; edits invalidate results and require saving before another test. Provider response bodies, credentials, and account data are not returned or included in the audit entry.
 
 - **Microsoft Clarity:** reads one day of aggregate dashboard data to verify the Data Export token. The check consumes one of the project's ten daily export requests and does not import or return the rows. [Data Export reference](https://learn.microsoft.com/en-us/clarity/setup-and-installation/clarity-data-export-api).
 - **OneSignal:** reads one message listing using the app API key. This checks app access, not browser subscription or push delivery. [API reference](https://documentation.onesignal.com/reference/view-messages).
 - **Brevo:** checks account access, the saved sender's active status, the contact-list folder, and the app's business mailing address. Folder ID `0` is unconfigured. No campaign or email is created. [Senders](https://developers.brevo.com/reference/get-senders), [folders](https://developers.brevo.com/reference/get-folder).
+- **MyEmailVerifier:** validates the provider's documented support mailbox. This consumes one single-address validation request and does not save a contact.
 - **BlueBubbles:** reads server information and registered webhooks, checking that the current reply URL is registered for `new-message`. It does not verify SMS forwarding or actual incoming delivery; test those with your own phone. [Server API](https://docs.bluebubbles.app/server/developer-guides/rest-api-and-webhooks).
 - **PropellerAds:** reads the advertiser balance endpoint to verify API access, discarding the balance. This does not test exclusion write permissions or change campaigns. [API reference](https://ssp-api.propellerads.com/v5/docs/).
 
-Tests use authenticated owner-only `POST /api/admin/integrations/{provider}/test` endpoints (`clarity`, `onesignal`, `brevo`, `bluebubbles`, `propellerads`). Only saved settings are used. Requests time out after 12 seconds each and do not follow redirects.
+Tests use authenticated owner-only `POST /api/admin/integrations/{provider}/test` endpoints (`clarity`, `onesignal`, `brevo`, `myemailverifier`, `bluebubbles`, `propellerads`). Only saved settings are used. Requests time out after 12 seconds each and do not follow redirects.
 
 ## Microsoft Clarity
 
@@ -200,6 +201,14 @@ https://sparecash.leadtechx.com/api/webhooks/brevo?token=WEBHOOK_TOKEN
 Accepted normalized fields are `event` and `email`. `unsubscribe`, `unsubscribed`, `spam`, `hard_bounce`, and `blocked` suppress the local subscription immediately. Delivery states currently track provider acceptance rather than guaranteed inbox delivery.
 
 Reference: https://developers.brevo.com/reference/create-email-campaign
+
+## MyEmailVerifier
+
+Save the API key in **Settings → Provider connections → MyEmailVerifier**. The key remains server-side and masked in the owner settings response.
+
+Every public standard or custom landing form uses the shared `/api/public/subscribe` endpoint. The submitted email first has to pass the local syntax and length checks. If an optional email field is left empty, no external request is made. When an email is present, the server checks it with MyEmailVerifier before creating a lead, subscription, follow-up enrollment, or PropellerAds Goal 3 conversion. Only a `Valid` result whose returned address matches the submitted address is accepted. An invalid result returns a correctable form error; an unavailable or malformed provider response stops the submission temporarily so an unverified address is not saved.
+
+The email channel is offered only when MyEmailVerifier, Brevo, live delivery, and an active subscriber email chain are all configured. The connection test validates MyEmailVerifier's documented support mailbox and consumes one validation request.
 
 ## BlueBubbles
 

@@ -31,6 +31,7 @@ beforeEach(() => {
     ONESIGNAL_APP_ID: "test-app-id",
     ONESIGNAL_API_KEY: "test-only-onesignal-key",
     BREVO_API_KEY: "test-only-brevo-key",
+    MYEMAILVERIFIER_API_KEY: "test-only-email-verifier-key",
     BREVO_SENDER_EMAIL: "sender@example.com",
     BREVO_FOLDER_ID: 12,
     BLUEBUBBLES_URL: "https://bluebubbles.example.test",
@@ -64,6 +65,7 @@ it.each([
   "clarity",
   "onesignal",
   "brevo",
+  "myemailverifier",
   "bluebubbles",
   "propellerads",
 ] as const)(
@@ -71,6 +73,7 @@ it.each([
   async (provider) => {
     config.ONESIGNAL_API_KEY =
       config.BREVO_API_KEY =
+      config.MYEMAILVERIFIER_API_KEY =
       config.BLUEBUBBLES_PASSWORD =
       config.PROPELLER_API_TOKEN =
       config.CLARITY_EXPORT_TOKEN =
@@ -79,6 +82,22 @@ it.each([
     expect(fetchMock).not.toHaveBeenCalled();
   },
 );
+
+it("checks MyEmailVerifier with its documented provider mailbox", async () => {
+  fetchMock.mockResolvedValue(
+    Response.json({
+      Address: "support@myemailverifier.com",
+      Status: "Valid",
+      Diagnosis: "Mailbox Exists and Active",
+    }),
+  );
+  const result = await run("myemailverifier");
+  expect(result.status).toBe("success");
+  expect(new URL(fetchMock.mock.calls[0][0]).hostname).toBe(
+    "client.myemailverifier.com",
+  );
+  expect(JSON.stringify(result)).not.toContain(config.MYEMAILVERIFIER_API_KEY);
+});
 
 it("checks Clarity Data Export without exposing its token or importing data", async () => {
   fetchMock.mockResolvedValue(

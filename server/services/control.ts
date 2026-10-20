@@ -417,6 +417,12 @@ export async function integrationStatus() {
         !!env.BREVO_FOLDER_ID,
     },
     {
+      id: "myemailverifier",
+      name: "MyEmailVerifier",
+      purpose: "Validate submitted email addresses",
+      connected: !!env.MYEMAILVERIFIER_API_KEY,
+    },
+    {
       id: "bluebubbles",
       name: "BlueBubbles",
       purpose: "Text messages",

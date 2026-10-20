@@ -503,6 +503,15 @@ export function ConnectionSettings({
             )}
             disabled={busy}
           />
+          <h3>MyEmailVerifier</h3>
+          <p className="help">
+            Checks every syntactically valid submitted email before the contact
+            is saved or enrolled in follow-ups.
+          </p>
+          {secret("MYEMAILVERIFIER_API_KEY", "MyEmailVerifier API key")}
+          {testButton("myemailverifier", "MyEmailVerifier", [
+            "MYEMAILVERIFIER_API_KEY",
+          ])}
           <h3>BlueBubbles</h3>
           <div className="form-grid">
             {field("BLUEBUBBLES_URL", "BlueBubbles server URL", "url")}

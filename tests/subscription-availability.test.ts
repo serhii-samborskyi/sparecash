@@ -13,6 +13,7 @@ beforeEach(() => {
     ONESIGNAL_APP_ID: "test-app",
     ONESIGNAL_API_KEY: "test-key",
     BREVO_API_KEY: "test-key",
+    MYEMAILVERIFIER_API_KEY: "test-verifier-key",
     BREVO_SENDER_EMAIL: "test@example.com",
     BREVO_FOLDER_ID: 1,
     BLUEBUBBLES_URL: "https://sms.example.test",
@@ -34,6 +35,11 @@ it("does not offer email with an incomplete sending configuration", async () => 
   ]);
   config.BREVO_FOLDER_ID = 1;
   config.BREVO_API_KEY = "";
+  expect((await subscriptionAvailability()).availableChannels).not.toContain(
+    "EMAIL",
+  );
+  config.BREVO_API_KEY = "test-key";
+  config.MYEMAILVERIFIER_API_KEY = "";
   expect((await subscriptionAvailability()).availableChannels).not.toContain(
     "EMAIL",
   );

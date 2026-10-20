@@ -55,6 +55,7 @@ import {
   transitionLead,
 } from "../services/journeys.js";
 import { attachLandingHit } from "../services/landing-hits.js";
+import { verifyEmailAddress } from "../services/email-verification.js";
 import { queueAdvertiserConversion } from "../services/advertiser-conversion-events.js";
 import { recentApplicationActivity } from "../services/recent-activity.js";
 export const publicRouter = Router();
@@ -508,6 +509,25 @@ publicRouter.post(
         .status(400)
         .json({ error: "Enter a valid address for each selected channel." });
       return;
+    }
+    if (input.email) {
+      let verification;
+      try {
+        verification = await verifyEmailAddress(input.email);
+      } catch {
+        res.status(503).json({
+          error:
+            "Email verification is temporarily unavailable. Try again shortly.",
+        });
+        return;
+      }
+      if (!verification.valid) {
+        res.status(400).json({
+          error:
+            "We could not verify this email address. Check it and try again.",
+        });
+        return;
+      }
     }
     const channels = [...new Set(input.channels)];
     const lead = await db.lead.create({

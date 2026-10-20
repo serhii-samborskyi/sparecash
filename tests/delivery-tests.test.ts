@@ -37,6 +37,7 @@ beforeEach(() => {
     ONESIGNAL_APP_ID: "test-app",
     ONESIGNAL_API_KEY: "test-key",
     BREVO_API_KEY: "test-brevo",
+    MYEMAILVERIFIER_API_KEY: "",
     BREVO_SENDER_EMAIL: "sender@example.com",
     BREVO_FOLDER_ID: 1,
     BLUEBUBBLES_URL: "https://bluebubbles.example.test",

@@ -1,11 +1,13 @@
 import { z } from "zod";
 import { env } from "../config.js";
 import { settings } from "./control.js";
+import { verifyEmailAddress } from "./email-verification.js";
 
 export const testProviderSchema = z.enum([
   "clarity",
   "onesignal",
   "brevo",
+  "myemailverifier",
   "bluebubbles",
   "propellerads",
 ]);
@@ -180,6 +182,19 @@ export async function testProviderConnection(provider: Provider) {
         return "A business mailing address is configured.";
       });
     }
+  } else if (provider === "myemailverifier") {
+    await check("Mailbox validation API", async () => {
+      requireValue(
+        env.MYEMAILVERIFIER_API_KEY,
+        "Save your MyEmailVerifier API key first.",
+      );
+      const result = await verifyEmailAddress("support@myemailverifier.com");
+      requireValue(
+        result.valid,
+        "The API key was accepted, but the provider did not validate its test mailbox.",
+      );
+      return "API key accepted and mailbox validation succeeded.";
+    });
   } else if (provider === "bluebubbles") {
     function url(path: string) {
       const value = new URL(path, env.BLUEBUBBLES_URL);
