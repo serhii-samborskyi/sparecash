@@ -7,6 +7,7 @@ import {
   sendingTimezone,
   nextSendingTime,
   startOfDayInTimezone,
+  statisticsTimezone,
   timezoneOffsetForDay,
   withinSendingHours,
   validTimezone,
@@ -131,5 +132,14 @@ describe("time zone selection and sending windows", () => {
     expect(addCalendarDays("2026-10-31", 1)).toBe("2026-11-01");
     expect(timezoneOffsetForDay("2026-10-19", "America/Chicago")).toBe("-0500");
     expect(timezoneOffsetForDay("2026-11-02", "America/Chicago")).toBe("-0600");
+  });
+  it("keeps a pre-deployment UTC Today tab usable until it reloads", () => {
+    const now = new Date("2026-10-20T01:00:00Z");
+    expect(statisticsTimezone("America/Chicago", "2026-10-20", now)).toBe(
+      "UTC",
+    );
+    expect(statisticsTimezone("America/Chicago", "2026-10-19", now)).toBe(
+      "America/Chicago",
+    );
   });
 });

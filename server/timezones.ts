@@ -38,6 +38,21 @@ export function dateInTimezone(value: Date, timezone: string) {
   return `${year}-${month}-${day}`;
 }
 
+export function statisticsTimezone(
+  workspaceTimezone: string,
+  requestedThrough: string | undefined,
+  now = new Date(),
+) {
+  const workspaceToday = dateInTimezone(now, workspaceTimezone);
+  const utcToday = dateInTimezone(now, "UTC");
+  // An admin tab opened before the timezone rollout can still submit its UTC
+  // "Today" until it reloads. Keep that tab usable without weakening normal
+  // future-date validation for the current client.
+  return requestedThrough === utcToday && utcToday > workspaceToday
+    ? "UTC"
+    : workspaceTimezone;
+}
+
 export function addCalendarDays(value: string, amount: number) {
   const [year, month, day] = value.split("-").map(Number);
   return new Date(Date.UTC(year, month - 1, day + amount))

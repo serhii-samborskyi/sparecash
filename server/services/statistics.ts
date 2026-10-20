@@ -15,6 +15,7 @@ import {
   addCalendarDays,
   dateInTimezone,
   startOfDayInTimezone,
+  statisticsTimezone,
 } from "../timezones.js";
 
 const day = z
@@ -193,9 +194,10 @@ function visitSegmentKey(
 
 function statisticsWindow(
   query: { from?: string; to?: string },
-  timezone: string,
+  workspaceTimezone: string,
 ) {
   const observedAt = new Date();
+  const timezone = statisticsTimezone(workspaceTimezone, query.to, observedAt);
   const today = dateInTimezone(observedAt, timezone);
   const to = query.to ?? today;
   const from = query.from ?? addCalendarDays(to, -29);
@@ -211,6 +213,7 @@ function statisticsWindow(
     );
   return {
     observedAt,
+    timezone,
     from,
     to,
     beginsAt: startOfDayInTimezone(from, timezone),
@@ -312,10 +315,10 @@ function addClarity(
 
 export async function statisticsReport(input: StatisticsInput = {}) {
   const query = statisticsSchema.parse(input);
-  const timezone = (await settings()).workspaceTimezone;
-  const { observedAt, from, to, beginsAt, end } = statisticsWindow(
+  const workspaceTimezone = (await settings()).workspaceTimezone;
+  const { observedAt, timezone, from, to, beginsAt, end } = statisticsWindow(
     query,
-    timezone,
+    workspaceTimezone,
   );
   const where: Prisma.VisitWhereInput = {
     createdAt: { gte: beginsAt, lt: end },
@@ -934,8 +937,11 @@ export type StatisticsReport = Awaited<ReturnType<typeof statisticsReport>>;
 
 export async function statisticsVisits(input: StatisticsVisitsInput) {
   const query = statisticsVisitsSchema.parse(input);
-  const timezone = (await settings()).workspaceTimezone;
-  const { from, to, beginsAt, end } = statisticsWindow(query, timezone);
+  const workspaceTimezone = (await settings()).workspaceTimezone;
+  const { timezone, from, to, beginsAt, end } = statisticsWindow(
+    query,
+    workspaceTimezone,
+  );
   const where: Prisma.VisitWhereInput = {
     createdAt: { gte: beginsAt, lt: end },
     ...(query.campaignId || query.zoneId
