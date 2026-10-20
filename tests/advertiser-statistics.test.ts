@@ -89,6 +89,18 @@ it("fetches a complete advertiser report with POST and stores its scoped snapsho
   );
 });
 
+it("requests advertiser day totals in the workspace time zone", async () => {
+  fetchMock.mockResolvedValue(Response.json({ result: [row] }));
+  await runtimeContext.run(config, () =>
+    advertiserStatistics({ ...query, timezone: "America/Chicago" }, true),
+  );
+  expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toMatchObject({
+    day_from: "2026-10-01 00:00:00",
+    day_to: "2026-10-02 23:59:59",
+    tz: "-0500",
+  });
+});
+
 it("does not reject valid statistics when unused request metadata changes type", async () => {
   fetchMock.mockResolvedValue(
     Response.json({ result: [row], request_id: 174291 }),

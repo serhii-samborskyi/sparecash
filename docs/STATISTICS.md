@@ -1,15 +1,17 @@
 # Acquisition statistics
 
 Open **Statistics** in the owner workspace (`/admin/statistics`). The initial
-view compares zones over the last seven UTC days, including today. Choose up to
-93 days, sort a metric, search rows, require a minimum visit sample, or export
-all matching rows as CSV. Table search and minimum visits affect rows/export;
+view compares zones for today in the workspace reporting time zone. Choose up
+to 93 days, sort a metric, search rows, require a minimum visit sample, or
+export all matching rows as CSV. Set the reporting time zone in **Settings →
+Workspace and reporting time zone**; it defaults to `America/Chicago`. Table
+search and minimum visits affect rows/export;
 the summary cards retain the full report scope. Row arrows add the segment to
 the report filters: campaign → zones, country → states, state → cities, and
 other segments → landing variants.
 
 Available breakdowns: campaign + zone, campaign, landing variant, country,
-state/region, city, device, browser, operating system, and UTC day. City keys
+state/region, city, device, browser, operating system, and local calendar day. City keys
 include country and state so identically named cities are not combined.
 Filters can combine dates, campaign, zone, landing, country, state, city,
 device, browser and operating system. Unknown dimensions remain visible.
@@ -27,7 +29,7 @@ feedback and retargeting activity.
 
 | Metric                           | Definition                                                                                                                                                                                     |
 | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Billed ad clicks                 | Clicks reported by PropellerAds for the selected campaign, zone and UTC day.                                                                                                                   |
+| Billed ad clicks                 | Clicks reported by PropellerAds for the selected campaign, zone and reporting-time-zone day.                                                                                                   |
 | Server hits                      | Requests received on `/go/<slug>` before browser JavaScript runs. Repeat loads count again.                                                                                                    |
 | JS visits                        | Recorded visit sessions after the application loads, not unique people. Each new advertiser click can produce another visit.                                                                   |
 | Click → server / server → JS     | Server hits divided by billed clicks, and JS visits divided by server hits. These expose delivery loss separately from browser-render loss.                                                    |
@@ -55,8 +57,8 @@ denominators and unavailable values are `—`, never fabricated zeros. A small
 sample marker appears below 30 visits; this is a reading aid, not a statistical
 significance test. The three traffic-quality groups are mutually exclusive.
 
-Visits and advertiser activity use the selected UTC window. Confirmations and
-sales for those visits are observed through report time. Recent traffic has
+Visits and advertiser activity use the selected workspace-time-zone window.
+Confirmations and sales for those visits are observed through report time. Recent traffic has
 had less time to convert. This view is descriptive; it never changes bids,
 budgets, campaign status or zone exclusions automatically.
 
@@ -64,7 +66,9 @@ budgets, campaign status or zone exclusions automatically.
 
 Use the saved **Integrations → PropellerAds** API token. The app sends
 `POST /adv/statistics` with `group_by` set to campaign, zone, country, and day,
-an explicit `tz=+0000`, and inclusive date/time boundaries. It validates the
+the UTC offset for the selected reporting time zone, and inclusive date/time
+boundaries. Date ranges that cross a daylight-saving transition are split by
+offset. It validates the
 complete returned result before storing a snapshot. Country names such as
 `United States (US)` are normalized to their country code. Provider-returned
 rows must match the requested dates/campaigns/zone/country. See the
@@ -75,7 +79,7 @@ traffic sources. An explicit campaign filter can load a campaign with no
 recorded local visits. Zones that have impressions/clicks but no tracked visits
 still appear. Advertiser clicks, server landing hits, rendered visits and
 verified visits are independent measurements and may differ. Server hits are
-available for zone, campaign and UTC-day views. Each hit is linked to the
+available for zone, campaign and local-day views. Each hit is linked to the
 rendered visit when the browser reaches the visit endpoint, which also makes
 the raw hit visible in the visit-detail explorer.
 

@@ -121,8 +121,8 @@ export function SettingsView({
             </select>
           </Field>
           <Field
-            label="Workspace / fallback time zone"
-            hint="Used when detection is unavailable, or for everyone in workspace mode."
+            label="Workspace and reporting time zone"
+            hint="Sets Statistics date boundaries and is the fallback for follow-ups when a lead’s time zone is unavailable."
           >
             <TimezoneSelect
               value={form.workspaceTimezone}

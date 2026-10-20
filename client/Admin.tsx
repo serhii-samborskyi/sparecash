@@ -392,7 +392,9 @@ export function Admin() {
               {error}
             </div>
           )}
-          {page === "statistics" && <Statistics />}
+          {page === "statistics" && (
+            <Statistics timezone={data.settings.workspaceTimezone} />
+          )}
           {page === "overview" && (
             <>
               <div className="launch-banner">

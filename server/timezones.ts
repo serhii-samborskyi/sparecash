@@ -20,6 +20,69 @@ export type TimingSettings = {
   followupTimezoneMode: "RECIPIENT" | "WORKSPACE";
   timezoneDetection: "BROWSER_FIRST" | "IP_FIRST";
 };
+
+const dateParts = (value: Date, timezone: string) => {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(value);
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((item) => item.type === type)?.value ?? "";
+  return { year: part("year"), month: part("month"), day: part("day") };
+};
+
+export function dateInTimezone(value: Date, timezone: string) {
+  const { year, month, day } = dateParts(value, timezone);
+  return `${year}-${month}-${day}`;
+}
+
+export function addCalendarDays(value: string, amount: number) {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day + amount))
+    .toISOString()
+    .slice(0, 10);
+}
+
+function offsetMinutesAt(value: Date, timezone: string) {
+  const name = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    timeZoneName: "longOffset",
+  })
+    .formatToParts(value)
+    .find((part) => part.type === "timeZoneName")?.value;
+  if (!name || name === "GMT") return 0;
+  const match = name.match(/^GMT([+-])(\d{2}):(\d{2})$/);
+  if (!match) throw new Error(`Unable to read the offset for ${timezone}`);
+  const minutes = Number(match[2]) * 60 + Number(match[3]);
+  return match[1] === "+" ? minutes : -minutes;
+}
+
+export function startOfDayInTimezone(value: string, timezone: string) {
+  const [year, month, day] = value.split("-").map(Number);
+  const localMidnight = Date.UTC(year, month - 1, day);
+  let instant = localMidnight;
+  // Re-read the offset at the resulting instant so DST boundary days resolve
+  // against the offset in force at local midnight.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const next =
+      localMidnight - offsetMinutesAt(new Date(instant), timezone) * 60_000;
+    if (next === instant) break;
+    instant = next;
+  }
+  return new Date(instant);
+}
+
+export function timezoneOffsetForDay(value: string, timezone: string) {
+  const start = startOfDayInTimezone(value, timezone);
+  const end = startOfDayInTimezone(addCalendarDays(value, 1), timezone);
+  const middle = new Date((start.getTime() + end.getTime()) / 2);
+  const minutes = offsetMinutesAt(middle, timezone);
+  const sign = minutes >= 0 ? "+" : "-";
+  const absolute = Math.abs(minutes);
+  return `${sign}${String(Math.floor(absolute / 60)).padStart(2, "0")}${String(absolute % 60).padStart(2, "0")}`;
+}
 export function detectTimezone(
   browser: unknown,
   ip: unknown,

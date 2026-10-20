@@ -383,10 +383,12 @@ function VisitDetails({ visit }: { visit: Visit }) {
 export function StatisticsVisitsModal({
   filters,
   row,
+  timezone,
   onClose,
 }: {
   filters: StatisticsInput;
   row: StatisticsRow;
+  timezone: string;
   onClose: () => void;
 }) {
   const [page, setPage] = useState(1);
@@ -441,7 +443,8 @@ export function StatisticsVisitsModal({
               visits
             </strong>
             <span>
-              {filters.from} through {filters.to} UTC
+              {filters.from} through {filters.to} in{" "}
+              {result?.window.timezone ?? timezone}
             </span>
           </div>
           <p>

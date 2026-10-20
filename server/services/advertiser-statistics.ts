@@ -2,6 +2,7 @@ import { z } from "zod";
 import { db } from "../db.js";
 import { env } from "../config.js";
 import { hash } from "../security.js";
+import { addCalendarDays, timezoneOffsetForDay } from "../timezones.js";
 
 const numeric = z
   .union([z.number(), z.string().min(1)])
@@ -57,6 +58,7 @@ type Query = {
   campaignIds: string[];
   zoneId?: string;
   country?: string;
+  timezone?: string;
 };
 export type AdvertiserResult = {
   status: "ready" | "stale" | "unavailable" | "unsupported";
@@ -101,7 +103,7 @@ export function advertiserStatistics(
   // Token changes invalidate snapshots without storing or returning credentials.
   const key = hash(
     JSON.stringify({
-      version: 3,
+      version: 4,
       ...scopedQuery,
       api: env.PROPELLER_API_URL,
       token: env.PROPELLER_API_TOKEN,
@@ -140,57 +142,71 @@ async function load(
     );
   try {
     const rows: AdRow[] = [];
-    const signal = AbortSignal.timeout(25_000);
-    const response = await fetch(
-      `${env.PROPELLER_API_URL.replace(/\/$/, "")}/adv/statistics`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${env.PROPELLER_API_TOKEN}`,
-          Accept: "application/json",
-          "Content-Type": "application/json",
+    const timezone = query.timezone ?? "UTC";
+    const ranges: { from: string; to: string; offset: string }[] = [];
+    for (let current = query.from; current <= query.to;) {
+      const offset = timezoneOffsetForDay(current, timezone);
+      let through = current;
+      while (through < query.to) {
+        const next = addCalendarDays(through, 1);
+        if (timezoneOffsetForDay(next, timezone) !== offset) break;
+        through = next;
+      }
+      ranges.push({ from: current, to: through, offset });
+      current = addCalendarDays(through, 1);
+    }
+    for (const range of ranges) {
+      const response = await fetch(
+        `${env.PROPELLER_API_URL.replace(/\/$/, "")}/adv/statistics`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${env.PROPELLER_API_TOKEN}`,
+            Accept: "application/json",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            group_by: ["campaign_id", "zone_id", "country_id", "date_time"],
+            day_from: `${range.from} 00:00:00`,
+            day_to: `${range.to} 23:59:59`,
+            tz: range.offset,
+            order_by: "campaign_id",
+            order_dest: "asc",
+            campaign_id: query.campaignIds.map(Number),
+            ...(query.zoneId ? { zone_id: [Number(query.zoneId)] } : {}),
+            ...(query.country ? { geo: [query.country] } : {}),
+          }),
+          redirect: "error",
+          signal: AbortSignal.timeout(25_000),
         },
-        body: JSON.stringify({
-          group_by: ["campaign_id", "zone_id", "country_id", "date_time"],
-          day_from: `${query.from} 00:00:00`,
-          day_to: `${query.to} 23:59:59`,
-          tz: "+0000",
-          order_by: "campaign_id",
-          order_dest: "asc",
-          campaign_id: query.campaignIds.map(Number),
-          ...(query.zoneId ? { zone_id: [Number(query.zoneId)] } : {}),
-          ...(query.country ? { geo: [query.country] } : {}),
-        }),
-        redirect: "error",
-        signal,
-      },
-    );
-    if (!response.ok)
-      throw new Error(
-        `PropellerAds statistics returned HTTP ${response.status}.`,
       );
-    const data = reportSchema.parse(await response.json());
-    for (const item of data.result) {
-      const country = item.country.match(/(?:^|\()([A-Z]{2})\)?$/)?.[1];
-      if (
-        !country ||
-        !query.campaignIds.includes(item.campaign_id) ||
-        (query.zoneId && item.zone_id !== query.zoneId) ||
-        (query.country && country !== query.country) ||
-        item.date_time < query.from ||
-        item.date_time > query.to
-      )
-        throw new Error("PropellerAds returned a different reporting scope.");
-      rows.push({
-        campaignId: item.campaign_id,
-        campaignName: item.campaign_name ?? item.campaign_id,
-        zoneId: item.zone_id,
-        country,
-        day: item.date_time,
-        impressions: item.impressions,
-        clicks: item.clicks,
-        spend: item.spent,
-      });
+      if (!response.ok)
+        throw new Error(
+          `PropellerAds statistics returned HTTP ${response.status}.`,
+        );
+      const data = reportSchema.parse(await response.json());
+      for (const item of data.result) {
+        const country = item.country.match(/(?:^|\()([A-Z]{2})\)?$/)?.[1];
+        if (
+          !country ||
+          !query.campaignIds.includes(item.campaign_id) ||
+          (query.zoneId && item.zone_id !== query.zoneId) ||
+          (query.country && country !== query.country) ||
+          item.date_time < range.from ||
+          item.date_time > range.to
+        )
+          throw new Error("PropellerAds returned a different reporting scope.");
+        rows.push({
+          campaignId: item.campaign_id,
+          campaignName: item.campaign_name ?? item.campaign_id,
+          zoneId: item.zone_id,
+          country,
+          day: item.date_time,
+          impressions: item.impressions,
+          clicks: item.clicks,
+          spend: item.spent,
+        });
+      }
     }
     const fetchedAt = new Date();
     await db.adStatisticsSnapshot.upsert({
@@ -200,7 +216,7 @@ async function load(
     });
     return {
       status: "ready",
-      message: "PropellerAds statistics · complete report · UTC.",
+      message: `PropellerAds statistics · complete report · ${timezone}.`,
       fetchedAt: fetchedAt.toISOString(),
       rows,
     };

@@ -10,6 +10,12 @@ import {
   type AdRow,
 } from "./advertiser-statistics.js";
 import { clarityReport } from "./clarity.js";
+import { settings } from "./control.js";
+import {
+  addCalendarDays,
+  dateInTimezone,
+  startOfDayInTimezone,
+} from "../timezones.js";
 
 const day = z
   .string()
@@ -145,6 +151,7 @@ function visitSegmentKey(
     source: { campaignId: string; zoneId: string } | null;
   },
   groupBy: z.output<typeof statisticsSchema>["groupBy"],
+  timezone: string,
 ) {
   const context = browserContext(visit.userAgent);
   const propeller = propellerContext(visit.adContext);
@@ -164,7 +171,7 @@ function visitSegmentKey(
     case "city":
       return JSON.stringify([visit.country, visit.region, visit.city]);
     case "day":
-      return JSON.stringify([visit.createdAt.toISOString().slice(0, 10)]);
+      return JSON.stringify([dateInTimezone(visit.createdAt, timezone)]);
     case "creative":
       return JSON.stringify([propeller.bannerId]);
     case "subzone":
@@ -184,17 +191,20 @@ function visitSegmentKey(
   }
 }
 
-function statisticsWindow(query: { from?: string; to?: string }) {
+function statisticsWindow(
+  query: { from?: string; to?: string },
+  timezone: string,
+) {
   const observedAt = new Date();
-  const today = observedAt.toISOString().slice(0, 10);
+  const today = dateInTimezone(observedAt, timezone);
   const to = query.to ?? today;
-  const from =
-    query.from ??
-    new Date(new Date(to).getTime() - 29 * 86400000).toISOString().slice(0, 10);
+  const from = query.from ?? addCalendarDays(to, -29);
   if (
     from > to ||
     to > today ||
-    new Date(to).getTime() - new Date(from).getTime() > 92 * 86400000
+    new Date(`${to}T00:00:00Z`).getTime() -
+      new Date(`${from}T00:00:00Z`).getTime() >
+      92 * 86400000
   )
     throw new Error(
       "Choose a reporting period of up to 93 days ending today or earlier.",
@@ -203,8 +213,12 @@ function statisticsWindow(query: { from?: string; to?: string }) {
     observedAt,
     from,
     to,
+    beginsAt: startOfDayInTimezone(from, timezone),
     end: new Date(
-      Math.min(new Date(to).getTime() + 86400000, observedAt.getTime()),
+      Math.min(
+        startOfDayInTimezone(addCalendarDays(to, 1), timezone).getTime(),
+        observedAt.getTime(),
+      ),
     ),
   };
 }
@@ -298,9 +312,13 @@ function addClarity(
 
 export async function statisticsReport(input: StatisticsInput = {}) {
   const query = statisticsSchema.parse(input);
-  const { observedAt, from, to, end } = statisticsWindow(query);
+  const timezone = (await settings()).workspaceTimezone;
+  const { observedAt, from, to, beginsAt, end } = statisticsWindow(
+    query,
+    timezone,
+  );
   const where: Prisma.VisitWhereInput = {
-    createdAt: { gte: new Date(from), lt: end },
+    createdAt: { gte: beginsAt, lt: end },
     ...(query.campaignId || query.zoneId
       ? { source: { campaignId: query.campaignId, zoneId: query.zoneId } }
       : {}),
@@ -419,6 +437,7 @@ export async function statisticsReport(input: StatisticsInput = {}) {
             campaignIds,
             zoneId: query.zoneId,
             country: query.country,
+            timezone,
           },
           query.refreshAds,
         )
@@ -432,7 +451,7 @@ export async function statisticsReport(input: StatisticsInput = {}) {
     hitSupported
       ? db.landingHit.findMany({
           where: {
-            createdAt: { gte: new Date(from), lt: end },
+            createdAt: { gte: beginsAt, lt: end },
             ...(query.campaignId ? { campaignId: query.campaignId } : {}),
             ...(query.zoneId ? { zoneId: query.zoneId } : {}),
           },
@@ -511,10 +530,8 @@ export async function statisticsReport(input: StatisticsInput = {}) {
           },
         );
       case "day":
-        return make(
-          [v.createdAt.toISOString().slice(0, 10)],
-          v.createdAt.toISOString().slice(0, 10),
-        );
+        const localDay = dateInTimezone(v.createdAt, timezone);
+        return make([localDay], localDay);
       case "creative":
         return make(
           [v.propeller.bannerId],
@@ -624,10 +641,8 @@ export async function statisticsReport(input: StatisticsInput = {}) {
           { campaignId: hit.campaignId ?? undefined },
         );
       default:
-        return make(
-          [hit.createdAt.toISOString().slice(0, 10)],
-          hit.createdAt.toISOString().slice(0, 10),
-        );
+        const localDay = dateInTimezone(hit.createdAt, timezone);
+        return make([localDay], localDay);
     }
   }
   const adScopes = new Set(
@@ -657,14 +672,14 @@ export async function statisticsReport(input: StatisticsInput = {}) {
               visit.source?.campaignId,
               visit.source?.zoneId,
               visit.country,
-              visit.createdAt.toISOString().slice(0, 10),
+              dateInTimezone(visit.createdAt, timezone),
             ]),
           )
         : adZoneScopes.has(
             JSON.stringify([
               visit.source?.campaignId,
               visit.source?.zoneId,
-              visit.createdAt.toISOString().slice(0, 10),
+              dateInTimezone(visit.createdAt, timezone),
             ]),
           );
     for (const target of [row, summary]) {
@@ -824,7 +839,7 @@ export async function statisticsReport(input: StatisticsInput = {}) {
           : true),
   ).length;
   return {
-    window: { from, to, timezone: "UTC", observedAt: observedAt.toISOString() },
+    window: { from, to, timezone, observedAt: observedAt.toISOString() },
     groupBy: query.groupBy,
     advertiser: {
       status: ads.status,
@@ -909,8 +924,7 @@ export async function statisticsReport(input: StatisticsInput = {}) {
         "Approximate IP location from trusted edge headers. Missing historical locations stay unknown. Browser and device categories come from the stored user agent.",
       propellerAttribution:
         "Creative, subzone, carrier, connection, language and version breakdowns use URL tokens supplied by PropellerAds. They are attribution metadata, not security evidence. URL-declared cost is retained for reconciliation but never booked as trusted spend.",
-      window:
-        "Visits and advertiser impressions/clicks use the selected UTC dates. Subscription and sale outcomes are observed through report time. Recent visits have had less time to convert; current-day advertiser totals can change.",
+      window: `Visits and advertiser impressions/clicks use the selected ${timezone} calendar dates. Subscription and sale outcomes are observed through report time. Recent visits have had less time to convert; current-day advertiser totals can change.`,
       clarity:
         "Microsoft Clarity reports a separate rolling export window. Human and bot session estimates are supporting evidence, not proof. Clarity columns are only aligned for unfiltered campaign and zone views; empty values mean unavailable, not zero.",
     },
@@ -920,9 +934,10 @@ export type StatisticsReport = Awaited<ReturnType<typeof statisticsReport>>;
 
 export async function statisticsVisits(input: StatisticsVisitsInput) {
   const query = statisticsVisitsSchema.parse(input);
-  const { from, to, end } = statisticsWindow(query);
+  const timezone = (await settings()).workspaceTimezone;
+  const { from, to, beginsAt, end } = statisticsWindow(query, timezone);
   const where: Prisma.VisitWhereInput = {
-    createdAt: { gte: new Date(from), lt: end },
+    createdAt: { gte: beginsAt, lt: end },
     ...(query.campaignId || query.zoneId
       ? { source: { campaignId: query.campaignId, zoneId: query.zoneId } }
       : {}),
@@ -957,7 +972,7 @@ export async function statisticsVisits(input: StatisticsVisitsInput) {
       (!query.device || context.device === query.device) &&
       (!query.browser || context.browser === query.browser) &&
       (!query.os || context.os === query.os) &&
-      visitSegmentKey(visit, query.groupBy) === query.segmentKey
+      visitSegmentKey(visit, query.groupBy, timezone) === query.segmentKey
     );
   });
   const start = (query.page - 1) * query.pageSize;
@@ -966,7 +981,7 @@ export async function statisticsVisits(input: StatisticsVisitsInput) {
     .map((visit) => visit.id);
   if (!pageIds.length)
     return {
-      window: { from, to, timezone: "UTC" },
+      window: { from, to, timezone },
       page: query.page,
       pageSize: query.pageSize,
       total: matching.length,
@@ -1150,7 +1165,7 @@ export async function statisticsVisits(input: StatisticsVisitsInput) {
   }
   const iso = (value: Date | null) => value?.toISOString() ?? null;
   return {
-    window: { from, to, timezone: "UTC" },
+    window: { from, to, timezone },
     page: query.page,
     pageSize: query.pageSize,
     total: matching.length,

@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { settingsSchema } from "../server/domain";
 import {
+  addCalendarDays,
+  dateInTimezone,
   detectTimezone,
   sendingTimezone,
   nextSendingTime,
+  startOfDayInTimezone,
+  timezoneOffsetForDay,
   withinSendingHours,
   validTimezone,
 } from "../server/timezones";
@@ -116,5 +120,16 @@ describe("time zone selection and sending windows", () => {
     expect(nextSendingTime("America/Chicago", 10, 18, end).toISOString()).toBe(
       "2026-10-08T15:00:00.000Z",
     );
+  });
+  it("uses Chicago calendar dates and UTC boundaries for reporting", () => {
+    expect(
+      dateInTimezone(new Date("2026-10-20T02:30:00Z"), "America/Chicago"),
+    ).toBe("2026-10-19");
+    expect(
+      startOfDayInTimezone("2026-10-19", "America/Chicago").toISOString(),
+    ).toBe("2026-10-19T05:00:00.000Z");
+    expect(addCalendarDays("2026-10-31", 1)).toBe("2026-11-01");
+    expect(timezoneOffsetForDay("2026-10-19", "America/Chicago")).toBe("-0500");
+    expect(timezoneOffsetForDay("2026-11-02", "America/Chicago")).toBe("-0600");
   });
 });

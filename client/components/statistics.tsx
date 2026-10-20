@@ -261,14 +261,34 @@ const columns: Record<string, Column[]> = {
     },
   ],
 };
-function dates(days: number): Pick<StatisticsInput, "from" | "to"> {
+function calendarDate(value: Date, timezone: string) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(value);
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((item) => item.type === type)?.value ?? "";
+  return `${part("year")}-${part("month")}-${part("day")}`;
+}
+function dates(
+  days: number,
+  timezone: string,
+): Pick<StatisticsInput, "from" | "to"> {
   const now = new Date();
+  const to = calendarDate(now, timezone);
+  const [year, month, day] = to.split("-").map(Number);
   return {
-    to: now.toISOString().slice(0, 10),
-    from: new Date(now.getTime() - (days - 1) * 86400000)
+    to,
+    from: new Date(Date.UTC(year, month - 1, day - (days - 1)))
       .toISOString()
       .slice(0, 10),
   };
+}
+function timezoneLabel(timezone: string) {
+  if (timezone === "UTC") return "UTC";
+  return `${timezone.split("/").at(-1)?.replaceAll("_", " ")} time`;
 }
 function display(value: number | null, type?: Column["type"]) {
   if (value === null) return "—";
@@ -294,9 +314,9 @@ function duration(value: number | null) {
   return minuteRemainder ? `${hours}h ${minuteRemainder}m` : `${hours}h`;
 }
 
-export function Statistics() {
+export function Statistics({ timezone }: { timezone: string }) {
   const [filters, setFilters] = useState<StatisticsInput>(() => ({
-    ...dates(1),
+    ...dates(1, timezone),
     groupBy: "zone",
   }));
   const [draft, setDraft] = useState(filters);
@@ -366,6 +386,7 @@ export function Statistics() {
     ([key]) => key !== "clarity" || report?.clarity.aligned,
   );
   const activeColumns = columns[view] ?? columns.performance;
+  const reportingTimezone = report?.window.timezone ?? timezone;
   useEffect(() => {
     if (report && view === "clarity" && !report.clarity.aligned) {
       setView("performance");
@@ -445,7 +466,7 @@ export function Statistics() {
               ))}
             </select>
           </Field>
-          <Field label="From (UTC)">
+          <Field label={`From (${timezoneLabel(reportingTimezone)})`}>
             <input
               required
               type="date"
@@ -454,13 +475,13 @@ export function Statistics() {
               onChange={(e) => setDraft({ ...draft, from: e.target.value })}
             />
           </Field>
-          <Field label="Through (UTC)">
+          <Field label={`Through (${timezoneLabel(reportingTimezone)})`}>
             <input
               required
               type="date"
               value={draft.to}
               min={draft.from}
-              max={dates(1).to}
+              max={dates(1, reportingTimezone).to}
               onChange={(e) => setDraft({ ...draft, to: e.target.value })}
             />
           </Field>
@@ -495,12 +516,14 @@ export function Statistics() {
               key={days}
               type="button"
               className="text-button"
-              onClick={() => apply({ ...filters, ...dates(days) })}
+              onClick={() =>
+                apply({ ...filters, ...dates(days, reportingTimezone) })
+              }
             >
               {days === 1 ? "Today" : `Last ${days} days`}
             </button>
           ))}
-          <span>All dates in UTC</span>
+          <span>All dates in {reportingTimezone}</span>
           {Object.entries(filters).some(
             ([k, v]) => !["from", "to", "groupBy"].includes(k) && v,
           ) && (
@@ -1231,6 +1254,7 @@ export function Statistics() {
         <StatisticsVisitsModal
           filters={filters}
           row={visitsRow}
+          timezone={reportingTimezone}
           onClose={() => setVisitsRow(null)}
         />
       )}
