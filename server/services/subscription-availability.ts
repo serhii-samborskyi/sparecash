@@ -12,7 +12,6 @@ export async function subscriptionAvailability() {
     PUSH: !!(env.ONESIGNAL_APP_ID && env.ONESIGNAL_API_KEY),
     EMAIL: !!(
       env.BREVO_API_KEY &&
-      env.MYEMAILVERIFIER_API_KEY &&
       env.BREVO_SENDER_EMAIL &&
       env.BREVO_FOLDER_ID > 0
     ),

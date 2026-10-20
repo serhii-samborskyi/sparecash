@@ -737,7 +737,7 @@ it("rejects an invalid mailbox before storing the contact", async () => {
   expect(providerCalls.slice(before)).toHaveLength(1);
   expect(providerCalls.at(-1)?.url).toContain("client.myemailverifier.com");
 });
-it("rejects subscriptions without storing contacts or contacting providers when delivery is paused", async () => {
+it("records subscriptions while follow-up delivery is paused", async () => {
   const previous = await readRuntimeConfiguration();
   const leads = await db.lead.count();
   const subscriptions = await db.subscription.count();
@@ -752,10 +752,13 @@ it("rejects subscriptions without storing contacts or contacting providers when 
       consent: true,
       adultUS: true,
     });
-    expect(response.status).toBe(503);
-    expect(await db.lead.count()).toBe(leads);
-    expect(await db.subscription.count()).toBe(subscriptions);
-    expect(providerCalls.length).toBe(calls);
+    expect(response.status).toBe(200);
+    expect(await db.lead.count()).toBe(leads + 1);
+    expect(await db.subscription.count()).toBe(subscriptions + 1);
+    expect(providerCalls.length).toBe(calls + 1);
+    expect(response.data.results).toContainEqual(
+      expect.objectContaining({ channel: "EMAIL", state: "PAUSED" }),
+    );
   } finally {
     await saveRuntimeSettings(
       {

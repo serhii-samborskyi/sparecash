@@ -27,7 +27,7 @@ it("hides every channel while delivery is paused even with configured providers"
   config.LIVE_DELIVERY = "false";
   expect((await subscriptionAvailability()).availableChannels).toEqual([]);
 });
-it("does not offer email with an incomplete sending configuration", async () => {
+it("requires email delivery configuration but not the optional mailbox verifier", async () => {
   config.BREVO_FOLDER_ID = 0;
   expect((await subscriptionAvailability()).availableChannels).toEqual([
     "PUSH",
@@ -40,9 +40,7 @@ it("does not offer email with an incomplete sending configuration", async () => 
   );
   config.BREVO_API_KEY = "test-key";
   config.MYEMAILVERIFIER_API_KEY = "";
-  expect((await subscriptionAvailability()).availableChannels).not.toContain(
-    "EMAIL",
-  );
+  expect((await subscriptionAvailability()).availableChannels).toContain("EMAIL");
 });
 it("offers only approved subscriber channels, leaving a held SMS chain unavailable", async () => {
   findMany.mockResolvedValue([{ channel: "PUSH" }]);

@@ -360,14 +360,6 @@ publicRouter.post(
       where: { id: visitId },
       include: { variant: true },
     });
-    const available = (await subscriptionAvailability()).availableChannels;
-    if (input.channels.some((channel) => !available.includes(channel))) {
-      res.status(503).json({
-        error:
-          "These updates are not available right now. You can continue to loan options without subscribing.",
-      });
-      return;
-    }
     if (input.company) {
       await db.visit.update({
         where: { id: visitId },
@@ -518,22 +510,20 @@ publicRouter.post(
       return;
     }
     if (input.email) {
-      let verification;
-      try {
-        verification = await verifyEmailAddress(input.email);
-      } catch {
-        res.status(503).json({
-          error:
-            "Email verification is temporarily unavailable. Try again shortly.",
-        });
-        return;
-      }
-      if (!verification.valid) {
-        res.status(400).json({
-          error:
-            "We could not verify this email address. Check it and try again.",
-        });
-        return;
+      if (env.MYEMAILVERIFIER_API_KEY) {
+        try {
+          const verification = await verifyEmailAddress(input.email);
+          if (!verification.valid) {
+            res.status(400).json({
+              error:
+                "We could not verify this email address. Check it and try again.",
+            });
+            return;
+          }
+        } catch {
+          // Mailbox verification improves lead quality, but a provider outage must
+          // never prevent a paid visitor from reaching the loan offer.
+        }
       }
     }
     const channels = [...new Set(input.channels)];
