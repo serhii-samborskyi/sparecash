@@ -656,6 +656,10 @@ p {
   background: #faf2df;
   color: #a38842;
 }
+.badge.red {
+  background: #fff0ed;
+  color: #a24737;
+}
 .shield-panel .badge {
   font-size: 8px;
 }
@@ -3382,6 +3386,74 @@ summary {
 
 .settings-form + .settings-form {
   margin-top: 24px;
+}
+
+.worker-controls {
+  margin-top: 24px;
+}
+.worker-controls + .settings-form {
+  margin-top: 24px;
+}
+.worker-controls .panel-heading {
+  display: flex;
+  gap: 11px;
+  align-items: flex-start;
+  margin-bottom: 20px;
+}
+.worker-refresh {
+  margin-left: auto;
+}
+.worker-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.worker-card {
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fbfcf8;
+}
+.worker-card-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.worker-card-heading h4 {
+  font-size: 13px;
+}
+.worker-card-heading p,
+.worker-facts {
+  color: #819076;
+  font-size: 10px;
+  line-height: 1.5;
+}
+.worker-card-heading p {
+  margin-top: 5px;
+}
+.worker-facts {
+  display: flex;
+  gap: 24px;
+  margin: 18px 0;
+}
+.worker-facts span {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.worker-facts b {
+  color: #52664a;
+}
+.worker-error {
+  margin: 0 0 14px;
+  color: #a24737;
+  font-size: 10px;
+}
+@media (max-width: 760px) {
+  .worker-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .autosave-status {

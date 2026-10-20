@@ -42,6 +42,12 @@ import { refreshClarityForStatistics } from "../services/clarity.js";
 import { browserContext } from "../services/visit-context.js";
 import { tick } from "../services/engine.js";
 import {
+  controlManagedWorker,
+  managedWorkerActionSchema,
+  managedWorkerIdSchema,
+  managedWorkerStatuses,
+} from "../services/managed-workers.js";
+import {
   unsubscribe,
   transitionLead,
   enrollExisting,
@@ -466,4 +472,14 @@ adminRouter.get("/audit", async (_req, res) => {
 });
 adminRouter.post("/worker/run", async (_req, res) => {
   res.json(await tick());
+});
+adminRouter.get("/workers", async (_req, res) => {
+  res.set("Cache-Control", "no-store").json(await managedWorkerStatuses());
+});
+adminRouter.post("/workers/:id/:action", async (req, res) => {
+  const id = managedWorkerIdSchema.parse(req.params.id);
+  const action = managedWorkerActionSchema.parse(req.params.action);
+  res
+    .set("Cache-Control", "no-store")
+    .json(await controlManagedWorker(id, action, "owner"));
 });

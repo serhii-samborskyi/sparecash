@@ -128,3 +128,54 @@ export async function processAdvertiserConversions() {
     }),
   };
 }
+
+export async function requeueAdvertiserConversions(input: {
+  goal: 1 | 2 | 3;
+  externalClickIds: string[];
+  actor: string;
+  reason: string;
+}) {
+  const externalClickIds = [...new Set(input.externalClickIds)];
+  const existing = await db.advertiserConversion.findMany({
+    where: {
+      goal: input.goal,
+      externalClickId: { in: externalClickIds },
+    },
+    select: { id: true, externalClickId: true, status: true, attempts: true },
+  });
+  await db.$transaction([
+    db.advertiserConversion.updateMany({
+      where: { id: { in: existing.map((item) => item.id) } },
+      data: {
+        status: "PENDING",
+        attemptedAt: null,
+        sentAt: null,
+        error: `Manual replay requested: ${input.reason}`,
+      },
+    }),
+    db.auditLog.create({
+      data: {
+        actor: input.actor,
+        action: "advertiser_conversions.requeued",
+        details: {
+          goal: input.goal,
+          reason: input.reason,
+          requested: externalClickIds.length,
+          matched: existing.length,
+          previous: existing.map((item) => ({
+            externalClickId: item.externalClickId,
+            status: item.status,
+            attempts: item.attempts,
+          })),
+        },
+      },
+    }),
+  ]);
+  return {
+    requested: externalClickIds.length,
+    requeued: existing.length,
+    missing: externalClickIds.filter(
+      (id) => !existing.some((item) => item.externalClickId === id),
+    ),
+  };
+}

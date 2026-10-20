@@ -41,6 +41,7 @@ import { SettingsView } from "./components/settings";
 import { TimezoneSelect } from "./components/timezone-select";
 import { Statistics } from "./components/statistics";
 import { BrandMark } from "./components/brand-mark";
+import { WorkerControls } from "./components/worker-controls";
 const nav: [string, string, LucideIcon][] = [
   ["overview", "Overview", LayoutDashboard],
   ["statistics", "Statistics", Activity],
@@ -1474,6 +1475,7 @@ export function Admin() {
           {page === "settings" && (
             <>
               <ConnectionSettings notify={notify} onSaved={refresh} />
+              <WorkerControls notify={notify} />
               <SettingsView
                 value={data.settings}
                 ipTimezoneConfigured={data.ipTimezoneConfigured}

@@ -4,7 +4,10 @@ import {
   defaultRuntimeValues,
   type RuntimeConfiguration,
 } from "../server/runtime-schema";
-import { processAdvertiserConversions } from "../server/services/advertiser-conversions";
+import {
+  processAdvertiserConversions,
+  requeueAdvertiserConversions,
+} from "../server/services/advertiser-conversions";
 
 const conversions = vi.hoisted(() => ({
   updateMany: vi.fn(),
@@ -16,10 +19,14 @@ const attempts = vi.hoisted(() => ({
   create: vi.fn(),
   update: vi.fn(),
 }));
+const auditLogs = vi.hoisted(() => ({ create: vi.fn() }));
+const transaction = vi.hoisted(() => vi.fn());
 vi.mock("../server/db", () => ({
   db: {
     advertiserConversion: conversions,
     advertiserConversionAttempt: attempts,
+    auditLog: auditLogs,
+    $transaction: transaction,
   },
 }));
 
@@ -49,6 +56,10 @@ beforeEach(() => {
   conversions.count.mockResolvedValue(0);
   attempts.create.mockResolvedValue({ id: "attempt-1" });
   attempts.update.mockResolvedValue({});
+  auditLogs.create.mockResolvedValue({});
+  transaction.mockImplementation(async (operations: Promise<unknown>[]) =>
+    Promise.all(operations),
+  );
   fetchMock = vi.fn().mockResolvedValue(new Response("ok"));
   vi.stubGlobal("fetch", fetchMock);
 });
@@ -118,4 +129,36 @@ it("leaves conversions queued until the account postback URL is configured", asy
   });
   expect(fetchMock).not.toHaveBeenCalled();
   expect(conversions.findMany).not.toHaveBeenCalled();
+});
+
+it("requeues only exact advertiser click IDs for an authorized replay", async () => {
+  conversions.findMany.mockResolvedValue([
+    {
+      id: "conversion-1",
+      externalClickId: "propeller-click-123",
+      status: "SENT",
+      attempts: 1,
+    },
+  ]);
+  const result = await requeueAdvertiserConversions({
+    goal: 3,
+    externalClickIds: ["propeller-click-123", "missing-click-456"],
+    actor: "mcp",
+    reason: "Owner requested replay after the advertiser report stayed empty",
+  });
+  expect(result).toEqual({
+    requested: 2,
+    requeued: 1,
+    missing: ["missing-click-456"],
+  });
+  expect(conversions.updateMany).toHaveBeenCalledWith({
+    where: { id: { in: ["conversion-1"] } },
+    data: {
+      status: "PENDING",
+      attemptedAt: null,
+      sentAt: null,
+      error:
+        "Manual replay requested: Owner requested replay after the advertiser report stayed empty",
+    },
+  });
 });

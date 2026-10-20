@@ -1,6 +1,6 @@
 import { initializeRuntimeConfiguration } from "./runtime-config.js";
-import { tick } from "./services/engine.js";
 import { db } from "./db.js";
+import { runManagedWorkerIfEnabled } from "./services/managed-workers.js";
 await initializeRuntimeConfiguration();
 let stopped = false;
 process.on("SIGTERM", () => {
@@ -12,7 +12,10 @@ process.on("SIGINT", () => {
 while (!stopped) {
   try {
     console.log(
-      JSON.stringify({ at: new Date().toISOString(), ...(await tick()) }),
+      JSON.stringify({
+        at: new Date().toISOString(),
+        ...(await runManagedWorkerIfEnabled("automation")),
+      }),
     );
   } catch (error) {
     console.error(

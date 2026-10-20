@@ -38,6 +38,10 @@ import {
 import { sources, blockSource } from "./services/traffic.js";
 import { statisticsReport, statisticsSchema } from "./services/statistics.js";
 import { tick } from "./services/engine.js";
+import {
+  processAdvertiserConversions,
+  requeueAdvertiserConversions,
+} from "./services/advertiser-conversions.js";
 import { timezoneSchema } from "./timezones.js";
 import { landingImages } from "./landing-images.js";
 import { landingDesignGuide } from "./landing-design-guide.js";
@@ -715,10 +719,34 @@ function makeServer() {
   );
   register(
     "run_worker",
-    "Process due consented journeys and source rules once. Can send messages or modify paid traffic when live switches are enabled.",
-    {},
-    async () => {
+    "Process due consented journeys and source rules once. Can send messages or modify paid traffic when live switches are enabled. An explicitly authorized manualRetry can replay exact advertiser click IDs that were previously attempted; advertiser postbacks are not idempotent and may be counted twice if the provider already accepted them.",
+    {
+      manualRetry: z
+        .object({
+          goal: z.union([z.literal(1), z.literal(2), z.literal(3)]),
+          externalClickIds: z
+            .array(z.string().regex(/^[A-Za-z0-9._:-]{6,200}$/))
+            .min(1)
+            .max(20),
+          reason: z.string().min(10).max(500),
+          confirmation: z.literal("REPLAY ADVERTISER CONVERSIONS"),
+        })
+        .optional(),
+    },
+    async ({ manualRetry }) => {
       await audit("mcp", "worker.requested");
+      if (manualRetry) {
+        const requeue = await requeueAdvertiserConversions({
+          goal: manualRetry.goal,
+          externalClickIds: manualRetry.externalClickIds,
+          actor: "mcp",
+          reason: manualRetry.reason,
+        });
+        return {
+          requeue,
+          ...(await withRuntimeConfiguration(processAdvertiserConversions)),
+        };
+      }
       return tick();
     },
   );
