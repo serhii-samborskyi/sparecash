@@ -2,7 +2,10 @@ import { z } from "zod";
 import { db } from "../db.js";
 import { withRuntimeConfiguration } from "../runtime-config.js";
 import { tick } from "./engine.js";
-import { processAdvertiserConversions } from "./advertiser-conversions.js";
+import {
+  processAdvertiserConversions,
+  requeueAdvertiserConversions,
+} from "./advertiser-conversions.js";
 
 export const managedWorkerIdSchema = z.enum([
   "automation",
@@ -210,4 +213,57 @@ export async function managedWorkerStatuses() {
     }),
     checkedAt: new Date().toISOString(),
   };
+}
+
+const goal3RecoveryKey = "repair:2026-10-20-propeller-goal3";
+const goal3RecoveryClickIds = [
+  "1136247656034340967",
+  "1136179505405894811",
+  "1136137768675315769",
+  "1136035787683665321",
+];
+
+export async function runAuthorizedGoal3Recovery() {
+  if (await db.setting.findUnique({ where: { key: goal3RecoveryKey } }))
+    return { alreadyCompleted: true };
+  try {
+    await db.setting.create({
+      data: {
+        key: goal3RecoveryKey,
+        value: { status: "RUNNING", startedAt: new Date().toISOString() },
+      },
+    });
+  } catch {
+    return { alreadyCompleted: true };
+  }
+  try {
+    const requeue = await requeueAdvertiserConversions({
+      goal: 3,
+      externalClickIds: goal3RecoveryClickIds,
+      actor: "system",
+      reason:
+        "Owner-authorized recovery after four attributed opt-ins remained absent from PropellerAds reporting",
+    });
+    const delivery = await runManagedWorker("advertiser-conversions");
+    const result = { status: "COMPLETED", requeue, delivery };
+    await db.setting.update({
+      where: { key: goal3RecoveryKey },
+      data: {
+        value: { ...result, completedAt: new Date().toISOString() },
+      },
+    });
+    return result;
+  } catch (error) {
+    await db.setting.update({
+      where: { key: goal3RecoveryKey },
+      data: {
+        value: {
+          status: "FAILED",
+          failedAt: new Date().toISOString(),
+          error: error instanceof Error ? error.message : "Recovery failed",
+        },
+      },
+    });
+    throw error;
+  }
 }

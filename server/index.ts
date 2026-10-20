@@ -20,7 +20,10 @@ import {
 } from "./runtime-config.js";
 import { runtimeContext } from "./config.js";
 import { recordLandingHit } from "./services/landing-hits.js";
-import { startManagedWorkerLoop } from "./services/managed-workers.js";
+import {
+  runAuthorizedGoal3Recovery,
+  startManagedWorkerLoop,
+} from "./services/managed-workers.js";
 export const app = express();
 app.disable("x-powered-by");
 // Coolify terminates TLS; only trust its loopback/private reverse-proxy hop.
@@ -222,6 +225,7 @@ app.use(
 );
 if (env.NODE_ENV !== "test") {
   await initializeRuntimeConfiguration();
+  await runAuthorizedGoal3Recovery();
   const server = app.listen(env.PORT, "0.0.0.0", () =>
     console.log(`SpareCash: ${env.APP_URL}`),
   );
