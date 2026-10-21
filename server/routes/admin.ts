@@ -65,6 +65,7 @@ import { listOffers, offerPostbackUrl, saveOffer } from "../services/offers.js";
 import {
   ensureEmailTemplates,
   listEmailTemplates,
+  previewEmailTemplate,
   saveEmailTemplate,
 } from "../services/email-templates.js";
 import {
@@ -224,6 +225,9 @@ adminRouter.get("/email-templates", async (_req, res) => {
 });
 adminRouter.post("/email-templates", async (req, res) => {
   res.json(await saveEmailTemplate(req.body, "owner"));
+});
+adminRouter.post("/email-templates/preview", async (req, res) => {
+  res.json(previewEmailTemplate(req.body));
 });
 adminRouter.get("/message-assets", async (_req, res) => {
   res.set("Cache-Control", "no-store").json(await listMessageAssets());

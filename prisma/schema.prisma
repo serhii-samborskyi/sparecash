@@ -615,6 +615,7 @@ model EmailTemplate {
   body        String
   ctaLabel    String      @default("Explore loan options")
   accentColor String      @default("#1f5b4d")
+  htmlSource  String?
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
   chainSteps  ChainStep[]

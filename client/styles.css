@@ -1805,6 +1805,21 @@ summary {
   color: #fff;
   font-weight: 700;
 }
+.email-html-preview {
+  width: 100%;
+  min-height: 620px;
+  margin-top: 18px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fff;
+}
+.code-input {
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+    monospace;
+  font-size: 12px;
+  line-height: 1.55;
+}
 .lead-summary {
   display: flex;
   gap: 20px;

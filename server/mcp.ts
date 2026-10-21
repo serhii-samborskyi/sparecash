@@ -24,7 +24,12 @@ import {
 import { db } from "./db.js";
 import { browserContext } from "./services/visit-context.js";
 import { requireMcp } from "./security.js";
-import { experimentSchema, chainSchema, settingsSchema } from "./domain.js";
+import {
+  experimentSchema,
+  chainSchema,
+  emailTemplateSchema,
+  settingsSchema,
+} from "./domain.js";
 import {
   dashboard,
   saveExperiment,
@@ -65,6 +70,11 @@ import {
   uploadLandingAsset,
   listLandingAssets,
 } from "./services/landing-assets.js";
+import {
+  listEmailTemplates,
+  previewEmailTemplate,
+  saveEmailTemplate,
+} from "./services/email-templates.js";
 import {
   reportSchema,
   trafficReport,
@@ -643,8 +653,65 @@ function makeServer() {
     true,
   );
   register(
+    "email_template_guide",
+    "Read the custom HTML email workflow, supported placeholders, image rules and a safe starter example before creating an HTML email design.",
+    {},
+    async () => ({
+      workflow: [
+        "Use list_landing_assets to find an existing public marketing image, or create_landing_asset_upload to upload AI-generated artwork first.",
+        "Use the returned absolute url in an img src. Relative paths, outside image hosts, scripts, forms, iframes, style tags and remote CSS are rejected.",
+        "Call preview_email_template with the complete design and inspect the rendered HTML.",
+        "Call save_email_template, then put its id in a chain step as emailTemplateId. Use delayHours: 0 on the first step to send on the next worker cycle.",
+      ],
+      placeholders: {
+        "{{name}}": "Contact first name, with a safe fallback.",
+        "{{link}}":
+          "Tracked offer continuation URL. A custom design must use this as an anchor href.",
+        "{{unsubscribe}}":
+          "Preference and unsubscribe URL. A compliance footer is also appended automatically.",
+        "{{business_name}}": "Configured sender business name.",
+        "{{business_address}}": "Configured sender postal address.",
+      },
+      html: {
+        format: "Email body fragment with inline CSS",
+        maximumCharacters: 60000,
+        imageSource: "Absolute url from list_landing_assets",
+        required: '<a href="{{link}}">...</a>',
+      },
+      starter: `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:620px;margin:28px auto;background:#ffffff;border-radius:20px"><tr><td style="padding:36px"><h1 style="margin:0 0 16px;color:#173b31">Your options are ready, {{name}}</h1><p style="font-size:17px;line-height:1.6;color:#486158">Compare the available terms and total cost before deciding.</p><a href="{{link}}" style="display:inline-block;background:#1f5b4d;color:#ffffff;text-decoration:none;font-weight:700;padding:15px 24px;border-radius:999px">Explore loan options</a></td></tr></table>`,
+    }),
+    true,
+  );
+  register(
+    "list_email_templates",
+    "List reusable structured and custom HTML email designs. Use an ACTIVE design id as emailTemplateId on an email chain step.",
+    {},
+    listEmailTemplates,
+    true,
+  );
+  register(
+    "get_email_template",
+    "Read one complete reusable email design, including sanitized custom HTML when present.",
+    { id: z.string().min(1) },
+    async ({ id }) => db.emailTemplate.findUniqueOrThrow({ where: { id } }),
+    true,
+  );
+  register(
+    "preview_email_template",
+    "Validate and render a complete email design with safe sample data without saving it. Read email_template_guide first. Custom HTML images must use absolute URLs from list_landing_assets.",
+    { template: emailTemplateSchema },
+    async ({ template }) => previewEmailTemplate(template),
+    true,
+  );
+  register(
+    "save_email_template",
+    "Create or update a reusable structured or custom HTML email design. Read email_template_guide and preview first. This saves the design but does not activate a chain or enroll contacts.",
+    { template: emailTemplateSchema },
+    async ({ template }) => saveEmailTemplate(template, "mcp"),
+  );
+  register(
     "save_chain",
-    "Create/edit a channel-specific sequence from generated copy. Use {{name}} and {{link}}. Trigger supports subscribed, clicked, explicit decline or elapsed no-conversion. Enrolled content is immutable; duplicate to change. Activating pauses other chains with that channel and trigger.",
+    "Create/edit a channel-specific sequence from generated copy. Use {{name}} and {{link}}. The first step may use delayHours:0 to send on the next worker cycle; later steps require at least 24 hours. For EMAIL, choose an ACTIVE emailTemplateId from list_email_templates. Trigger supports subscribed, clicked, explicit decline or elapsed no-conversion. Enrolled content is immutable; duplicate to change. Activating pauses other chains with that channel and trigger.",
     { chain: chainSchema },
     async ({ chain }) => saveChain(chain, "mcp"),
   );

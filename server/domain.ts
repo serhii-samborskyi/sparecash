@@ -492,29 +492,40 @@ export const experimentSchema = z
     (v) => v.variants.every((x) => !x.preserveConfig || Boolean(x.id)),
     "Only an existing variant can preserve its stored config",
   );
-export const chainSchema = z.object({
-  id: z.string().optional(),
-  name: z.string().min(3).max(100),
-  channel: channelSchema,
-  status: z.enum(["DRAFT", "ACTIVE", "PAUSED"]).default("DRAFT"),
-  trigger: z
-    .enum(["SUBSCRIBED", "CLICKED", "DECLINED", "NO_CONVERSION"])
-    .default("SUBSCRIBED"),
-  maxDays: z.number().int().min(1).max(365).default(30),
-  steps: z
-    .array(
-      z.object({
-        delayHours: z.number().int().min(24).max(2160),
-        subject: z.string().min(2).max(140),
-        body: z.string().min(10).max(4000),
-        offerId: z.string().min(1).nullish(),
-        emailTemplateId: z.string().min(1).nullish(),
-        mediaAssetId: z.string().min(1).nullish(),
-      }),
-    )
-    .min(1)
-    .max(60),
-});
+export const chainSchema = z
+  .object({
+    id: z.string().optional(),
+    name: z.string().min(3).max(100),
+    channel: channelSchema,
+    status: z.enum(["DRAFT", "ACTIVE", "PAUSED"]).default("DRAFT"),
+    trigger: z
+      .enum(["SUBSCRIBED", "CLICKED", "DECLINED", "NO_CONVERSION"])
+      .default("SUBSCRIBED"),
+    maxDays: z.number().int().min(1).max(365).default(30),
+    steps: z
+      .array(
+        z.object({
+          delayHours: z.number().int().min(0).max(2160),
+          subject: z.string().min(2).max(140),
+          body: z.string().min(10).max(4000),
+          offerId: z.string().min(1).nullish(),
+          emailTemplateId: z.string().min(1).nullish(),
+          mediaAssetId: z.string().min(1).nullish(),
+        }),
+      )
+      .min(1)
+      .max(60),
+  })
+  .superRefine((chain, context) => {
+    chain.steps.slice(1).forEach((step, index) => {
+      if (step.delayHours < 24)
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["steps", index + 1, "delayHours"],
+          message: "Later follow-ups must be at least 24 hours apart",
+        });
+    });
+  });
 export const offerSchema = z.object({
   id: z.string().optional(),
   name: z.string().min(2).max(100),
@@ -551,6 +562,7 @@ export const emailTemplateSchema = z.object({
     .string()
     .regex(/^#[0-9a-fA-F]{6}$/)
     .default("#1f5b4d"),
+  htmlSource: z.string().max(60000).nullable().default(null),
 });
 export const settingsSchema = z
   .object({

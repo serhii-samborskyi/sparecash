@@ -1211,7 +1211,11 @@ export function Admin() {
                         {chain.steps.slice(0, 3).map((step: any, i: number) => (
                           <div className="chain-node" key={step.id}>
                             <span className="chain-line" />
-                            <small>Wait {step.delayHours} hours</small>
+                            <small>
+                              {step.delayHours === 0
+                                ? "Send immediately"
+                                : `Wait ${step.delayHours} hours`}
+                            </small>
                             <div>
                               <Icon size={14} />
                               <b>{step.subject}</b>

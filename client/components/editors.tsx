@@ -986,7 +986,8 @@ export function ChainEditor({
         </div>
         <div className="notice subtle">
           One active sequence per person, per channel. Messages are spaced at
-          least 24 hours apart and respect the recipient’s local sending window.
+          least 24 hours apart after the first step and respect the recipient’s
+          local sending window.
         </div>
         {form.steps.map((step: any, i: number) => (
           <div key={i} className="step-editor">
@@ -1009,11 +1010,31 @@ export function ChainEditor({
                 </button>
               )}
             </div>
+            {i === 0 && (
+              <label className="check-row">
+                <input
+                  type="checkbox"
+                  checked={step.delayHours === 0}
+                  onChange={(e) =>
+                    set(
+                      "steps",
+                      form.steps.map((s: any, j: number) =>
+                        j === i
+                          ? { ...s, delayHours: e.target.checked ? 0 : 24 }
+                          : s,
+                      ),
+                    )
+                  }
+                />
+                Send immediately on the next worker cycle
+              </label>
+            )}
             <div className="form-grid">
               <Field label="Wait before sending (hours)">
                 <input
                   type="number"
-                  min="24"
+                  min={i === 0 ? "0" : "24"}
+                  disabled={i === 0 && step.delayHours === 0}
                   value={step.delayHours}
                   onChange={(e) =>
                     set(
@@ -1300,19 +1321,24 @@ export function EmailTemplateEditor({
   notify: (value: string) => void;
 }) {
   const [form, setForm] = useState(
-    initial ?? {
-      name: "New email design",
-      status: "DRAFT",
-      subject: "Your next step, {{name}}",
-      preheader: "Your loan-options link is ready.",
-      eyebrow: "YOUR LOAN OPTIONS",
-      headline: "A clearer next step",
-      body: "Hi {{name}}, compare the available terms and total cost before deciding.",
-      ctaLabel: "Explore loan options",
-      accentColor: "#1f5b4d",
-    },
+    initial
+      ? { ...initial, htmlSource: initial.htmlSource ?? null }
+      : {
+          name: "New email design",
+          status: "DRAFT",
+          subject: "Your next step, {{name}}",
+          preheader: "Your loan-options link is ready.",
+          eyebrow: "YOUR LOAN OPTIONS",
+          headline: "A clearer next step",
+          body: "Hi {{name}}, compare the available terms and total cost before deciding.",
+          ctaLabel: "Explore loan options",
+          accentColor: "#1f5b4d",
+          htmlSource: null,
+        },
   );
   const [busy, setBusy] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
+  const [preview, setPreview] = useState("");
   const [error, setError] = useState("");
   const set = (key: string, value: any) => setForm({ ...form, [key]: value });
   return (
@@ -1364,21 +1390,46 @@ export function EmailTemplateEditor({
               onChange={(e) => set("preheader", e.target.value)}
             />
           </Field>
-          <Field label="Eyebrow">
-            <input
-              value={form.eyebrow}
-              onChange={(e) => set("eyebrow", e.target.value)}
-            />
-          </Field>
-          <Field label="Headline">
-            <input
-              required
-              value={form.headline}
-              onChange={(e) => set("headline", e.target.value)}
-            />
-          </Field>
+          {form.htmlSource === null && (
+            <>
+              <Field label="Eyebrow">
+                <input
+                  value={form.eyebrow}
+                  onChange={(e) => set("eyebrow", e.target.value)}
+                />
+              </Field>
+              <Field label="Headline">
+                <input
+                  required
+                  value={form.headline}
+                  onChange={(e) => set("headline", e.target.value)}
+                />
+              </Field>
+            </>
+          )}
         </div>
-        <Field label="Email copy" hint="Use {{name}} for the contact name.">
+        <label className="check-row">
+          <input
+            type="checkbox"
+            checked={form.htmlSource !== null}
+            onChange={(event) => {
+              set(
+                "htmlSource",
+                event.target.checked
+                  ? `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:620px;margin:28px auto;background:#ffffff;border-radius:20px"><tr><td style="padding:36px"><h1 style="margin:0 0 16px;color:#173b31">Your options are ready, {{name}}</h1><p style="font-size:17px;line-height:1.6;color:#486158">Compare the available terms and total cost before deciding.</p><a href="{{link}}" style="display:inline-block;background:#1f5b4d;color:#ffffff;text-decoration:none;font-weight:700;padding:15px 24px;border-radius:999px">Explore loan options</a></td></tr></table>`
+                  : null,
+              );
+              setPreview("");
+            }}
+          />
+          Use custom HTML with hosted marketing images
+        </label>
+        <Field
+          label={
+            form.htmlSource !== null ? "Plain-text fallback" : "Email copy"
+          }
+          hint="Use {{name}} for the contact name."
+        >
           <textarea
             required
             rows={6}
@@ -1386,33 +1437,85 @@ export function EmailTemplateEditor({
             onChange={(e) => set("body", e.target.value)}
           />
         </Field>
-        <div className="form-grid">
-          <Field label="Button label">
-            <input
-              required
-              value={form.ctaLabel}
-              onChange={(e) => set("ctaLabel", e.target.value)}
-            />
-          </Field>
-          <Field label="Accent color">
-            <input
-              type="color"
-              value={form.accentColor}
-              onChange={(e) => set("accentColor", e.target.value)}
-            />
-          </Field>
-        </div>
-        <div
-          className="email-template-preview"
-          style={{ borderTop: `8px solid ${form.accentColor}` }}
-        >
-          <small>{form.eyebrow}</small>
-          <h2>{form.headline}</h2>
-          <p>{form.body.replaceAll("{{name}}", "Alex")}</p>
-          <button type="button" style={{ background: form.accentColor }}>
-            {form.ctaLabel}
-          </button>
-        </div>
+        {form.htmlSource !== null ? (
+          <>
+            <Field
+              label="HTML email body"
+              hint="Use {{name}}, {{link}}, {{unsubscribe}}, {{business_name}}, and {{business_address}}. Every image must use an absolute URL from the Marketing image library. Inline CSS only."
+            >
+              <textarea
+                required
+                className="code-input"
+                rows={16}
+                value={form.htmlSource}
+                onChange={(event) => {
+                  set("htmlSource", event.target.value);
+                  setPreview("");
+                }}
+              />
+            </Field>
+            <button
+              type="button"
+              className="button secondary"
+              disabled={previewing}
+              onClick={async () => {
+                setPreviewing(true);
+                setError("");
+                try {
+                  const result = await post(
+                    "/admin/email-templates/preview",
+                    form,
+                  );
+                  setPreview(result.html);
+                } catch (caught) {
+                  setError((caught as Error).message);
+                } finally {
+                  setPreviewing(false);
+                }
+              }}
+            >
+              {previewing && <Spinner />}Preview HTML
+            </button>
+            {preview && (
+              <iframe
+                className="email-html-preview"
+                title="Email HTML preview"
+                sandbox=""
+                srcDoc={preview}
+              />
+            )}
+          </>
+        ) : (
+          <>
+            <div className="form-grid">
+              <Field label="Button label">
+                <input
+                  required
+                  value={form.ctaLabel}
+                  onChange={(e) => set("ctaLabel", e.target.value)}
+                />
+              </Field>
+              <Field label="Accent color">
+                <input
+                  type="color"
+                  value={form.accentColor}
+                  onChange={(e) => set("accentColor", e.target.value)}
+                />
+              </Field>
+            </div>
+            <div
+              className="email-template-preview"
+              style={{ borderTop: `8px solid ${form.accentColor}` }}
+            >
+              <small>{form.eyebrow}</small>
+              <h2>{form.headline}</h2>
+              <p>{form.body.replaceAll("{{name}}", "Alex")}</p>
+              <button type="button" style={{ background: form.accentColor }}>
+                {form.ctaLabel}
+              </button>
+            </div>
+          </>
+        )}
         {error && <p className="error">{error}</p>}
       </div>
       <div className="modal-footer">
