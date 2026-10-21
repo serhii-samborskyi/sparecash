@@ -28,6 +28,7 @@ import {
   experimentSchema,
   chainSchema,
   emailTemplateSchema,
+  offerSchema,
   settingsSchema,
 } from "./domain.js";
 import {
@@ -75,6 +76,7 @@ import {
   previewEmailTemplate,
   saveEmailTemplate,
 } from "./services/email-templates.js";
+import { listOffers, saveOffer } from "./services/offers.js";
 import {
   reportSchema,
   trafficReport,
@@ -651,6 +653,19 @@ function makeServer() {
     { id: z.string() },
     async ({ id }) => experimentResults(id),
     true,
+  );
+  register(
+    "list_offers",
+    "List reusable offer destinations, provider, status, assignments, applications and each offer's unique conversion postback URL. Use an ACTIVE offer id in save_experiment or save_chain to build content and follow-ups around that destination.",
+    {},
+    listOffers,
+    true,
+  );
+  register(
+    "save_offer",
+    "Create or edit one HTTPS offer destination and its attribution parameter. Saving an ACTIVE non-default offer only makes it assignable; it does not change traffic until its id is assigned to an experiment, variant or chain step. Returns the offer's unique conversion postback URL.",
+    { offer: offerSchema },
+    async ({ offer }) => saveOffer(offer, "mcp"),
   );
   register(
     "email_template_guide",

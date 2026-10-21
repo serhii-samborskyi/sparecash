@@ -1068,6 +1068,8 @@ it("implements MCP initialization, tool discovery and authenticated tool calls",
   const tools = await client.listTools();
   expect(tools.tools.length).toBeGreaterThanOrEqual(18);
   expect(tools.tools.some((t) => t.name === "save_chain")).toBe(true);
+  expect(tools.tools.some((t) => t.name === "list_offers")).toBe(true);
+  expect(tools.tools.some((t) => t.name === "save_offer")).toBe(true);
   expect(tools.tools.some((t) => t.name === "email_template_guide")).toBe(true);
   expect(tools.tools.some((t) => t.name === "save_email_template")).toBe(true);
   expect(tools.tools.some((t) => t.name === "preview_email_template")).toBe(
