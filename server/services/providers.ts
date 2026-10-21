@@ -20,6 +20,7 @@ async function request(
   method: string,
   headers: Record<string, string>,
   body?: unknown,
+  timeoutMs = 20000,
 ): Promise<any> {
   let response: Response;
   try {
@@ -31,7 +32,7 @@ async function request(
         Accept: "application/json",
       },
       body: body === undefined ? undefined : JSON.stringify(body),
-      signal: AbortSignal.timeout(20000),
+      signal: AbortSignal.timeout(timeoutMs),
       redirect: "error",
     });
   } catch {
@@ -82,7 +83,43 @@ const one = (path: string, body?: unknown, method = "POST") =>
     { Authorization: `Key ${env.ONESIGNAL_API_KEY}` },
     body,
   );
-export async function sendText(phone: string, message: string, id: string) {
+export type BlueBubblesService = "SMS" | "iMessage";
+
+export function selectBlueBubblesService(
+  preferred: BlueBubblesService,
+  visit?: { adContext: unknown; userAgent: string } | null,
+): BlueBubblesService {
+  if (preferred === "SMS") return "SMS";
+  const context =
+    visit?.adContext && typeof visit.adContext === "object"
+      ? (visit.adContext as Record<string, unknown>)
+      : {};
+  const os = typeof context.os === "string" ? context.os : "";
+  const device = typeof context.device === "string" ? context.device : "";
+  const fingerprint = `${os} ${device} ${visit?.userAgent ?? ""}`.toLowerCase();
+  return /(?:iphone|ipad|ipod|\bios\b|macintosh|\bmac ?os\b)/.test(fingerprint)
+    ? "iMessage"
+    : "SMS";
+}
+
+async function serviceForSubscription(
+  sub: Subscription,
+): Promise<BlueBubblesService> {
+  const lead = await db.lead.findUnique({
+    where: { id: sub.leadId },
+    select: {
+      visit: { select: { adContext: true, userAgent: true } },
+    },
+  });
+  return selectBlueBubblesService(env.BLUEBUBBLES_SERVICE, lead?.visit);
+}
+
+export async function sendText(
+  phone: string,
+  message: string,
+  id: string,
+  service: BlueBubblesService = env.BLUEBUBBLES_SERVICE,
+) {
   if (!env.BLUEBUBBLES_URL || !env.BLUEBUBBLES_PASSWORD)
     throw new Error("BlueBubbles is not configured");
   const url = new URL("/api/v1/message/text", env.BLUEBUBBLES_URL);
@@ -93,29 +130,28 @@ export async function sendText(phone: string, message: string, id: string) {
     "POST",
     {},
     {
-      chatGuid: `${env.BLUEBUBBLES_SERVICE};-;${phone}`,
+      chatGuid: `${service};-;${phone}`,
       message,
       tempGuid: id,
       method: "apple-script",
     },
+    60000,
   );
-  if (
-    result.status !== 200 ||
-    typeof result.data?.guid !== "string" ||
-    !result.data.guid
-  )
+  const guid = result.data?.guid ?? result.data?.messageGuid;
+  if (result.status !== 200 || typeof guid !== "string" || !guid)
     throw new Error(
       "BlueBubbles did not confirm a message ID; check Messages on the Mac before retrying",
     );
-  return result.data.guid as string;
+  return guid as string;
 }
 export async function sendAttachment(
   phone: string,
   asset: { data: Uint8Array; mimeType: string; fileName: string },
+  service: BlueBubblesService = env.BLUEBUBBLES_SERVICE,
 ) {
   if (!env.BLUEBUBBLES_URL || !env.BLUEBUBBLES_PASSWORD)
     throw new Error("BlueBubbles is not configured");
-  const chatGuid = `${env.BLUEBUBBLES_SERVICE};-;${phone}`;
+  const chatGuid = `${service};-;${phone}`;
   const url = new URL("/api/v1/message/attachment", env.BLUEBUBBLES_URL);
   url.searchParams.set("password", env.BLUEBUBBLES_PASSWORD);
   // Keep the GUID in the query because some BlueBubbles multipart parsers
@@ -154,12 +190,15 @@ export async function sendVerification(sub: Subscription, code: string) {
         "Brevo did not confirm a message ID; check Brevo logs before retrying",
       );
     providerId = result.messageId;
-  } else if (sub.channel === "SMS")
+  } else if (sub.channel === "SMS") {
+    const service = await serviceForSubscription(sub);
     providerId = await sendText(
       sub.address,
       `Your SpareCash optional verification code is ${code}. It expires in 10 minutes. Updates are already active. Reply STOP to opt out.`,
       sub.id,
+      service,
     );
+  }
   return { paused: false, providerId };
 }
 export async function verifyPush(subscriptionId: string, externalId: string) {
@@ -205,16 +244,18 @@ export async function deliver(
     return String(r.id);
   }
   if (sub.channel === "SMS") {
+    const service = await serviceForSubscription(sub);
     if (message.mediaAssetId) {
       const asset = await db.messageAsset.findUniqueOrThrow({
         where: { id: message.mediaAssetId },
       });
-      await sendAttachment(sub.address, asset);
+      await sendAttachment(sub.address, asset, service);
     }
     return sendText(
       sub.address,
       `${message.body}\n${message.body.includes(link) ? "" : link + "\n"}Reply STOP to opt out.`,
       message.id,
+      service,
     );
   }
   if (!env.BREVO_API_KEY || !env.BREVO_SENDER_EMAIL)

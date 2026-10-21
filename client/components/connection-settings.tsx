@@ -521,8 +521,8 @@ export function ConnectionSettings({
             {field("BLUEBUBBLES_URL", "BlueBubbles server URL", "url")}
             {secret("BLUEBUBBLES_PASSWORD", "BlueBubbles password")}
             <Field
-              label="Text delivery service"
-              hint="Used for phone confirmations, follow-ups, and test messages. Keep SMS for Android recipients."
+              label="Preferred Apple text service"
+              hint="Android and other non-Apple visitors are routed through SMS automatically. Choose iMessage for identified Apple visitors, or SMS to use SMS for everyone. The test below uses this selected service directly."
             >
               <select
                 value={values.BLUEBUBBLES_SERVICE ?? "SMS"}

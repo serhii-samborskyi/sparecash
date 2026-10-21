@@ -4,7 +4,10 @@ import {
   defaultRuntimeValues,
   type RuntimeConfiguration,
 } from "../server/runtime-schema";
-import { sendDeliveryTest } from "../server/services/providers";
+import {
+  selectBlueBubblesService,
+  sendDeliveryTest,
+} from "../server/services/providers";
 vi.mock("../server/services/control", () => ({
   settings: async () => ({
     businessName: "SpareCash",
@@ -68,6 +71,40 @@ it.each(["SMS", "iMessage"] as const)(
     expect(fetchMock).toHaveBeenCalledTimes(1);
   },
 );
+it("routes non-Apple visitors through SMS when iMessage is preferred", () => {
+  expect(
+    selectBlueBubblesService("iMessage", {
+      adContext: { os: "Android", device: "Mobile" },
+      userAgent: "Mozilla/5.0 (Linux; Android 15)",
+    }),
+  ).toBe("SMS");
+  expect(
+    selectBlueBubblesService("iMessage", {
+      adContext: { os: "Windows" },
+      userAgent: "Mozilla/5.0 (Windows NT 10.0)",
+    }),
+  ).toBe("SMS");
+});
+it("uses iMessage only for identified Apple visitors when preferred", () => {
+  expect(
+    selectBlueBubblesService("iMessage", {
+      adContext: { os: "iOS", device: "Mobile" },
+      userAgent: "Mozilla/5.0 (iPhone)",
+    }),
+  ).toBe("iMessage");
+  expect(
+    selectBlueBubblesService("SMS", {
+      adContext: { os: "iOS" },
+      userAgent: "Mozilla/5.0 (iPhone)",
+    }),
+  ).toBe("SMS");
+});
+it("accepts the alternate BlueBubbles messageGuid response", async () => {
+  fetchMock.mockResolvedValue(
+    Response.json({ status: 200, data: { messageGuid: "alternate-id" } }),
+  );
+  expect(await run("bluebubbles", "+13125550123")).toBe("alternate-id");
+});
 it("does not invent BlueBubbles acceptance when there is no message ID", async () => {
   fetchMock.mockResolvedValue(Response.json({ status: 200, data: {} }));
   await expect(run("bluebubbles", "+13125550123")).rejects.toThrow(
