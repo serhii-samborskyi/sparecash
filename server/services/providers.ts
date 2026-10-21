@@ -3,6 +3,7 @@ import { db } from "../db.js";
 import { env } from "../config.js";
 import { token } from "../security.js";
 import { escapeHtml } from "../domain.js";
+import { canReceiveFollowups } from "../subscription-policy.js";
 import { settings } from "./control.js";
 import { renderEmailTemplate } from "./email-templates.js";
 
@@ -74,6 +75,74 @@ const brevo = (path: string, body: unknown, method = "POST") =>
     { "api-key": env.BREVO_API_KEY },
     body,
   );
+
+function withBrevoUnsubscribe(html: string) {
+  const footer =
+    '<p style="font-size:12px;color:#6f7d72;text-align:center"><a href="{{ unsubscribe }}">Unsubscribe through our email provider</a></p>';
+  return html.includes("</body>")
+    ? html.replace("</body>", `${footer}</body>`)
+    : `${html}${footer}`;
+}
+
+async function deliverBrevoCampaign(
+  sub: Subscription,
+  message: Delivery,
+  subject: string,
+  html: string,
+) {
+  if (!env.BREVO_FOLDER_ID)
+    throw new Error(
+      "Brevo transactional email is unavailable and no campaign folder is configured",
+    );
+
+  // A separate list lets the local journey engine target exactly one
+  // consented recipient while using Brevo's marketing-campaign transport.
+  let listId = sub.providerListId;
+  if (!listId) {
+    const list = await brevo("/contacts/lists", {
+      name: `SpareCash ${sub.id}`,
+      folderId: env.BREVO_FOLDER_ID,
+    });
+    listId = Number(list.id);
+    if (!Number.isSafeInteger(listId) || listId <= 0)
+      throw new Error("Brevo returned no list ID");
+    await db.subscription.update({
+      where: { id: sub.id },
+      data: { providerListId: listId },
+    });
+  }
+  await brevo("/contacts", {
+    email: sub.address,
+    listIds: [listId],
+    updateEnabled: true,
+  });
+  const campaign = await brevo("/emailCampaigns", {
+    name: `SpareCash ${message.id}`,
+    type: "classic",
+    sender: { name: env.BREVO_SENDER_NAME, email: env.BREVO_SENDER_EMAIL },
+    subject,
+    htmlContent: withBrevoUnsubscribe(html),
+    recipients: { listIds: [listId] },
+    tag: "sparecash-followup",
+  });
+  const campaignId = Number(campaign.id);
+  if (!Number.isSafeInteger(campaignId) || campaignId <= 0)
+    throw new Error("Brevo returned no campaign ID");
+
+  // Save the ID before sendNow so a delivery webhook can still be reconciled
+  // if the provider response is interrupted after accepting the campaign.
+  await db.delivery.update({
+    where: { id: message.id },
+    data: { providerId: String(campaignId) },
+  });
+  const current = await db.subscription.findUniqueOrThrow({
+    where: { id: sub.id },
+  });
+  if (!canReceiveFollowups(current))
+    throw new Error("Recipient unsubscribed before sending");
+  await brevo(`/emailCampaigns/${campaignId}/sendNow`, {});
+  return String(campaignId);
+}
 const one = (path: string, body?: unknown, method = "POST") =>
   request(
     "OneSignal",
@@ -255,15 +324,30 @@ export async function deliver(
       htmlBody: rendered.html,
     },
   });
-  const result = await brevo("/smtp/email", {
-    sender: { name: env.BREVO_SENDER_NAME, email: env.BREVO_SENDER_EMAIL },
-    to: [{ email: sub.address }],
-    subject: rendered.subject,
-    htmlContent: rendered.html,
-    textContent: `${rendered.body}\n\n${link}\n\nManage preferences: ${unsubscribe}`,
-    tags: ["sparecash-followup"],
-    headers: { "X-Mailin-custom": `delivery:${message.id}` },
-  });
+  let result;
+  try {
+    result = await brevo("/smtp/email", {
+      sender: { name: env.BREVO_SENDER_NAME, email: env.BREVO_SENDER_EMAIL },
+      to: [{ email: sub.address }],
+      subject: rendered.subject,
+      htmlContent: rendered.html,
+      textContent: `${rendered.body}\n\n${link}\n\nManage preferences: ${unsubscribe}`,
+      tags: ["sparecash-followup"],
+      headers: { "X-Mailin-custom": `delivery:${message.id}` },
+    });
+  } catch (error) {
+    // This Brevo account currently rejects the transactional endpoint with
+    // HTTP 405. That response means no message was accepted, so it is safe to
+    // fall back to a one-recipient campaign without risking a duplicate send.
+    if (error instanceof ProviderError && error.status === 405)
+      return deliverBrevoCampaign(
+        sub,
+        message,
+        rendered.subject,
+        rendered.html,
+      );
+    throw error;
+  }
   if (typeof result.messageId !== "string" || !result.messageId)
     throw new Error("Brevo returned no message ID");
   return result.messageId;

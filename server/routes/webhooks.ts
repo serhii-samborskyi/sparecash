@@ -136,6 +136,8 @@ webhookRouter.post("/brevo", async (req, res) => {
       event: z.string(),
       email: z.string().email(),
       id: z.union([z.string(), z.number()]).optional(),
+      camp_id: z.union([z.string(), z.number()]).optional(),
+      campaign_id: z.union([z.string(), z.number()]).optional(),
       ts_event: z.coerce.number().optional(),
       link: z.string().url().optional(),
       URL: z.string().url().optional(),
@@ -164,11 +166,14 @@ webhookRouter.post("/brevo", async (req, res) => {
   const messageId = String(
     input["message-id"] ?? input.messageId ?? input["message_id"] ?? "",
   );
+  const campaignId = String(input.camp_id ?? input.campaign_id ?? "");
   const delivery = embeddedDeliveryId
     ? await db.delivery.findUnique({ where: { id: embeddedDeliveryId } })
     : messageId
       ? await db.delivery.findFirst({ where: { providerId: messageId } })
-      : null;
+      : campaignId
+        ? await db.delivery.findFirst({ where: { providerId: campaignId } })
+        : null;
   const type = (
     {
       delivered: "DELIVERED",
