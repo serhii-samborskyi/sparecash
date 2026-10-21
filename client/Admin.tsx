@@ -185,6 +185,7 @@ export function Admin() {
     [modal, setModal] = useState<any>(null),
     [extra, setExtra] = useState<any>(null),
     [query, setQuery] = useState(""),
+    [libraryQuery, setLibraryQuery] = useState(""),
     [listPage, setListPage] = useState(1),
     [loading, setLoading] = useState(false),
     [experimentAction, setExperimentAction] = useState<{
@@ -249,6 +250,7 @@ export function Admin() {
     setPage(next);
     setListPage(1);
     setQuery("");
+    setLibraryQuery("");
     history.pushState({}, "", `/admin/${next}`);
     setMobile(false);
   };
@@ -284,6 +286,23 @@ export function Admin() {
   const stats = data.stats,
     connected = data.integrations.filter((x: any) => x.connected).length;
   const title = nav.find((x) => x[0] === page)?.[1] ?? "Overview";
+  const libraryNeedle = libraryQuery.trim().toLowerCase();
+  const libraryOffers = (extra?.offers ?? []).filter((offer: any) =>
+    [offer.name, offer.provider, offer.status]
+      .filter(Boolean)
+      .some((value) => String(value).toLowerCase().includes(libraryNeedle)),
+  );
+  const libraryTemplates = (extra?.emailTemplates ?? []).filter(
+    (template: any) =>
+      [template.name, template.subject]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(libraryNeedle)),
+  );
+  const libraryAssets = (extra?.messageAssets ?? []).filter((asset: any) =>
+    [asset.name, asset.fileName]
+      .filter(Boolean)
+      .some((value) => String(value).toLowerCase().includes(libraryNeedle)),
+  );
   return (
     <div className="app-shell">
       <aside className={`sidebar ${mobile ? "open" : ""}`}>
@@ -1072,107 +1091,225 @@ export function Admin() {
                 </span>
               </div>
               <section className="panel followup-library">
-                <div className="section-heading">
+                <div className="followup-library-top">
                   <div>
-                    <h2>Offers and message library</h2>
+                    <h2>Content library</h2>
                     <p>
-                      Choose the destination, email design, and iMessage video
-                      for each step.
+                      Reuse destinations and creative across every follow-up
+                      step.
                     </p>
                   </div>
+                  <label className="library-search">
+                    <Search size={17} />
+                    <input
+                      type="search"
+                      value={libraryQuery}
+                      onChange={(event) => setLibraryQuery(event.target.value)}
+                      placeholder="Search library"
+                      aria-label="Search offers, email designs, and videos"
+                    />
+                  </label>
                 </div>
                 <div className="followup-library-grid">
-                  <div>
-                    <div className="library-heading">
-                      <b>Offers</b>
+                  <section className="library-collection">
+                    <div className="library-collection-heading">
+                      <div className="library-collection-title">
+                        <span className="library-collection-icon">
+                          <Wallet size={18} />
+                        </span>
+                        <span>
+                          <b>Offers</b>
+                          <small>
+                            {number((extra?.offers ?? []).length)} destinations
+                          </small>
+                        </span>
+                      </div>
                       <button
-                        className="text-button"
+                        type="button"
+                        className="library-add-button"
                         onClick={() => setModal({ type: "offer" })}
                       >
-                        <Plus size={14} />
+                        <Plus size={15} />
                         Add offer
                       </button>
                     </div>
-                    {(extra?.offers ?? []).map((offer: any) => (
-                      <button
-                        className="library-row"
-                        key={offer.id}
-                        onClick={() =>
-                          setModal({ type: "offer", value: offer })
-                        }
-                      >
-                        <span>
-                          <b>{offer.name}</b>
+                    <div className="library-list">
+                      {libraryOffers.length ? (
+                        libraryOffers.map((offer: any) => (
+                          <button
+                            type="button"
+                            className="library-item"
+                            key={offer.id}
+                            onClick={() =>
+                              setModal({ type: "offer", value: offer })
+                            }
+                          >
+                            <span className="library-item-copy">
+                              <b>{offer.name}</b>
+                              <small>
+                                {offer.provider} · {offer._count.applications}{" "}
+                                clicks
+                              </small>
+                            </span>
+                            <span className="library-item-action">
+                              <Badge tone={stateTone(offer.status)}>
+                                {offer.isDefault
+                                  ? "default"
+                                  : offer.status.toLowerCase()}
+                              </Badge>
+                              <ChevronRight size={15} />
+                            </span>
+                          </button>
+                        ))
+                      ) : (
+                        <div className="library-empty">
+                          <Wallet size={20} />
+                          <b>
+                            {libraryNeedle
+                              ? "No matching offers"
+                              : "No offers yet"}
+                          </b>
                           <small>
-                            {offer.provider} · {offer._count.applications}{" "}
-                            clicks
+                            {libraryNeedle
+                              ? "Try a different search."
+                              : "Add a destination for your follow-ups."}
+                          </small>
+                        </div>
+                      )}
+                    </div>
+                  </section>
+                  <section className="library-collection">
+                    <div className="library-collection-heading">
+                      <div className="library-collection-title">
+                        <span className="library-collection-icon">
+                          <Mail size={18} />
+                        </span>
+                        <span>
+                          <b>Email designs</b>
+                          <small>
+                            {number((extra?.emailTemplates ?? []).length)}{" "}
+                            reusable templates
                           </small>
                         </span>
-                        <Badge tone={stateTone(offer.status)}>
-                          {offer.isDefault
-                            ? "default"
-                            : offer.status.toLowerCase()}
-                        </Badge>
-                      </button>
-                    ))}
-                  </div>
-                  <div>
-                    <div className="library-heading">
-                      <b>Email designs</b>
+                      </div>
                       <button
-                        className="text-button"
+                        type="button"
+                        className="library-add-button"
                         onClick={() => setModal({ type: "email-template" })}
                       >
-                        <Plus size={14} />
+                        <Plus size={15} />
                         Add design
                       </button>
                     </div>
-                    {(extra?.emailTemplates ?? []).map((template: any) => (
-                      <button
-                        className="library-row"
-                        key={template.id}
-                        onClick={() =>
-                          setModal({ type: "email-template", value: template })
-                        }
-                      >
-                        <span>
-                          <b>{template.name}</b>
-                          <small>{template.subject}</small>
+                    <div className="library-list">
+                      {libraryTemplates.length ? (
+                        libraryTemplates.map((template: any) => (
+                          <button
+                            type="button"
+                            className="library-item"
+                            key={template.id}
+                            onClick={() =>
+                              setModal({
+                                type: "email-template",
+                                value: template,
+                              })
+                            }
+                          >
+                            <span className="library-item-copy">
+                              <b>{template.name}</b>
+                              <small>{template.subject}</small>
+                            </span>
+                            <span className="library-item-action">
+                              <i
+                                className="template-swatch"
+                                style={{ background: template.accentColor }}
+                                aria-hidden="true"
+                              />
+                              <ChevronRight size={15} />
+                            </span>
+                          </button>
+                        ))
+                      ) : (
+                        <div className="library-empty">
+                          <Mail size={20} />
+                          <b>
+                            {libraryNeedle
+                              ? "No matching designs"
+                              : "No email designs yet"}
+                          </b>
+                          <small>
+                            {libraryNeedle
+                              ? "Try a different search."
+                              : "Create a reusable HTML email design."}
+                          </small>
+                        </div>
+                      )}
+                    </div>
+                  </section>
+                  <section className="library-collection library-collection-videos">
+                    <div className="library-collection-heading">
+                      <div className="library-collection-title">
+                        <span className="library-collection-icon">
+                          <MessageSquare size={18} />
                         </span>
-                        <i
-                          className="template-swatch"
-                          style={{ background: template.accentColor }}
-                        />
-                      </button>
-                    ))}
-                  </div>
-                  <div>
-                    <div className="library-heading">
-                      <b>iMessage videos</b>
+                        <span>
+                          <b>iMessage videos</b>
+                          <small>
+                            {number((extra?.messageAssets ?? []).length)} media
+                            files
+                          </small>
+                        </span>
+                      </div>
                       <button
-                        className="text-button"
+                        type="button"
+                        className="library-add-button"
                         onClick={() => setModal({ type: "message-asset" })}
                       >
-                        <Plus size={14} />
+                        <Plus size={15} />
                         Upload video
                       </button>
                     </div>
-                    {(extra?.messageAssets ?? []).length ? (
-                      extra.messageAssets.map((asset: any) => (
-                        <div className="library-row static" key={asset.id}>
-                          <span>
-                            <b>{asset.name}</b>
-                            <small>
-                              {asset.fileName} ·{" "}
-                              {(asset.byteSize / 1048576).toFixed(1)} MB
-                            </small>
-                          </span>
+                    <div className="library-list">
+                      {libraryAssets.length ? (
+                        libraryAssets.map((asset: any) => (
+                          <div className="library-item static" key={asset.id}>
+                            <span className="library-item-copy">
+                              <b>{asset.name}</b>
+                              <small>
+                                {asset.fileName} ·{" "}
+                                {(asset.byteSize / 1048576).toFixed(1)} MB
+                              </small>
+                            </span>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="library-empty">
+                          <MessageSquare size={20} />
+                          <b>
+                            {libraryNeedle
+                              ? "No matching videos"
+                              : "No videos uploaded"}
+                          </b>
+                          <small>
+                            {libraryNeedle
+                              ? "Try a different search."
+                              : "Attach short videos to iMessage steps."}
+                          </small>
+                          {!libraryNeedle && (
+                            <button
+                              type="button"
+                              className="text-button"
+                              onClick={() =>
+                                setModal({ type: "message-asset" })
+                              }
+                            >
+                              Upload your first video
+                            </button>
+                          )}
                         </div>
-                      ))
-                    ) : (
-                      <p className="muted">No videos uploaded yet.</p>
-                    )}
-                  </div>
+                      )}
+                    </div>
+                  </section>
                 </div>
               </section>
               <div className="chain-grid">

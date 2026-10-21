@@ -830,58 +830,234 @@ p {
   margin: 0 0 2px;
 }
 .followup-library {
+  padding: 0;
+  overflow: hidden;
+  border-radius: 16px;
   margin-bottom: 22px;
+}
+.followup-library-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 24px 26px 20px;
+  border-bottom: 1px solid #e9ede6;
+}
+.followup-library-top h2 {
+  font-size: 17px;
+}
+.followup-library-top p {
+  color: var(--muted);
+  font-size: 11px;
+  margin-top: 5px;
+}
+.library-search {
+  width: min(330px, 100%);
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 13px;
+  border: 1px solid #dfe6da;
+  border-radius: 10px;
+  background: #f7f9f5;
+  color: #849083;
+  transition:
+    border-color 150ms ease,
+    background 150ms ease,
+    box-shadow 150ms ease;
+}
+.library-search:focus-within {
+  border-color: #9fbea6;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgb(108 151 116 / 10%);
+}
+.library-search input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--ink);
+  font-size: 12px;
+}
+.library-search input::placeholder {
+  color: #98a197;
 }
 .followup-library-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 24px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(240px, 0.72fr);
+  gap: 16px;
+  padding: 18px;
 }
-.library-heading,
-.library-row {
+.library-collection {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid #e1e7dc;
+  border-radius: 13px;
+  background: #f8faf6;
+}
+.library-collection-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  min-height: 70px;
+  padding: 13px 14px;
+  border-bottom: 1px solid #e5eae1;
+  background: rgb(255 255 255 / 72%);
+}
+.library-collection-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.library-collection-title > span:last-child,
+.library-collection-title b,
+.library-collection-title small {
+  display: block;
+  min-width: 0;
+}
+.library-collection-title b {
+  color: var(--ink);
+  font-family: "Manrope", sans-serif;
+  font-size: 12px;
+  letter-spacing: -0.1px;
+}
+.library-collection-title small {
+  margin-top: 3px;
+  color: #8c978b;
+  font-size: 9px;
+}
+.library-collection-icon {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border-radius: 10px;
+  background: #ebf2e6;
+  color: #56745e;
+}
+.library-add-button {
+  min-height: 33px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  flex: 0 0 auto;
+  padding: 7px 9px;
+  border: 1px solid #dbe4d6;
+  border-radius: 9px;
+  background: #fff;
+  color: var(--green);
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition:
+    transform 120ms var(--ease),
+    border-color 150ms ease,
+    background 150ms ease;
+}
+.library-list {
+  min-height: 170px;
+  max-height: 450px;
+  overflow: auto;
+  padding: 6px;
+  scrollbar-width: thin;
+  scrollbar-color: #cdd8c8 transparent;
+}
+.library-item {
+  width: 100%;
+  min-height: 57px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-}
-.library-heading {
-  margin-bottom: 10px;
-  font-size: 12px;
-}
-.library-row {
-  width: 100%;
-  border-top: 1px solid var(--line);
-  padding: 11px 2px;
-  text-align: left;
+  padding: 10px 9px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
   color: inherit;
+  text-align: left;
+  transition:
+    transform 120ms var(--ease),
+    background 150ms ease,
+    box-shadow 150ms ease;
 }
-.library-row:not(.static):hover {
-  color: var(--green);
+.library-item + .library-item {
+  margin-top: 2px;
 }
-.library-row span,
-.library-row small {
+.library-item-copy {
   display: block;
   min-width: 0;
 }
-.library-row b,
-.library-row small {
+.library-item-copy b,
+.library-item-copy small {
+  display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.library-row b {
+.library-item-copy b {
+  color: #29463c;
   font-size: 11px;
+  font-weight: 600;
 }
-.library-row small {
-  margin-top: 3px;
-  color: var(--muted);
+.library-item-copy small {
+  margin-top: 4px;
+  color: #8a958a;
   font-size: 9px;
 }
-.template-swatch {
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
+.library-item-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   flex: 0 0 auto;
+  color: #98a397;
+}
+.library-item-action > svg {
+  opacity: 0;
+  transform: translateX(-3px);
+  transition:
+    opacity 150ms ease,
+    transform 150ms ease;
+}
+.template-swatch {
+  width: 12px;
+  height: 26px;
+  border-radius: 4px;
+  flex: 0 0 auto;
+  box-shadow: inset 0 0 0 1px rgb(26 54 44 / 10%);
+}
+.library-empty {
+  min-height: 170px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  color: #8b988c;
+  text-align: center;
+}
+.library-empty > svg {
+  margin-bottom: 10px;
+  color: #8ca084;
+}
+.library-empty b {
+  color: #51675e;
+  font-size: 11px;
+}
+.library-empty small {
+  max-width: 210px;
+  margin-top: 5px;
+  font-size: 9px;
+  line-height: 1.5;
+}
+.library-empty .text-button {
+  margin-top: 9px;
+  font-size: 10px;
 }
 .chain-performance {
   display: grid;
@@ -2870,6 +3046,18 @@ summary {
     border-color: #9bb681;
     background: #eff5e5;
   }
+  .library-add-button:hover {
+    border-color: #b8cbb4;
+    background: #f4f8f1;
+  }
+  .library-item:not(.static):hover {
+    background: #fff;
+    box-shadow: 0 5px 16px rgb(40 72 57 / 7%);
+  }
+  .library-item:not(.static):hover .library-item-action > svg {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 @media (min-width: 1500px) {
   .page {
@@ -3037,6 +3225,21 @@ summary {
   }
   .page {
     padding: 25px 18px;
+  }
+  .followup-library-top {
+    align-items: stretch;
+    flex-direction: column;
+    padding: 20px;
+  }
+  .library-search {
+    width: 100%;
+  }
+  .followup-library-grid {
+    grid-template-columns: 1fr;
+    padding: 12px;
+  }
+  .library-list {
+    max-height: 360px;
   }
   .page-heading h1 {
     font-size: 25px;
