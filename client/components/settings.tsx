@@ -222,7 +222,7 @@ export function SettingsView({
           <FileText size={20} />
           <div>
             <h3>Business details & disclosures</h3>
-            <p>Shown to visitors and included in email campaigns.</p>
+            <p>Shown to visitors and included in follow-up emails.</p>
           </div>
         </div>
         <div className="form-grid">

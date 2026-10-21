@@ -10,11 +10,7 @@ export async function subscriptionAvailability() {
   });
   const configured: Record<Channel, boolean> = {
     PUSH: !!(env.ONESIGNAL_APP_ID && env.ONESIGNAL_API_KEY),
-    EMAIL: !!(
-      env.BREVO_API_KEY &&
-      env.BREVO_SENDER_EMAIL &&
-      env.BREVO_FOLDER_ID > 0
-    ),
+    EMAIL: !!(env.BREVO_API_KEY && env.BREVO_SENDER_EMAIL),
     SMS: !!(env.BLUEBUBBLES_URL && env.BLUEBUBBLES_PASSWORD),
   };
   const liveDelivery = env.LIVE_DELIVERY === "true";

@@ -52,7 +52,7 @@ The worker runs separately and acquires a database advisory lock. In-memory HTTP
 - Channel-specific consent records and immutable copies of the landing configuration seen by each visitor. Email confirmation, phone OTP verification, and OneSignal subscription verification precede activation.
 - One active journey per subscription; per-channel rolling 24-hour cap, recipient-local sending hours, maximum journey lifetime, and subscribed/clicked/declined/no-conversion triggers.
 - Time-zone selection in Settings and per-contact CRM/MCP overrides. Prefer browser detection or trusted Cloudflare IP location, with a workspace fallback; optionally schedule everyone in one zone. Sending windows respect daylight saving. [IP detection setup](docs/INTEGRATIONS.md#lead-time-zones).
-- Brevo marketing campaign sending, BlueBubbles SMS/iMessage adapter, and OneSignal push sending. Transactional Brevo email is used only for subscription confirmation.
+- Brevo transactional email for confirmations and follow-ups, BlueBubbles SMS/iMessage delivery, and OneSignal push sending.
 - RoundSky's native sold-lead S2S pixel with separate authentication, decimal commission storage, transaction deduplication, and cancellation of pending messages across channels. Optional prefill uses the visitor's available name/contact details and an exact requested amount when collected.
 - Brevo suppression webhooks, BlueBubbles inbound STOP handling, channel preference pages, and manual owner unsubscribe controls.
 - Durable send intent, worker locking, explicit uncertain-delivery states, and a UI for checking provider logs and resolving attempts before retry.

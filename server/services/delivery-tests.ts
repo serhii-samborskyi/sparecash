@@ -10,7 +10,7 @@ const schema = z
     provider: z.enum(["onesignal", "brevo", "bluebubbles"]),
     recipient: z.string().trim().min(1).max(254),
     requestId: z.string().uuid(),
-    emailKind: z.enum(["transactional", "campaign"]).default("campaign"),
+    emailKind: z.enum(["confirmation", "followup"]).default("followup"),
   })
   .strict()
   .superRefine((input, context) => {
@@ -87,7 +87,7 @@ export async function testDelivery(input: unknown) {
         "OneSignal is not configured",
         "BlueBubbles is not configured",
         "Brevo is not configured",
-        "Set your Brevo campaign folder ID and business mailing address before testing campaign email",
+        "Set your business mailing address before testing follow-up email",
         "OneSignal did not accept a notification. Check that the subscription is active and belongs to this app.",
       ].includes(error.message)
     ) {

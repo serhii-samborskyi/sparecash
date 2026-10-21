@@ -260,7 +260,7 @@ export function ProviderDeliveryTest({
   service?: string;
 }) {
   const [recipient, setRecipient] = useState("");
-  const [emailKind, setEmailKind] = useState("campaign");
+  const [emailKind, setEmailKind] = useState("followup");
   const [sending, setSending] = useState(false);
   const inFlight = useRef(false);
   const [result, setResult] = useState<{
@@ -294,9 +294,9 @@ export function ProviderDeliveryTest({
               setResult(null);
             }}
           >
-            <option value="campaign">Follow-up campaign email</option>
-            <option value="transactional">
-              Confirmation / transactional email
+            <option value="followup">Follow-up email (transactional)</option>
+            <option value="confirmation">
+              Confirmation email (transactional)
             </option>
           </select>
         </Field>
@@ -313,7 +313,7 @@ export function ProviderDeliveryTest({
           provider === "onesignal"
             ? "Subscribe on your phone using a published landing page, then copy that device's Subscription ID from OneSignal → Audience → Subscriptions. This is different from the app ID."
             : provider === "brevo"
-              ? "Check both email types to verify confirmations and marketing delivery."
+              ? "Both email types use Brevo transactional delivery. The follow-up test also checks the branded HTML format."
               : "Use a country code, for example +13125550123. iMessage requires an iMessage-capable recipient; SMS requires Text Message Forwarding on your iPhone and Mac."
         }
       >

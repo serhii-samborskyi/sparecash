@@ -428,11 +428,8 @@ export async function integrationStatus() {
     {
       id: "brevo",
       name: "Brevo",
-      purpose: "Email campaigns",
-      connected:
-        !!env.BREVO_API_KEY &&
-        !!env.BREVO_SENDER_EMAIL &&
-        !!env.BREVO_FOLDER_ID,
+      purpose: "Transactional confirmation & follow-up email",
+      connected: !!env.BREVO_API_KEY && !!env.BREVO_SENDER_EMAIL,
     },
     {
       id: "myemailverifier",

@@ -1658,7 +1658,7 @@ export function Admin() {
                             onesignal:
                               "Add your App ID and API key. The service worker is included at the site root.",
                             brevo:
-                              "Add your API key, sender address and campaign folder ID. Configure the suppression webhook.",
+                              "Add your API key and verified sender address. Configure the transactional event webhook.",
                             bluebubbles:
                               "Add your server URL and password. Connect the inbound message webhook for STOP replies.",
                           } as any

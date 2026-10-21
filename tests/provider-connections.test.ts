@@ -115,59 +115,34 @@ it("checks Clarity Data Export without exposing its token or importing data", as
   expect(JSON.stringify(result)).not.toContain(config.CLARITY_EXPORT_TOKEN);
 });
 
-it("warns about Brevo folder zero even with a valid API key and active sender", async () => {
-  config.BREVO_FOLDER_ID = 0;
-  fetchMock
-    .mockResolvedValueOnce(Response.json({ email: "account@example.com" }))
-    .mockResolvedValueOnce(
-      Response.json({
-        senders: [{ email: "SENDER@example.com", active: true }],
-      }),
-    );
-  const result = await run("brevo");
-  expect(result.status).toBe("warning");
-  expect(
-    result.checks.find((c) => c.label === "Contact-list folder"),
-  ).toMatchObject({ ok: false });
-  expect(fetchMock).toHaveBeenCalledTimes(2);
-});
-
-it("verifies Brevo sender, folder and business address using only reads", async () => {
+it("verifies the Brevo sender and business address using only reads", async () => {
   fetchMock
     .mockResolvedValueOnce(Response.json({ email: "account@example.com" }))
     .mockResolvedValueOnce(
       Response.json({
         senders: [{ email: config.BREVO_SENDER_EMAIL, active: true }],
       }),
-    )
-    .mockResolvedValueOnce(Response.json({ id: 12 }));
+    );
   const result = await run("brevo");
   expect(result.status).toBe("success");
-  expect(result.checks).toHaveLength(4);
+  expect(result.checks).toHaveLength(3);
   expect(fetchMock.mock.calls.map(([, init]) => init.method)).toEqual([
     "GET",
     "GET",
-    "GET",
   ]);
-  expect(fetchMock.mock.calls[2][0]).toBe(
-    "https://api.brevo.com/v3/contacts/folders/12",
-  );
 });
 
-it("reports an inactive Brevo sender and inaccessible folder as setup failures", async () => {
+it("reports an inactive Brevo sender as a setup failure", async () => {
   fetchMock
     .mockResolvedValueOnce(Response.json({ email: "account@example.com" }))
     .mockResolvedValueOnce(
       Response.json({
         senders: [{ email: config.BREVO_SENDER_EMAIL, active: false }],
       }),
-    )
-    .mockResolvedValueOnce(
-      Response.json({ message: config.BREVO_API_KEY }, { status: 404 }),
     );
   const result = await run("brevo");
   expect(result.status).toBe("warning");
-  expect(result.checks.filter((c) => !c.ok)).toHaveLength(2);
+  expect(result.checks.filter((c) => !c.ok)).toHaveLength(1);
   expect(JSON.stringify(result)).not.toContain(config.BREVO_API_KEY);
 });
 

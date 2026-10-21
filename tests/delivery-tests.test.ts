@@ -18,7 +18,7 @@ const subscription = "1a690bd0-2745-43d8-b07c-40cd937cb802";
 const run = (
   provider: "onesignal" | "brevo" | "bluebubbles",
   recipient: string,
-  kind: "transactional" | "campaign" = "campaign",
+  kind: "confirmation" | "followup" = "followup",
 ) =>
   runtimeContext.run(config, () =>
     sendDeliveryTest(provider, recipient, requestId, kind),
@@ -91,9 +91,9 @@ it("reports a push with no accepted audience as a failure", async () => {
     "did not accept",
   );
 });
-it("sends a transactional test only to the entered email address", async () => {
+it("sends a confirmation test only to the entered email address", async () => {
   fetchMock.mockResolvedValue(Response.json({ messageId: "email-test-id" }));
-  expect(await run("brevo", "owner@example.com", "transactional")).toBe(
+  expect(await run("brevo", "owner@example.com", "confirmation")).toBe(
     "email-test-id",
   );
   expect(fetchMock.mock.calls[0][0]).toBe(
@@ -103,20 +103,19 @@ it("sends a transactional test only to the entered email address", async () => {
     { email: "owner@example.com" },
   ]);
 });
-it("creates a draft campaign and sends its test to one address, never a contact list", async () => {
-  fetchMock
-    .mockResolvedValueOnce(Response.json({ id: 42 }))
-    .mockResolvedValueOnce(new Response(null, { status: 204 }));
-  expect(await run("brevo", "owner@example.com")).toBe("42");
-  expect(
-    JSON.parse(fetchMock.mock.calls[0][1].body).recipients,
-  ).toBeUndefined();
-  expect(fetchMock.mock.calls[1][0]).toBe(
-    "https://api.brevo.com/v3/emailCampaigns/42/sendTest",
+it("sends a branded follow-up test through the same transactional endpoint", async () => {
+  fetchMock.mockResolvedValue(Response.json({ messageId: "followup-test-id" }));
+  expect(await run("brevo", "owner@example.com")).toBe("followup-test-id");
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+  expect(fetchMock.mock.calls[0][0]).toBe(
+    "https://api.brevo.com/v3/smtp/email",
   );
-  expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({
-    emailTo: ["owner@example.com"],
-  });
+  const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+  expect(body.to).toEqual([{ email: "owner@example.com" }]);
+  expect(body.tags).toEqual(["sparecash-followup-test"]);
+  expect(body.headers["X-Mailin-custom"]).toBe(`test:${requestId}`);
+  expect(body.htmlContent).toContain("FOLLOW-UP TEST");
+  expect(body.htmlContent).toContain("Test address");
 });
 it("keeps provider response secrets out of send errors", async () => {
   fetchMock.mockResolvedValue(

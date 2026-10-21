@@ -39,7 +39,7 @@ async function getJson<T>(
       response.status === 401 || response.status === 403
         ? "Access was rejected. Check the saved credential, permissions, and provider IP restrictions."
         : response.status === 404
-          ? "Not found. Check the saved app ID, folder ID, or server URL."
+          ? "Not found. Check the saved app ID or server URL."
           : response.status === 429
             ? "The provider rate limit was reached. Wait before testing again."
             : "The provider could not complete this check. Retry or check its service status.";
@@ -180,26 +180,10 @@ export async function testProviderConnection(provider: Provider) {
         );
         return "The saved sender is active in Brevo.";
       });
-      await check("Contact-list folder", async () => {
-        requireValue(
-          env.BREVO_FOLDER_ID > 0,
-          "Create a contact-list folder in Brevo and save its numeric ID in Campaign folder ID. Zero is not configured.",
-        );
-        const folder = await getJson(
-          `https://api.brevo.com/v3/contacts/folders/${env.BREVO_FOLDER_ID}`,
-          headers,
-          z.object({ id: z.number() }),
-        );
-        requireValue(
-          folder.id === env.BREVO_FOLDER_ID,
-          "The saved folder ID did not match Brevo's response.",
-        );
-        return "The saved contact-list folder exists.";
-      });
       await check("Business address", async () => {
         requireValue(
           (await settings()).businessAddress.trim(),
-          "Add your business mailing address in Settings before sending email campaigns.",
+          "Add your business mailing address in Settings before sending follow-up emails.",
         );
         return "A business mailing address is configured.";
       });

@@ -3,7 +3,6 @@ import { db } from "../db.js";
 import { env } from "../config.js";
 import { token } from "../security.js";
 import { escapeHtml } from "../domain.js";
-import { canReceiveFollowups } from "../subscription-policy.js";
 import { settings } from "./control.js";
 import { renderEmailTemplate } from "./email-templates.js";
 
@@ -75,74 +74,6 @@ const brevo = (path: string, body: unknown, method = "POST") =>
     { "api-key": env.BREVO_API_KEY },
     body,
   );
-
-function withBrevoUnsubscribe(html: string) {
-  const footer =
-    '<p style="font-size:12px;color:#6f7d72;text-align:center"><a href="{{ unsubscribe }}">Unsubscribe through our email provider</a></p>';
-  return html.includes("</body>")
-    ? html.replace("</body>", `${footer}</body>`)
-    : `${html}${footer}`;
-}
-
-async function deliverBrevoCampaign(
-  sub: Subscription,
-  message: Delivery,
-  subject: string,
-  html: string,
-) {
-  if (!env.BREVO_FOLDER_ID)
-    throw new Error(
-      "Brevo transactional email is unavailable and no campaign folder is configured",
-    );
-
-  // A separate list lets the local journey engine target exactly one
-  // consented recipient while using Brevo's marketing-campaign transport.
-  let listId = sub.providerListId;
-  if (!listId) {
-    const list = await brevo("/contacts/lists", {
-      name: `SpareCash ${sub.id}`,
-      folderId: env.BREVO_FOLDER_ID,
-    });
-    listId = Number(list.id);
-    if (!Number.isSafeInteger(listId) || listId <= 0)
-      throw new Error("Brevo returned no list ID");
-    await db.subscription.update({
-      where: { id: sub.id },
-      data: { providerListId: listId },
-    });
-  }
-  await brevo("/contacts", {
-    email: sub.address,
-    listIds: [listId],
-    updateEnabled: true,
-  });
-  const campaign = await brevo("/emailCampaigns", {
-    name: `SpareCash ${message.id}`,
-    type: "classic",
-    sender: { name: env.BREVO_SENDER_NAME, email: env.BREVO_SENDER_EMAIL },
-    subject,
-    htmlContent: withBrevoUnsubscribe(html),
-    recipients: { listIds: [listId] },
-    tag: "sparecash-followup",
-  });
-  const campaignId = Number(campaign.id);
-  if (!Number.isSafeInteger(campaignId) || campaignId <= 0)
-    throw new Error("Brevo returned no campaign ID");
-
-  // Save the ID before sendNow so a delivery webhook can still be reconciled
-  // if the provider response is interrupted after accepting the campaign.
-  await db.delivery.update({
-    where: { id: message.id },
-    data: { providerId: String(campaignId) },
-  });
-  const current = await db.subscription.findUniqueOrThrow({
-    where: { id: sub.id },
-  });
-  if (!canReceiveFollowups(current))
-    throw new Error("Recipient unsubscribed before sending");
-  await brevo(`/emailCampaigns/${campaignId}/sendNow`, {});
-  return String(campaignId);
-}
 const one = (path: string, body?: unknown, method = "POST") =>
   request(
     "OneSignal",
@@ -291,7 +222,7 @@ export async function deliver(
   const config = await settings();
   if (!config.businessAddress)
     throw new Error(
-      "Set the business mailing address before sending email campaigns",
+      "Set the business mailing address before sending follow-up emails",
     );
   const [template, subscription] = await Promise.all([
     message.emailTemplateId
@@ -324,30 +255,15 @@ export async function deliver(
       htmlBody: rendered.html,
     },
   });
-  let result;
-  try {
-    result = await brevo("/smtp/email", {
-      sender: { name: env.BREVO_SENDER_NAME, email: env.BREVO_SENDER_EMAIL },
-      to: [{ email: sub.address }],
-      subject: rendered.subject,
-      htmlContent: rendered.html,
-      textContent: `${rendered.body}\n\n${link}\n\nManage preferences: ${unsubscribe}`,
-      tags: ["sparecash-followup"],
-      headers: { "X-Mailin-custom": `delivery:${message.id}` },
-    });
-  } catch (error) {
-    // This Brevo account currently rejects the transactional endpoint with
-    // HTTP 405. That response means no message was accepted, so it is safe to
-    // fall back to a one-recipient campaign without risking a duplicate send.
-    if (error instanceof ProviderError && error.status === 405)
-      return deliverBrevoCampaign(
-        sub,
-        message,
-        rendered.subject,
-        rendered.html,
-      );
-    throw error;
-  }
+  const result = await brevo("/smtp/email", {
+    sender: { name: env.BREVO_SENDER_NAME, email: env.BREVO_SENDER_EMAIL },
+    to: [{ email: sub.address }],
+    subject: rendered.subject,
+    htmlContent: rendered.html,
+    textContent: `${rendered.body}\n\n${link}\n\nManage preferences: ${unsubscribe}`,
+    tags: ["sparecash-followup"],
+    headers: { "X-Mailin-custom": `delivery:${message.id}` },
+  });
   if (typeof result.messageId !== "string" || !result.messageId)
     throw new Error("Brevo returned no message ID");
   return result.messageId;
@@ -371,9 +287,8 @@ export async function sendDeliveryTest(
   provider: "onesignal" | "brevo" | "bluebubbles",
   recipient: string,
   requestId: string,
-  emailKind: "transactional" | "campaign",
+  emailKind: "confirmation" | "followup",
 ) {
-  const subject = "SpareCash delivery test";
   const body =
     "This is a test message requested by the SpareCash owner. No loan application or subscription was created.";
   if (provider === "bluebubbles") return sendText(recipient, body, requestId);
@@ -383,7 +298,7 @@ export async function sendDeliveryTest(
     const result = await one("/notifications", {
       app_id: env.ONESIGNAL_APP_ID,
       include_subscription_ids: [recipient],
-      headings: { en: subject },
+      headings: { en: "SpareCash delivery test" },
       contents: { en: body },
       url: env.APP_URL,
       idempotency_key: requestId,
@@ -397,37 +312,34 @@ export async function sendDeliveryTest(
   if (!env.BREVO_API_KEY || !env.BREVO_SENDER_EMAIL)
     throw new Error("Brevo is not configured");
   const sender = { name: env.BREVO_SENDER_NAME, email: env.BREVO_SENDER_EMAIL };
-  if (emailKind === "transactional") {
-    const result = await brevo("/smtp/email", {
-      sender,
-      to: [{ email: recipient }],
-      subject,
-      htmlContent: `<p>${body}</p>`,
-    });
-    if (typeof result.messageId !== "string" || !result.messageId)
-      throw new Error(
-        "Brevo did not confirm a message ID; check Brevo logs before retrying",
-      );
-    return result.messageId;
-  }
-  const config = await settings();
-  if (!env.BREVO_FOLDER_ID || !config.businessAddress.trim())
+  const config = emailKind === "followup" ? await settings() : null;
+  if (config && !config.businessAddress.trim())
     throw new Error(
-      "Set your Brevo campaign folder ID and business mailing address before testing campaign email",
+      "Set your business mailing address before testing follow-up email",
     );
-  const campaign = await brevo("/emailCampaigns", {
-    name: `SpareCash test ${requestId}`,
-    type: "classic",
+  const subject =
+    emailKind === "followup"
+      ? "SpareCash follow-up delivery test"
+      : "SpareCash confirmation delivery test";
+  const htmlContent = config
+    ? `<!doctype html><html><body style="margin:0;background:#f2f5ef;font-family:Arial,sans-serif;color:#203d34"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f2f5ef;padding:28px 12px"><tr><td align="center"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:620px;background:#fff;border:1px solid #dce5d9;border-radius:24px"><tr><td style="height:10px;background:#245f52"></td></tr><tr><td style="padding:38px"><div style="font-size:12px;letter-spacing:2px;font-weight:700;color:#245f52;margin-bottom:14px">FOLLOW-UP TEST</div><h1 style="font-size:32px;line-height:1.1;margin:0 0 18px;color:#173b31">Your email design is ready</h1><p style="font-size:17px;line-height:1.6;color:#486158">${escapeHtml(body)}</p><p style="margin:28px 0"><a href="${escapeHtml(env.APP_URL)}" style="display:inline-block;background:#245f52;color:#fff;text-decoration:none;font-weight:700;padding:15px 24px;border-radius:999px">Open SpareCash</a></p><p style="font-size:12px;line-height:1.5;color:#74847d">${escapeHtml(config.businessName)} · ${escapeHtml(config.businessAddress)}</p></td></tr></table></td></tr></table></body></html>`
+    : `<p>${escapeHtml(body)}</p>`;
+  const result = await brevo("/smtp/email", {
     sender,
+    to: [{ email: recipient }],
     subject,
-    htmlContent: `<p>${body}</p><hr><p>${escapeHtml(config.businessName)} · ${escapeHtml(config.businessAddress)}</p><p><a href="{{ unsubscribe }}">Unsubscribe</a></p>`,
-    tag: "sparecash-test",
+    htmlContent,
+    textContent: body,
+    tags: [
+      emailKind === "followup"
+        ? "sparecash-followup-test"
+        : "sparecash-confirmation-test",
+    ],
+    headers: { "X-Mailin-custom": `test:${requestId}` },
   });
-  if (!Number.isSafeInteger(campaign.id) || campaign.id <= 0)
-    throw new Error("Brevo did not confirm the test campaign ID");
-  // Always provide one explicit address; an empty list would send to the entire test list.
-  await brevo(`/emailCampaigns/${campaign.id}/sendTest`, {
-    emailTo: [recipient],
-  });
-  return String(campaign.id);
+  if (typeof result.messageId !== "string" || !result.messageId)
+    throw new Error(
+      "Brevo did not confirm a message ID; check Brevo logs before retrying",
+    );
+  return result.messageId;
 }

@@ -485,13 +485,11 @@ export function ConnectionSettings({
             {secret("BREVO_API_KEY", "Brevo API key")}
             {field("BREVO_SENDER_EMAIL", "Sender email", "email")}
             {field("BREVO_SENDER_NAME", "Sender name")}
-            {field("BREVO_FOLDER_ID", "Campaign folder ID", "number")}
           </div>
           {testButton("brevo", "Brevo", [
             "BREVO_API_KEY",
             "BREVO_SENDER_EMAIL",
             "BREVO_SENDER_NAME",
-            "BREVO_FOLDER_ID",
           ])}
           <ProviderDeliveryTest
             provider="brevo"
@@ -500,7 +498,6 @@ export function ConnectionSettings({
               "BREVO_API_KEY",
               "BREVO_SENDER_EMAIL",
               "BREVO_SENDER_NAME",
-              "BREVO_FOLDER_ID",
             )}
             disabled={busy}
           />

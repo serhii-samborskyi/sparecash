@@ -8,7 +8,7 @@ Settings auto-save when you leave a field; switches and selects save immediately
 
 - **Microsoft Clarity:** reads one day of aggregate dashboard data to verify the Data Export token. The check consumes one of the project's ten daily export requests and does not import or return the rows. [Data Export reference](https://learn.microsoft.com/en-us/clarity/setup-and-installation/clarity-data-export-api).
 - **OneSignal:** reads one message listing using the app API key. This checks app access, not browser subscription or push delivery. [API reference](https://documentation.onesignal.com/reference/view-messages).
-- **Brevo:** checks account access, the saved sender's active status, the contact-list folder, and the app's business mailing address. Folder ID `0` is unconfigured. No campaign or email is created. [Senders](https://developers.brevo.com/reference/get-senders), [folders](https://developers.brevo.com/reference/get-folder).
+- **Brevo:** checks account access, the saved sender's active status, and the app's business mailing address. No email is created. [Senders](https://developers.brevo.com/reference/get-senders).
 - **MyEmailVerifier:** performs one verification request for the provider's support mailbox. Any successfully parsed mailbox status proves API access; visitor submissions still require `Valid`. This consumes one single-address validation request and does not save a contact.
 - **BlueBubbles:** reads server information and registered webhooks, checking that the current reply URL is registered for `new-message`. It does not verify SMS forwarding or actual incoming delivery; test those with your own phone. [Server API](https://docs.bluebubbles.app/server/developer-guides/rest-api-and-webhooks).
 - **PropellerAds:** reads the advertiser balance endpoint to verify API access, discarding the balance. This does not test exclusion write permissions or change campaigns. [API reference](https://ssp-api.propellerads.com/v5/docs/).
@@ -33,7 +33,7 @@ Each messaging provider has a **Send test** control in Settings. These owner-onl
 
 - **BlueBubbles:** select SMS or iMessage, enter your own phone number including country code, and click **Send test SMS/iMessage**. iMessage mode also accepts an Apple ID email for a test. Check receipt on the destination device. Existing phone contacts' replies can also verify the reply webhook.
 - **OneSignal:** subscribe on your phone through a published landing page. In OneSignal's Audience → Subscriptions, copy that device's Subscription ID into **Test push subscription ID**, then click **Send test push**. The app ID is not a device subscription ID. [Targeting by subscription](https://documentation.onesignal.com/reference/create-message).
-- **Brevo:** enter your own email address. Test both **Confirmation / transactional email** and **Follow-up campaign email**. Campaign tests create a draft in Brevo and call `sendTest` with exactly one `emailTo` address; they never send to an audience list. The configured campaign folder and business address are also required. Check your inbox and spam folder. [Brevo campaign test API](https://developers.brevo.com/reference/send-test-email).
+- **Brevo:** enter your own email address. Test both **Confirmation email (transactional)** and **Follow-up email (transactional)**. Both send exactly one message through `/v3/smtp/email`; the follow-up test also renders the branded HTML format and requires the business address. Check your inbox and spam folder. [Brevo transactional email API](https://developers.brevo.com/reference/sendtransacemail).
 
 “Accepted by provider” means the API accepted the request, not that a device or inbox received it. Results show a provider reference when available. If a request times out or returns an ambiguous result, inspect the device/provider logs before starting another test. The app does not automatically retry these sends, and repeated requests with the same test ID are blocked. Rate limits allow five test requests per minute per client IP.
 
@@ -186,13 +186,11 @@ The app ignores `cf-timezone` if the matching secret is absent or incorrect. Inv
 
 ## Brevo
 
-Set `BREVO_API_KEY`, a verified `BREVO_SENDER_EMAIL`, and `BREVO_FOLDER_ID` for a dedicated SpareCash contact-list folder. Add your real business mailing address in Settings.
+Set `BREVO_API_KEY` and a verified `BREVO_SENDER_EMAIL`. Add your real business mailing address in Settings.
 
-Email addresses stay pending until the user explicitly confirms. Confirmation is sent through `/v3/smtp/email`. Marketing follows through `/v3/emailCampaigns`, using a dedicated list for each subscriber so the local per-person sequence engine can select an exact recipient. Contacts are upserted without clearing Brevo blacklist flags. Each email includes your address, the app's preference link, and Brevo's unsubscribe link.
+Email addresses stay pending until the user explicitly confirms. Confirmations and consented follow-ups both send through Brevo's `/v3/smtp/email` endpoint. SpareCash selects the exact recipient, renders the branded HTML, includes your business address and its preference link, and adds a delivery identifier for webhook reconciliation.
 
-For the initial low-volume deployment, this creates one list per email subscriber and one campaign per email delivery. Plan limits and operational scale must be checked before volume growth. Batch campaigns per step/segment or use a provider-approved personalized marketing transport for larger audiences.
-
-Configure a marketing/suppression webhook to:
+Configure a transactional event webhook to:
 
 ```text
 https://sparecash.leadtechx.com/api/webhooks/brevo?token=WEBHOOK_TOKEN
@@ -200,7 +198,7 @@ https://sparecash.leadtechx.com/api/webhooks/brevo?token=WEBHOOK_TOKEN
 
 Accepted normalized fields are `event` and `email`. `unsubscribe`, `unsubscribed`, `spam`, `hard_bounce`, and `blocked` suppress the local subscription immediately. Delivery states currently track provider acceptance rather than guaranteed inbox delivery.
 
-Reference: https://developers.brevo.com/reference/create-email-campaign
+Reference: https://developers.brevo.com/reference/sendtransacemail
 
 ## MyEmailVerifier
 

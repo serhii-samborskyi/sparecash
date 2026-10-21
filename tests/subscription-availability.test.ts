@@ -27,20 +27,25 @@ it("hides every channel while delivery is paused even with configured providers"
   config.LIVE_DELIVERY = "false";
   expect((await subscriptionAvailability()).availableChannels).toEqual([]);
 });
-it("requires email delivery configuration but not the optional mailbox verifier", async () => {
+it("requires transactional email delivery configuration but not a campaign folder", async () => {
   config.BREVO_FOLDER_ID = 0;
-  expect((await subscriptionAvailability()).availableChannels).toEqual([
-    "PUSH",
-    "SMS",
-  ]);
-  config.BREVO_FOLDER_ID = 1;
+  expect((await subscriptionAvailability()).availableChannels).toContain(
+    "EMAIL",
+  );
   config.BREVO_API_KEY = "";
   expect((await subscriptionAvailability()).availableChannels).not.toContain(
     "EMAIL",
   );
   config.BREVO_API_KEY = "test-key";
+  config.BREVO_SENDER_EMAIL = "";
+  expect((await subscriptionAvailability()).availableChannels).not.toContain(
+    "EMAIL",
+  );
+  config.BREVO_SENDER_EMAIL = "test@example.com";
   config.MYEMAILVERIFIER_API_KEY = "";
-  expect((await subscriptionAvailability()).availableChannels).toContain("EMAIL");
+  expect((await subscriptionAvailability()).availableChannels).toContain(
+    "EMAIL",
+  );
 });
 it("offers only approved subscriber channels, leaving a held SMS chain unavailable", async () => {
   findMany.mockResolvedValue([{ channel: "PUSH" }]);

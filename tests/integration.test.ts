@@ -74,7 +74,6 @@ let server: Server,
   initialEmailChainId: string;
 const originalFetch = globalThis.fetch,
   providerCalls: any[] = [];
-let rejectTransactionalFollowup = false;
 function daytimeTimezone() {
   const zones = [
     "America/Chicago",
@@ -177,19 +176,8 @@ beforeAll(async () => {
             : "Mailbox Does Not Exist",
         });
       }
-      if (
-        url.includes("/smtp/email") &&
-        rejectTransactionalFollowup &&
-        JSON.parse(init.body).headers?.["X-Mailin-custom"]
-      )
-        return Response.json({ message: "not allowed" }, { status: 405 });
       if (url.includes("/smtp/email"))
         return Response.json({ messageId: "confirmation-test" });
-      if (url.includes("/contacts/lists")) return Response.json({ id: 42 });
-      if (url.includes("/contacts")) return Response.json({ id: 1 });
-      if (url.includes("/emailCampaigns") && url.endsWith("/sendNow"))
-        return new Response(null, { status: 204 });
-      if (url.includes("/emailCampaigns")) return Response.json({ id: 100 });
       throw new Error(
         `Unexpected outbound provider call: ${new URL(url).hostname}`,
       );
@@ -949,12 +937,7 @@ it("sends a due email once and enforces the next-day cap", async () => {
     where: { id: enrollment.id },
     data: { nextAt: new Date(Date.now() - 1000) },
   });
-  rejectTransactionalFollowup = true;
-  try {
-    expect(((await tick()) as any).sent).toBe(1);
-  } finally {
-    rejectTransactionalFollowup = false;
-  }
+  expect(((await tick()) as any).sent).toBe(1);
   await tick();
   expect(
     await db.delivery.count({
@@ -964,42 +947,23 @@ it("sends a due email once and enforces the next-day cap", async () => {
   expect(
     providerCalls.filter((c) => c.url.includes("/smtp/email")),
   ).toHaveLength(2);
-  const fallbackCalls = providerCalls.filter(
-    (call) =>
-      call.url.includes("/contacts") || call.url.includes("/emailCampaigns"),
-  );
-  expect(fallbackCalls.map((call) => call.url)).toEqual([
-    "https://api.brevo.com/v3/contacts/lists",
-    "https://api.brevo.com/v3/contacts",
-    "https://api.brevo.com/v3/emailCampaigns",
-    "https://api.brevo.com/v3/emailCampaigns/100/sendNow",
-  ]);
-  const campaignBody = JSON.parse(fallbackCalls[2].body);
-  expect(campaignBody.recipients).toEqual({ listIds: [42] });
-  expect(campaignBody.htmlContent).toContain("{{ unsubscribe }}");
   const sent = await db.delivery.findFirstOrThrow({
     where: { subscriptionId: emailId },
   });
-  expect(sent.providerId).toBe("100");
+  expect(sent.providerId).toBe("confirmation-test");
+  expect(sent.htmlBody).toContain("<html>");
   expect(sent.body).toContain("/follow-up?token=");
   expect(sent.body).not.toContain("{{name}}");
-
-  const webhook = await request(
-    "/api/webhooks/brevo",
-    "POST",
-    {
-      event: "unique_opened",
-      email: "visitor@example.com",
-      camp_id: 100,
-      id: "campaign-open-1",
-    },
-    false,
-    { "x-webhook-token": env.WEBHOOK_TOKEN },
-  );
-  expect(webhook.status).toBe(200);
-  expect(
-    await db.delivery.findUniqueOrThrow({ where: { id: sent.id } }),
-  ).toMatchObject({ openCount: 1 });
+  const followupRequest = providerCalls
+    .filter((call) => call.url.endsWith("/smtp/email"))
+    .map((call) => JSON.parse(call.body))
+    .find(
+      (body) => body.headers?.["X-Mailin-custom"] === `delivery:${sent.id}`,
+    );
+  expect(followupRequest).toMatchObject({
+    to: [{ email: "visitor@example.com" }],
+    tags: ["sparecash-followup"],
+  });
 });
 it("deduplicates postbacks, stops funded journeys, and rejects downgrades", async () => {
   const headers = { "x-webhook-token": env.WEBHOOK_TOKEN };
@@ -2460,7 +2424,7 @@ it("requires owner access for real delivery tests and deduplicates a repeated se
   const input = {
     recipient: "owner@example.com",
     requestId: "34828a29-dc87-4a5e-8bb2-63fca1276dd5",
-    emailKind: "transactional",
+    emailKind: "confirmation",
   };
   expect(
     (await request("/api/admin/integrations/brevo/send-test", "POST", input))
