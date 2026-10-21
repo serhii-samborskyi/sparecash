@@ -32,11 +32,18 @@ import {
   Clock,
   SlidersHorizontal,
   Trash2,
+  BadgeDollarSign,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { api, post, money, number, date } from "./api";
 import { Badge, Empty, Modal, Field, Spinner, External } from "./components/ui";
-import { ExperimentEditor, ChainEditor } from "./components/editors";
+import {
+  ExperimentEditor,
+  ChainEditor,
+  OfferEditor,
+  EmailTemplateEditor,
+  MessageAssetUploader,
+} from "./components/editors";
 import { SettingsView } from "./components/settings";
 import { TimezoneSelect } from "./components/timezone-select";
 import { Statistics } from "./components/statistics";
@@ -67,7 +74,14 @@ const goalName: Record<string, string> = {
 const stateTone = (state: string) =>
   ["ACTIVE", "SENT", "FUNDED", "BLOCKED", "APPLIED"].includes(state)
     ? "green"
-    : ["PENDING", "DRAFT", "RECOMMENDED", "UNCERTAIN"].includes(state)
+    : [
+          "PENDING",
+          "DRAFT",
+          "RECOMMENDED",
+          "UNCERTAIN",
+          "HELD",
+          "SCHEDULED",
+        ].includes(state)
       ? "amber"
       : "neutral";
 function landingCardDetails(variant: any) {
@@ -1009,7 +1023,7 @@ export function Admin() {
           )}
           {page === "journeys" && (
             <>
-              <div className="stats-grid">
+              <div className="stats-grid followup-stats">
                 <Metric
                   label="People in follow-up"
                   value={number(extra?.summary?.people ?? 0)}
@@ -1019,34 +1033,159 @@ export function Admin() {
                 <Metric
                   label="Message queue"
                   value={number(extra?.summary?.active ?? 0)}
-                  caption={`${number(extra?.summary?.due ?? 0)} due now · ${number(extra?.summary?.scheduled ?? 0)} scheduled · ${number(extra?.summary?.stopped ?? 0)} stopped`}
+                  caption={`${number(extra?.summary?.due ?? 0)} due · ${number(extra?.summary?.scheduled ?? 0)} scheduled · ${number(extra?.summary?.held ?? 0)} held`}
                   icon={Clock}
                 />
                 <Metric
-                  label="Messages accepted"
-                  value={number(extra?.summary?.sent ?? 0)}
-                  caption={`${number(extra?.summary?.failed ?? 0)} failed · ${number(extra?.summary?.uncertain ?? 0)} uncertain`}
+                  label="Messages delivered"
+                  value={number(extra?.summary?.delivered ?? 0)}
+                  caption={`${number(extra?.summary?.sent ?? 0)} accepted · ${number(extra?.summary?.failed ?? 0)} failed · ${number(extra?.summary?.uncertain ?? 0)} uncertain`}
                   icon={Check}
                 />
                 <Metric
-                  label="Follow-up link clicks"
-                  value={number(extra?.summary?.linkClicks ?? 0)}
-                  caption={`${number(extra?.summary?.applications ?? 0)} application continuations`}
+                  label="Opens and link clicks"
+                  value={number(extra?.summary?.opened ?? 0)}
+                  caption={`${number(extra?.summary?.linkClicks ?? 0)} tracked link clicks · ${number(extra?.summary?.providerClicks ?? 0)} provider click events`}
+                  icon={Mail}
+                />
+                <Metric
+                  label="iMessage engagement"
+                  value={number(extra?.summary?.read ?? 0)}
+                  caption={`${number(extra?.summary?.replied ?? 0)} replies`}
                   icon={MousePointer2}
+                />
+                <Metric
+                  label="Conversions"
+                  value={number(extra?.summary?.sold ?? 0)}
+                  caption={`${number(extra?.summary?.applications ?? 0)} continued · ${number(extra?.summary?.approved ?? 0)} approved · ${number(extra?.summary?.funded ?? 0)} funded`}
+                  icon={BadgeDollarSign}
                 />
               </div>
               <div className="notice subtle">
                 <Workflow size={20} />
                 <span>
-                  Each channel follows its own chain. Opens and reads are not
-                  available from the current providers. “Accepted” means the
-                  provider accepted the send; link clicks are measured through
-                  SpareCash follow-up links.
+                  Email opens and provider clicks come from Brevo and can be
+                  affected by privacy proxies. SpareCash link clicks and
+                  application continuations are first-party events. iMessage
+                  delivered, read, and reply events appear when BlueBubbles
+                  reports them.
                 </span>
               </div>
+              <section className="panel followup-library">
+                <div className="section-heading">
+                  <div>
+                    <h2>Offers and message library</h2>
+                    <p>
+                      Choose the destination, email design, and iMessage video
+                      for each step.
+                    </p>
+                  </div>
+                </div>
+                <div className="followup-library-grid">
+                  <div>
+                    <div className="library-heading">
+                      <b>Offers</b>
+                      <button
+                        className="text-button"
+                        onClick={() => setModal({ type: "offer" })}
+                      >
+                        <Plus size={14} />
+                        Add offer
+                      </button>
+                    </div>
+                    {(extra?.offers ?? []).map((offer: any) => (
+                      <button
+                        className="library-row"
+                        key={offer.id}
+                        onClick={() =>
+                          setModal({ type: "offer", value: offer })
+                        }
+                      >
+                        <span>
+                          <b>{offer.name}</b>
+                          <small>
+                            {offer.provider} · {offer._count.applications}{" "}
+                            clicks
+                          </small>
+                        </span>
+                        <Badge tone={stateTone(offer.status)}>
+                          {offer.isDefault
+                            ? "default"
+                            : offer.status.toLowerCase()}
+                        </Badge>
+                      </button>
+                    ))}
+                  </div>
+                  <div>
+                    <div className="library-heading">
+                      <b>Email designs</b>
+                      <button
+                        className="text-button"
+                        onClick={() => setModal({ type: "email-template" })}
+                      >
+                        <Plus size={14} />
+                        Add design
+                      </button>
+                    </div>
+                    {(extra?.emailTemplates ?? []).map((template: any) => (
+                      <button
+                        className="library-row"
+                        key={template.id}
+                        onClick={() =>
+                          setModal({ type: "email-template", value: template })
+                        }
+                      >
+                        <span>
+                          <b>{template.name}</b>
+                          <small>{template.subject}</small>
+                        </span>
+                        <i
+                          className="template-swatch"
+                          style={{ background: template.accentColor }}
+                        />
+                      </button>
+                    ))}
+                  </div>
+                  <div>
+                    <div className="library-heading">
+                      <b>iMessage videos</b>
+                      <button
+                        className="text-button"
+                        onClick={() => setModal({ type: "message-asset" })}
+                      >
+                        <Plus size={14} />
+                        Upload video
+                      </button>
+                    </div>
+                    {(extra?.messageAssets ?? []).length ? (
+                      extra.messageAssets.map((asset: any) => (
+                        <div className="library-row static" key={asset.id}>
+                          <span>
+                            <b>{asset.name}</b>
+                            <small>
+                              {asset.fileName} ·{" "}
+                              {(asset.byteSize / 1048576).toFixed(1)} MB
+                            </small>
+                          </span>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="muted">No videos uploaded yet.</p>
+                    )}
+                  </div>
+                </div>
+              </section>
               <div className="chain-grid">
                 {data.chains.map((chain: any) => {
                   const Icon = channelIcon[chain.channel];
+                  const metrics = (extra?.chainMetrics ?? []).filter(
+                    (item: any) => item.chainId === chain.id,
+                  );
+                  const total = (key: string) =>
+                    metrics.reduce(
+                      (sum: number, item: any) => sum + Number(item[key] ?? 0),
+                      0,
+                    );
                   return (
                     <section className="panel chain-card" key={chain.id}>
                       <div className="card-top">
@@ -1088,6 +1227,23 @@ export function Admin() {
                       <div className="chain-meta">
                         <span>{chain._count.enrollments} enrollments</span>
                         <span>{chain.maxDays}-day limit</span>
+                      </div>
+                      <div className="chain-performance">
+                        <span>
+                          <b>{total("sent")}</b> sent
+                        </span>
+                        <span>
+                          <b>{total("opened")}</b> opened
+                        </span>
+                        <span>
+                          <b>{total("clicked")}</b> clicked
+                        </span>
+                        <span>
+                          <b>
+                            {total("applications")} / {total("sold")}
+                          </b>{" "}
+                          continued / sold
+                        </span>
                       </div>
                       <div className="card-actions">
                         <button
@@ -1145,6 +1301,19 @@ export function Admin() {
                       completed, and stopped journeys.
                     </p>
                   </div>
+                  <button
+                    className="text-button"
+                    onClick={() =>
+                      void mutate(
+                        "/admin/enrollments/resume",
+                        {},
+                        "Eligible held enrollments resumed",
+                      )
+                    }
+                  >
+                    Resume eligible
+                    <RefreshCw size={14} />
+                  </button>
                 </div>
                 {Array.isArray(extra?.queue) && extra.queue.length ? (
                   <div className="table-scroll">
@@ -1174,9 +1343,14 @@ export function Admin() {
                             </td>
                             <td>{item.chain.name}</td>
                             <td>
-                              <Badge tone={stateTone(item.status)}>
-                                {item.status.toLowerCase()}
+                              <Badge tone={stateTone(item.displayState)}>
+                                {item.displayState.toLowerCase()}
                               </Badge>
+                              {item.stateReason && (
+                                <small className="block muted">
+                                  {item.stateReason}
+                                </small>
+                              )}
                             </td>
                             <td>
                               Step{" "}
@@ -1184,7 +1358,9 @@ export function Admin() {
                               of {item.chain._count.steps}
                             </td>
                             <td>
-                              {item.status === "ACTIVE"
+                              {["ACTIVE", "SCHEDULED"].includes(
+                                item.displayState,
+                              )
                                 ? date(item.deferredUntil || item.nextAt)
                                 : "—"}
                             </td>
@@ -1234,7 +1410,10 @@ export function Admin() {
                           <th>Recipient</th>
                           <th>Message</th>
                           <th>State</th>
+                          <th>Delivered / opened</th>
                           <th>Link clicks</th>
+                          <th>Continued</th>
+                          <th>Conversion</th>
                           <th>Created</th>
                           <th />
                         </tr>
@@ -1259,7 +1438,34 @@ export function Admin() {
                                 {d.status.toLowerCase()}
                               </Badge>
                             </td>
+                            <td>
+                              {d.deliveredAt ? "Delivered" : "—"}
+                              <small className="block muted">
+                                {d.openedAt
+                                  ? `${d.openCount} open event${d.openCount === 1 ? "" : "s"}`
+                                  : d.readAt
+                                    ? "Read"
+                                    : "Not opened"}
+                              </small>
+                            </td>
                             <td>{d.clickCount}</td>
+                            <td>{d.applications?.length ?? 0}</td>
+                            <td>
+                              {d.applications
+                                ?.flatMap((application: any) =>
+                                  application.postbacks.map(
+                                    (postback: any) => postback.event,
+                                  ),
+                                )
+                                .filter(
+                                  (
+                                    event: string,
+                                    index: number,
+                                    all: string[],
+                                  ) => all.indexOf(event) === index,
+                                )
+                                .join(" · ") || "—"}
+                            </td>
                             <td>{date(d.createdAt)}</td>
                             <td>
                               {["FAILED", "UNCERTAIN"].includes(d.status) && (
@@ -1599,6 +1805,7 @@ export function Admin() {
               void refresh();
             }}
             notify={notify}
+            offers={data.offers}
           />
         </Modal>
       )}
@@ -1617,6 +1824,53 @@ export function Admin() {
               void refresh();
             }}
             notify={notify}
+            offers={extra?.offers ?? data.offers}
+            emailTemplates={extra?.emailTemplates ?? []}
+            messageAssets={extra?.messageAssets ?? []}
+          />
+        </Modal>
+      )}
+      {modal?.type === "offer" && (
+        <Modal
+          title={modal.value ? "Edit offer" : "Add offer"}
+          onClose={closeModal}
+          wide
+        >
+          <OfferEditor
+            initial={modal.value}
+            notify={notify}
+            onSaved={() => {
+              setModal(null);
+              void refresh();
+              void loadPage();
+            }}
+          />
+        </Modal>
+      )}
+      {modal?.type === "email-template" && (
+        <Modal
+          title={modal.value ? "Edit email design" : "Add email design"}
+          onClose={closeModal}
+          wide
+        >
+          <EmailTemplateEditor
+            initial={modal.value}
+            notify={notify}
+            onSaved={() => {
+              setModal(null);
+              void loadPage();
+            }}
+          />
+        </Modal>
+      )}
+      {modal?.type === "message-asset" && (
+        <Modal title="Upload iMessage video" onClose={closeModal}>
+          <MessageAssetUploader
+            notify={notify}
+            onSaved={() => {
+              setModal(null);
+              void loadPage();
+            }}
           />
         </Modal>
       )}

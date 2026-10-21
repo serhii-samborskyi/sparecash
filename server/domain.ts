@@ -464,12 +464,14 @@ export const experimentSchema = z
       .max(70),
     status: z.enum(["DRAFT", "ACTIVE", "PAUSED"]).default("DRAFT"),
     objective: objectiveSchema.default("SUBSCRIPTIONS"),
+    offerId: z.string().min(1).nullish(),
     variants: z
       .array(
         z.object({
           id: z.string().optional(),
           name: z.string().min(1).max(80),
           weight: z.number().int().min(0).max(100),
+          offerId: z.string().min(1).nullish(),
           config: landingSchema,
           preserveConfig: z
             .boolean()
@@ -505,10 +507,50 @@ export const chainSchema = z.object({
         delayHours: z.number().int().min(24).max(2160),
         subject: z.string().min(2).max(140),
         body: z.string().min(10).max(4000),
+        offerId: z.string().min(1).nullish(),
+        emailTemplateId: z.string().min(1).nullish(),
+        mediaAssetId: z.string().min(1).nullish(),
       }),
     )
     .min(1)
     .max(60),
+});
+export const offerSchema = z.object({
+  id: z.string().optional(),
+  name: z.string().min(2).max(100),
+  status: z.enum(["DRAFT", "ACTIVE", "PAUSED"]).default("DRAFT"),
+  provider: z.string().min(2).max(60).default("CUSTOM"),
+  destinationUrl: z
+    .string()
+    .url()
+    .max(2000)
+    .refine((value) => {
+      try {
+        return new URL(value).protocol === "https:";
+      } catch {
+        return false;
+      }
+    }, "Offer URL must use HTTPS"),
+  trackingParameter: z
+    .string()
+    .regex(/^[A-Za-z][A-Za-z0-9_]{0,49}$/)
+    .default("subId3"),
+  isDefault: z.boolean().default(false),
+});
+export const emailTemplateSchema = z.object({
+  id: z.string().optional(),
+  name: z.string().min(2).max(100),
+  status: z.enum(["DRAFT", "ACTIVE", "PAUSED"]).default("DRAFT"),
+  subject: z.string().min(2).max(140),
+  preheader: z.string().max(180).default(""),
+  eyebrow: z.string().max(80).default("SPARECASH"),
+  headline: z.string().min(2).max(180),
+  body: z.string().min(10).max(5000),
+  ctaLabel: z.string().min(2).max(80).default("Explore loan options"),
+  accentColor: z
+    .string()
+    .regex(/^#[0-9a-fA-F]{6}$/)
+    .default("#1f5b4d"),
 });
 export const settingsSchema = z
   .object({

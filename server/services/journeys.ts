@@ -26,7 +26,7 @@ export async function enroll(subscriptionId: string, trigger: string) {
     });
     if (existing) return existing;
     await tx.enrollment.updateMany({
-      where: { subscriptionId, status: "ACTIVE" },
+      where: { subscriptionId, status: { in: ["ACTIVE", "HELD"] } },
       data: { status: "STOPPED" },
     });
     await tx.delivery.updateMany({
@@ -75,7 +75,7 @@ export async function unsubscribe(id: string, reason = "Visitor opted out") {
       },
     }),
     db.enrollment.updateMany({
-      where: { subscriptionId: id, status: "ACTIVE" },
+      where: { subscriptionId: id, status: { in: ["ACTIVE", "HELD"] } },
       data: { status: "STOPPED" },
     }),
     db.delivery.updateMany({
@@ -106,7 +106,10 @@ export async function transitionLead(
     await tx.leadEvent.create({ data: { leadId, type: event, detail } });
     if (shouldStop(updated.status, config.stopOn)) {
       await tx.enrollment.updateMany({
-        where: { subscription: { leadId }, status: "ACTIVE" },
+        where: {
+          subscription: { leadId },
+          status: { in: ["ACTIVE", "HELD"] },
+        },
         data: { status: "STOPPED" },
       });
       await tx.delivery.updateMany({
@@ -142,6 +145,34 @@ export async function enrollExisting(channel: Channel, trigger: string) {
   let count = 0;
   for (const sub of subs) if (await enroll(sub.id, trigger)) count++;
   return { count };
+}
+
+export async function resumeEligibleEnrollments(subscriptionId?: string) {
+  const config = await settings();
+  const held = await db.enrollment.findMany({
+    where: {
+      status: "HELD",
+      ...(subscriptionId ? { subscriptionId } : {}),
+    },
+    include: { subscription: { include: { lead: true } } },
+    take: 1000,
+  });
+  let resumed = 0;
+  for (const enrollment of held) {
+    if (
+      canReceiveFollowups(enrollment.subscription) &&
+      !shouldStop(enrollment.subscription.lead.status, config.stopOn)
+    ) {
+      await db.enrollment.update({
+        where: { id: enrollment.id },
+        data: { status: "ACTIVE", holdReason: null, deferredUntil: null },
+      });
+      resumed++;
+    }
+  }
+  if (subscriptionId && !held.length)
+    await enroll(subscriptionId, "SUBSCRIBED");
+  return { resumed };
 }
 
 export async function enrollPendingConsents() {

@@ -195,7 +195,12 @@ it("verifies the exact BlueBubbles reply URL, encoded token and new-message even
     .mockResolvedValueOnce(
       Response.json({
         status: 200,
-        data: [{ url: setup.webhookUrl, events: ["new-message"] }],
+        data: [
+          {
+            url: setup.webhookUrl,
+            events: ["new-message", "updated-message"],
+          },
+        ],
       }),
     );
   const result = await run("bluebubbles");

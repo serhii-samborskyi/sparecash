@@ -13,6 +13,7 @@ export async function recordPostback(input: {
   applicationId: string;
   event: "SOLD" | "APPROVED" | "FUNDED" | "DECLINED";
   revenue: string | number;
+  offerId?: string;
 }) {
   const revenue = new Prisma.Decimal(input.revenue);
   const config = await settings();
@@ -74,7 +75,10 @@ export async function recordPostback(input: {
         });
         if (shouldStop(status, config.stopOn)) {
           await tx.enrollment.updateMany({
-            where: { subscription: { leadId: lead.id }, status: "ACTIVE" },
+            where: {
+              subscription: { leadId: lead.id },
+              status: { in: ["ACTIVE", "HELD"] },
+            },
             data: { status: "STOPPED" },
           });
           await tx.delivery.updateMany({

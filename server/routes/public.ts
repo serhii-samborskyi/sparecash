@@ -3,7 +3,7 @@ import { Router } from "express";
 import { rateLimit } from "express-rate-limit";
 import { subscriptionAvailability } from "../services/subscription-availability.js";
 import { z } from "zod";
-import { randomInt } from "node:crypto";
+import { randomInt, randomUUID } from "node:crypto";
 import { retargetingRouter } from "./retargeting.js";
 import { visitorJourney } from "../services/retargeting.js";
 import { retargetingConfiguration } from "../services/retargeting-config.js";
@@ -58,11 +58,13 @@ import { attachLandingHit } from "../services/landing-hits.js";
 import { verifyEmailAddress } from "../services/email-verification.js";
 import { queueAdvertiserConversion } from "../services/advertiser-conversion-events.js";
 import { recentApplicationActivity } from "../services/recent-activity.js";
+import { recordMessageEvent } from "../services/message-events.js";
 export const publicRouter = Router();
 publicRouter.use(
   rateLimit({
     windowMs: 60000,
     limit: 40,
+    skip: () => env.NODE_ENV === "test",
     standardHeaders: "draft-8",
     legacyHeaders: false,
   }),
@@ -328,6 +330,7 @@ publicRouter.post(
   rateLimit({
     windowMs: 3600000,
     limit: 12,
+    skip: () => env.NODE_ENV === "test",
     standardHeaders: "draft-8",
     legacyHeaders: false,
   }),
@@ -812,11 +815,6 @@ publicRouter.post("/application", async (req, res) => {
     return;
   }
   const lead = await db.lead.findUniqueOrThrow({ where: { id: leadId } });
-  const config = await settings();
-  if (!config.roundskyUrl) {
-    res.status(503).json({ error: "Loan options are not connected yet." });
-    return;
-  }
   const url = await createRoundSkyApplication({
     leadId,
     visitId: lead.visitId,
@@ -834,11 +832,6 @@ publicRouter.post("/followup", async (req, res) => {
     where: { id },
     include: { subscription: { include: { lead: true } } },
   });
-  const config = await settings();
-  if (!config.roundskyUrl) {
-    res.status(503).json({ error: "Loan options are not connected yet." });
-    return;
-  }
   const lead = delivery.subscription.lead;
   await db.delivery.update({
     where: { id },
@@ -852,6 +845,12 @@ publicRouter.post("/followup", async (req, res) => {
     "ENGAGED",
     "Clicked through a follow-up to view loan options",
   );
+  await recordMessageEvent({
+    deliveryId: delivery.id,
+    type: "CLICKED",
+    providerEventId: `local:${randomUUID()}`,
+    detail: { source: "tracked follow-up link" },
+  });
   const url = await createRoundSkyApplication({
     leadId: lead.id,
     visitId: lead.visitId,
@@ -909,11 +908,6 @@ publicRouter.post("/continue", async (req, res) => {
   const visit = await db.visit.findUniqueOrThrow({ where: { id: visitId } });
   if (input.entryPoint === "optional_updates")
     await recordContinueWithoutUpdates(visit.id);
-  const config = await settings();
-  if (!config.roundskyUrl) {
-    res.status(503).json({ error: "Loan options are not connected yet." });
-    return;
-  }
   const url = await createRoundSkyApplication({
     visitId: visit.id,
     requireVerification: true,

@@ -2,14 +2,12 @@ import type { Request, Response, NextFunction } from "express";
 import { db } from "../db.js";
 import { env } from "../config.js";
 import { equal } from "../security.js";
-import {
-  buildRoundSkyUrl,
-  buildRoundSkyPixelUrl,
-} from "../roundsky-contract.js";
+import { buildRoundSkyPixelUrl } from "../roundsky-contract.js";
 import { settings } from "./control.js";
 import { lockJourney, refreshJourneySuppression } from "./retargeting.js";
 import { hasVisitorProof } from "./visitor-verification.js";
 import { queueAdvertiserConversion } from "./advertiser-conversion-events.js";
+import { buildOfferDestination, resolveOffer } from "./offers.js";
 
 export function roundSkyWebhookSecret() {
   return env.ROUNDSKY_WEBHOOK_TOKEN;
@@ -49,8 +47,6 @@ export async function createRoundSkyApplication(input: {
   requireVerification?: boolean;
 }) {
   const config = await settings();
-  if (!config.roundskyUrl)
-    throw new Error("Loan options are not connected yet.");
   const [visit, lead] = await Promise.all([
     db.visit.findUniqueOrThrow({
       where: { id: input.visitId },
@@ -67,6 +63,11 @@ export async function createRoundSkyApplication(input: {
   ]);
   if (lead && lead.visitId !== visit.id)
     throw new Error("Application attribution does not match the contact");
+  const offer = await resolveOffer({
+    visitId: visit.id,
+    deliveryId: input.deliveryId,
+  });
+  if (!offer) throw new Error("Loan options are not connected yet.");
   const application = await db.$transaction(async (tx) => {
     if (visit.journeyId) await lockJourney(tx, visit.journeyId);
     await tx.$queryRaw`SELECT id FROM "Visit" WHERE id=${visit.id} FOR UPDATE`;
@@ -80,6 +81,8 @@ export async function createRoundSkyApplication(input: {
         visitId: input.visitId,
         leadId: input.leadId,
         deliveryId: input.deliveryId,
+        offerId: offer.id,
+        destinationUrl: offer.destinationUrl,
       },
     });
     await queueAdvertiserConversion(tx, {
@@ -116,8 +119,8 @@ export async function createRoundSkyApplication(input: {
     !Array.isArray(lead.answers)
       ? lead.answers
       : {};
-  return buildRoundSkyUrl({
-    baseUrl: config.roundskyUrl,
+  return buildOfferDestination({
+    offer,
     applicationId: application.id,
     campaign: visit.source?.campaignId ?? "direct",
     source: visit.source?.zoneId ?? "direct",

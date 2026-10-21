@@ -10,12 +10,20 @@ import {
 import { token } from "../security.js";
 import { settings } from "./control.js";
 import { deliver, ProviderError } from "./providers.js";
-import { enroll, enrollPendingConsents } from "./journeys.js";
+import {
+  enroll,
+  enrollPendingConsents,
+  resumeEligibleEnrollments,
+} from "./journeys.js";
 import { evaluateSources } from "./traffic.js";
 import { sendingTimezone, nextSendingTime } from "../timezones.js";
 import { processAdvertiserConversions } from "./advertiser-conversions.js";
 import { syncClarityIfDue } from "./clarity.js";
-import { canReceiveFollowups } from "../subscription-policy.js";
+import {
+  canReceiveFollowups,
+  followupHoldReason,
+} from "../subscription-policy.js";
+import { recordMessageEvent } from "./message-events.js";
 export async function tick() {
   return withRuntimeConfiguration(runTick);
 }
@@ -31,6 +39,7 @@ async function runTick() {
       const advertiserConversions = await processAdvertiserConversions();
       const clarity = await syncClarityIfDue();
       const pendingConsentsEnrolled = await enrollPendingConsents();
+      const resumedEnrollments = await resumeEligibleEnrollments();
       await db.delivery.updateMany({
         where: {
           status: "SENDING",
@@ -63,8 +72,8 @@ async function runTick() {
         const sub = enrollment.subscription,
           lead = sub.lead,
           now = new Date();
+        const holdReason = followupHoldReason(sub);
         if (
-          !canReceiveFollowups(sub) ||
           shouldStop(lead.status, config.stopOn) ||
           now.getTime() - enrollment.startedAt.getTime() >
             enrollment.chain.maxDays * 86400000
@@ -72,6 +81,16 @@ async function runTick() {
           await db.enrollment.update({
             where: { id: enrollment.id },
             data: { status: "STOPPED" },
+          });
+          continue;
+        }
+        if (!canReceiveFollowups(sub)) {
+          await db.enrollment.update({
+            where: { id: enrollment.id },
+            data: {
+              status: sub.status === "UNSUBSCRIBED" ? "STOPPED" : "HELD",
+              holdReason,
+            },
           });
           continue;
         }
@@ -125,6 +144,9 @@ async function runTick() {
             step: enrollment.step,
             subject: step.subject,
             body: step.body,
+            offerId: step.offerId,
+            emailTemplateId: step.emailTemplateId,
+            mediaAssetId: step.mediaAssetId,
           },
           update: {},
         });
@@ -212,6 +234,12 @@ async function runTick() {
               },
             }),
           ]);
+          await recordMessageEvent({
+            deliveryId: message.id,
+            type: "ACCEPTED",
+            providerEventId: `accepted:${providerId}`,
+            detail: { providerId },
+          });
           sent++;
         } catch (error) {
           await db.delivery.update({
@@ -224,6 +252,15 @@ async function runTick() {
                   ? "FAILED"
                   : "UNCERTAIN",
               error: error instanceof Error ? error.message : "Delivery failed",
+            },
+          });
+          await recordMessageEvent({
+            deliveryId: message.id,
+            type: "FAILED",
+            providerEventId: `failed:${message.id}:${Date.now()}`,
+            detail: {
+              message:
+                error instanceof Error ? error.message : "Delivery failed",
             },
           });
         }
@@ -255,6 +292,7 @@ async function runTick() {
       return {
         sent,
         pendingConsentsEnrolled,
+        resumedEnrollments,
         clarity,
         ...advertiserConversions,
         ...traffic,

@@ -5,6 +5,7 @@ import { useAutosave } from "../hooks/use-autosave";
 import { AutosaveStatus } from "./autosave-status";
 import { Field, Spinner } from "./ui";
 import {
+  BrevoEventUrl,
   BlueBubblesReplyUrl,
   ProviderTestButton,
   ProviderDeliveryTest,
@@ -502,6 +503,12 @@ export function ConnectionSettings({
               "BREVO_FOLDER_ID",
             )}
             disabled={busy}
+          />
+          <BrevoEventUrl
+            saved={configuration}
+            needsSave={changed("APP_URL", "WEBHOOK_TOKEN")}
+            disabled={busy}
+            notify={notify}
           />
           <h3>MyEmailVerifier</h3>
           <p className="help">

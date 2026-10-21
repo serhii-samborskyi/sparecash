@@ -22,3 +22,18 @@ export function canReceiveFollowups(subscription: SubscriptionState) {
     (subscription.status === "PENDING" && subscription.channel !== "PUSH")
   );
 }
+
+export function followupHoldReason(subscription: SubscriptionState) {
+  if (subscription.status === "UNSUBSCRIBED") return "Contact unsubscribed";
+  if (
+    subscription.channel === "EMAIL" &&
+    subscription.emailVerificationState &&
+    !["NOT_CHECKED", "VERIFIED"].includes(subscription.emailVerificationState)
+  )
+    return subscription.emailVerificationState === "INVALID"
+      ? "Email mailbox is invalid"
+      : "Email verification is inconclusive; retry verification";
+  if (subscription.channel === "PUSH" && subscription.status !== "ACTIVE")
+    return "Push subscription is not confirmed";
+  return null;
+}

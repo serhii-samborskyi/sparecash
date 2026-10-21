@@ -15,10 +15,12 @@ export function ExperimentEditor({
   initial,
   onSaved,
   notify,
+  offers = [],
 }: {
   initial: any;
   onSaved: () => void;
   notify: (s: string) => void;
+  offers?: any[];
 }) {
   const [form, setForm] = useState<any>(
     initial
@@ -98,7 +100,14 @@ export function ExperimentEditor({
     setBusy(true);
     setError("");
     try {
-      await post("/admin/experiments", form);
+      await post("/admin/experiments", {
+        ...form,
+        offerId: form.offerId || null,
+        variants: form.variants.map((item: any) => ({
+          ...item,
+          offerId: item.offerId || null,
+        })),
+      });
       notify("Experiment saved");
       onSaved();
     } catch (e) {
@@ -161,6 +170,24 @@ export function ExperimentEditor({
               <option>DRAFT</option>
               <option>ACTIVE</option>
               <option>PAUSED</option>
+            </select>
+          </Field>
+          <Field
+            label="Default offer"
+            hint="Used by every landing unless the variant overrides it."
+          >
+            <select
+              value={form.offerId ?? ""}
+              onChange={(e) => set("offerId", e.target.value)}
+            >
+              <option value="">Workspace default offer</option>
+              {offers
+                .filter((offer: any) => offer.status === "ACTIVE")
+                .map((offer: any) => (
+                  <option key={offer.id} value={offer.id}>
+                    {offer.name}
+                  </option>
+                ))}
             </select>
           </Field>
         </div>
@@ -365,6 +392,21 @@ export function ExperimentEditor({
               value={v.weight}
               onChange={(e) => variant("weight", Number(e.target.value))}
             />
+          </Field>
+          <Field label="Landing offer">
+            <select
+              value={v.offerId ?? ""}
+              onChange={(e) => variant("offerId", e.target.value)}
+            >
+              <option value="">Use experiment offer</option>
+              {offers
+                .filter((offer: any) => offer.status === "ACTIVE")
+                .map((offer: any) => (
+                  <option key={offer.id} value={offer.id}>
+                    {offer.name}
+                  </option>
+                ))}
+            </select>
           </Field>
           {!v.config.design && !v.config.customLanding && (
             <Field label="Headline">
@@ -838,10 +880,16 @@ export function ChainEditor({
   initial,
   onSaved,
   notify,
+  offers = [],
+  emailTemplates = [],
+  messageAssets = [],
 }: {
   initial: any;
   onSaved: () => void;
   notify: (s: string) => void;
+  offers?: any[];
+  emailTemplates?: any[];
+  messageAssets?: any[];
 }) {
   const [form, setForm] = useState<any>(
     initial ?? {
@@ -866,7 +914,15 @@ export function ChainEditor({
     e.preventDefault();
     setBusy(true);
     try {
-      await post("/admin/chains", form);
+      await post("/admin/chains", {
+        ...form,
+        steps: form.steps.map((step: any) => ({
+          ...step,
+          offerId: step.offerId || null,
+          emailTemplateId: step.emailTemplateId || null,
+          mediaAssetId: step.mediaAssetId || null,
+        })),
+      });
       notify("Follow-up chain saved");
       onSaved();
     } catch (e) {
@@ -1008,6 +1064,82 @@ export function ChainEditor({
                 }
               />
             </Field>
+            <div className="form-grid">
+              <Field label="Offer after click">
+                <select
+                  value={step.offerId ?? ""}
+                  onChange={(e) =>
+                    set(
+                      "steps",
+                      form.steps.map((s: any, j: number) =>
+                        j === i ? { ...s, offerId: e.target.value } : s,
+                      ),
+                    )
+                  }
+                >
+                  <option value="">Use visitor landing offer</option>
+                  {offers
+                    .filter((offer: any) => offer.status === "ACTIVE")
+                    .map((offer: any) => (
+                      <option key={offer.id} value={offer.id}>
+                        {offer.name}
+                      </option>
+                    ))}
+                </select>
+              </Field>
+              {form.channel === "EMAIL" && (
+                <Field label="Email design">
+                  <select
+                    value={step.emailTemplateId ?? ""}
+                    onChange={(e) =>
+                      set(
+                        "steps",
+                        form.steps.map((s: any, j: number) =>
+                          j === i
+                            ? { ...s, emailTemplateId: e.target.value }
+                            : s,
+                        ),
+                      )
+                    }
+                  >
+                    <option value="">Simple email</option>
+                    {emailTemplates
+                      .filter((template: any) => template.status === "ACTIVE")
+                      .map((template: any) => (
+                        <option key={template.id} value={template.id}>
+                          {template.name}
+                        </option>
+                      ))}
+                  </select>
+                </Field>
+              )}
+              {form.channel === "SMS" && (
+                <Field
+                  label="iMessage video"
+                  hint="Sent as an attachment before this text."
+                >
+                  <select
+                    value={step.mediaAssetId ?? ""}
+                    onChange={(e) =>
+                      set(
+                        "steps",
+                        form.steps.map((s: any, j: number) =>
+                          j === i ? { ...s, mediaAssetId: e.target.value } : s,
+                        ),
+                      )
+                    }
+                  >
+                    <option value="">No video</option>
+                    {messageAssets.map((asset: any) => (
+                      <option key={asset.id} value={asset.id}>
+                        {asset.name} · {(asset.byteSize / 1048576).toFixed(1)}{" "}
+                        MB
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              )}
+            </div>
           </div>
         ))}
         <button
@@ -1020,6 +1152,9 @@ export function ChainEditor({
                 delayHours: 24,
                 subject: "Explore your options",
                 body: "Hi {{name}}, here is a reminder to explore your options when the time is right. {{link}}",
+                offerId: null,
+                emailTemplateId: null,
+                mediaAssetId: null,
               },
             ])
           }
@@ -1037,6 +1172,329 @@ export function ChainEditor({
         <p>Pause or duplicate enrolled chains to preserve history.</p>
         <button className="button" disabled={busy}>
           {busy && <Spinner />}Save chain
+        </button>
+      </div>
+    </form>
+  );
+}
+
+export function OfferEditor({
+  initial,
+  onSaved,
+  notify,
+}: {
+  initial?: any;
+  onSaved: () => void;
+  notify: (value: string) => void;
+}) {
+  const [form, setForm] = useState(
+    initial ?? {
+      name: "New offer",
+      status: "DRAFT",
+      provider: "CUSTOM",
+      destinationUrl: "https://",
+      trackingParameter: "subId3",
+      isDefault: false,
+    },
+  );
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const set = (key: string, value: any) => setForm({ ...form, [key]: value });
+  return (
+    <form
+      onSubmit={async (event) => {
+        event.preventDefault();
+        setBusy(true);
+        setError("");
+        try {
+          await post("/admin/offers", form);
+          notify("Offer saved");
+          onSaved();
+        } catch (caught) {
+          setError((caught as Error).message);
+        } finally {
+          setBusy(false);
+        }
+      }}
+    >
+      <div className="modal-body">
+        <div className="form-grid">
+          <Field label="Offer name">
+            <input
+              required
+              value={form.name}
+              onChange={(e) => set("name", e.target.value)}
+            />
+          </Field>
+          <Field label="Provider">
+            <input
+              required
+              value={form.provider}
+              onChange={(e) => set("provider", e.target.value)}
+            />
+          </Field>
+          <Field label="Status">
+            <select
+              value={form.status}
+              onChange={(e) => set("status", e.target.value)}
+            >
+              <option>DRAFT</option>
+              <option>ACTIVE</option>
+              <option>PAUSED</option>
+            </select>
+          </Field>
+          <Field
+            label="Tracking parameter"
+            hint="The application UUID is sent in this parameter."
+          >
+            <input
+              required
+              value={form.trackingParameter}
+              onChange={(e) => set("trackingParameter", e.target.value)}
+            />
+          </Field>
+        </div>
+        <Field label="Destination URL">
+          <input
+            required
+            type="url"
+            value={form.destinationUrl}
+            onChange={(e) => set("destinationUrl", e.target.value)}
+          />
+        </Field>
+        <label className="check-row">
+          <input
+            type="checkbox"
+            checked={form.isDefault}
+            onChange={(e) => set("isDefault", e.target.checked)}
+          />
+          Use as the workspace default offer
+        </label>
+        {initial?.postbackUrl && (
+          <Field
+            label="Unique conversion postback"
+            hint="Give this URL only to this offer provider."
+          >
+            <textarea readOnly rows={4} value={initial.postbackUrl} />
+          </Field>
+        )}
+        {error && <p className="error">{error}</p>}
+      </div>
+      <div className="modal-footer">
+        <p>Offer assignments are snapshotted on every click.</p>
+        <button className="button" disabled={busy}>
+          {busy && <Spinner />}Save offer
+        </button>
+      </div>
+    </form>
+  );
+}
+
+export function EmailTemplateEditor({
+  initial,
+  onSaved,
+  notify,
+}: {
+  initial?: any;
+  onSaved: () => void;
+  notify: (value: string) => void;
+}) {
+  const [form, setForm] = useState(
+    initial ?? {
+      name: "New email design",
+      status: "DRAFT",
+      subject: "Your next step, {{name}}",
+      preheader: "Your loan-options link is ready.",
+      eyebrow: "YOUR LOAN OPTIONS",
+      headline: "A clearer next step",
+      body: "Hi {{name}}, compare the available terms and total cost before deciding.",
+      ctaLabel: "Explore loan options",
+      accentColor: "#1f5b4d",
+    },
+  );
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const set = (key: string, value: any) => setForm({ ...form, [key]: value });
+  return (
+    <form
+      onSubmit={async (event) => {
+        event.preventDefault();
+        setBusy(true);
+        setError("");
+        try {
+          await post("/admin/email-templates", form);
+          notify("Email design saved");
+          onSaved();
+        } catch (caught) {
+          setError((caught as Error).message);
+        } finally {
+          setBusy(false);
+        }
+      }}
+    >
+      <div className="modal-body">
+        <div className="form-grid">
+          <Field label="Design name">
+            <input
+              required
+              value={form.name}
+              onChange={(e) => set("name", e.target.value)}
+            />
+          </Field>
+          <Field label="Status">
+            <select
+              value={form.status}
+              onChange={(e) => set("status", e.target.value)}
+            >
+              <option>DRAFT</option>
+              <option>ACTIVE</option>
+              <option>PAUSED</option>
+            </select>
+          </Field>
+          <Field label="Subject">
+            <input
+              required
+              value={form.subject}
+              onChange={(e) => set("subject", e.target.value)}
+            />
+          </Field>
+          <Field label="Inbox preview">
+            <input
+              value={form.preheader}
+              onChange={(e) => set("preheader", e.target.value)}
+            />
+          </Field>
+          <Field label="Eyebrow">
+            <input
+              value={form.eyebrow}
+              onChange={(e) => set("eyebrow", e.target.value)}
+            />
+          </Field>
+          <Field label="Headline">
+            <input
+              required
+              value={form.headline}
+              onChange={(e) => set("headline", e.target.value)}
+            />
+          </Field>
+        </div>
+        <Field label="Email copy" hint="Use {{name}} for the contact name.">
+          <textarea
+            required
+            rows={6}
+            value={form.body}
+            onChange={(e) => set("body", e.target.value)}
+          />
+        </Field>
+        <div className="form-grid">
+          <Field label="Button label">
+            <input
+              required
+              value={form.ctaLabel}
+              onChange={(e) => set("ctaLabel", e.target.value)}
+            />
+          </Field>
+          <Field label="Accent color">
+            <input
+              type="color"
+              value={form.accentColor}
+              onChange={(e) => set("accentColor", e.target.value)}
+            />
+          </Field>
+        </div>
+        <div
+          className="email-template-preview"
+          style={{ borderTop: `8px solid ${form.accentColor}` }}
+        >
+          <small>{form.eyebrow}</small>
+          <h2>{form.headline}</h2>
+          <p>{form.body.replaceAll("{{name}}", "Alex")}</p>
+          <button type="button" style={{ background: form.accentColor }}>
+            {form.ctaLabel}
+          </button>
+        </div>
+        {error && <p className="error">{error}</p>}
+      </div>
+      <div className="modal-footer">
+        <p>
+          Brevo reports delivery, opens, and provider clicks for these emails.
+        </p>
+        <button className="button" disabled={busy}>
+          {busy && <Spinner />}Save design
+        </button>
+      </div>
+    </form>
+  );
+}
+
+export function MessageAssetUploader({
+  onSaved,
+  notify,
+}: {
+  onSaved: () => void;
+  notify: (value: string) => void;
+}) {
+  const [name, setName] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  return (
+    <form
+      onSubmit={async (event) => {
+        event.preventDefault();
+        if (!file) return;
+        setBusy(true);
+        setError("");
+        try {
+          const base64 = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onerror = () =>
+              reject(new Error("Could not read the video"));
+            reader.onload = () =>
+              resolve(String(reader.result).split(",")[1] ?? "");
+            reader.readAsDataURL(file);
+          });
+          await post("/admin/message-assets", {
+            name,
+            fileName: file.name,
+            mimeType:
+              file.type ||
+              (file.name.toLowerCase().endsWith(".mov")
+                ? "video/quicktime"
+                : "video/mp4"),
+            base64,
+          });
+          notify("iMessage video uploaded");
+          onSaved();
+        } catch (caught) {
+          setError((caught as Error).message);
+        } finally {
+          setBusy(false);
+        }
+      }}
+    >
+      <div className="modal-body">
+        <Field label="Asset name">
+          <input
+            required
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+        </Field>
+        <Field label="MP4 or MOV video" hint="Maximum file size: 20 MB.">
+          <input
+            required
+            type="file"
+            accept="video/mp4,video/quicktime"
+            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+          />
+        </Field>
+        {error && <p className="error">{error}</p>}
+      </div>
+      <div className="modal-footer">
+        <p>The video is sent through BlueBubbles before the text step.</p>
+        <button className="button" disabled={busy || !file}>
+          {busy && <Spinner />}Upload video
         </button>
       </div>
     </form>

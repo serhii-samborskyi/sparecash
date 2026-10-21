@@ -131,8 +131,8 @@ export function BlueBubblesReplyUrl({
   return (
     <>
       <Field
-        label="BlueBubbles reply webhook URL"
-        hint="Paste this complete URL into BlueBubbles → API & Webhooks and enable new-message. Replies from known contacts appear in their CRM timeline; STOP replies unsubscribe them."
+        label="BlueBubbles message webhook URL"
+        hint="Paste this complete URL into BlueBubbles → API & Webhooks and enable new-message and updated-message. It records replies, STOP requests, delivery, and read updates when available."
       >
         <textarea
           readOnly
@@ -178,6 +178,70 @@ export function BlueBubblesReplyUrl({
           {error}
         </p>
       )}
+    </>
+  );
+}
+
+export function BrevoEventUrl({
+  saved,
+  needsSave,
+  disabled,
+  notify,
+}: {
+  saved: object;
+  needsSave: boolean;
+  disabled: boolean;
+  notify: (message: string) => void;
+}) {
+  const [url, setUrl] = useState("");
+  const [error, setError] = useState("");
+  useEffect(() => {
+    const controller = new AbortController();
+    setUrl("");
+    setError("");
+    if (!needsSave)
+      api("/admin/integrations/brevo/webhook", { signal: controller.signal })
+        .then((data) => {
+          if (!controller.signal.aborted) setUrl(data.webhookUrl);
+        })
+        .catch((caught) => {
+          if (!controller.signal.aborted) setError(caught.message);
+        });
+    return () => controller.abort();
+  }, [saved, needsSave]);
+  return (
+    <>
+      <Field
+        label="Brevo event webhook URL"
+        hint="Create a transactional webhook in Brevo for delivered, opened, click, bounce, spam, and unsubscribe events."
+      >
+        <textarea
+          readOnly
+          rows={3}
+          spellCheck={false}
+          value={needsSave ? "" : url}
+          onFocus={(event) => event.currentTarget.select()}
+        />
+      </Field>
+      <div className="row-actions">
+        <button
+          type="button"
+          className="button secondary"
+          disabled={!url || needsSave || disabled}
+          onClick={async () => {
+            try {
+              await navigator.clipboard.writeText(url);
+              notify("Brevo event URL copied");
+            } catch {
+              setError("Select the event URL above and copy it manually.");
+            }
+          }}
+        >
+          <Copy size={16} />
+          Copy event URL
+        </button>
+      </div>
+      {error && <p className="error">{error}</p>}
     </>
   );
 }

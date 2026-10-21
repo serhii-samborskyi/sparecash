@@ -95,12 +95,14 @@ export async function saveExperiment(input: unknown, actor: string) {
         slug: data.slug,
         status: data.status,
         objective: data.objective,
+        offerId: data.offerId ?? null,
       },
       update: {
         name: data.name,
         slug: data.slug,
         status: data.status,
         objective: data.objective,
+        offerId: data.offerId ?? null,
       },
     });
     for (const variant of data.variants) {
@@ -125,11 +127,13 @@ export async function saveExperiment(input: unknown, actor: string) {
           experimentId: experiment.id,
           name: variant.name,
           weight: variant.weight,
+          offerId: variant.offerId ?? null,
           config: variant.config,
         },
         update: {
           name: variant.name,
           weight: variant.weight,
+          offerId: variant.offerId ?? null,
           archivedAt: null,
           config: variant.preserveConfig
             ? (previous!.config as Prisma.InputJsonValue)
@@ -178,10 +182,12 @@ export async function duplicateExperiment(id: string, actor: string) {
         slug,
         status: "DRAFT",
         objective: source.objective,
+        offerId: source.offerId,
         variants: {
           create: source.variants.map((variant) => ({
             name: variant.name,
             weight: variant.weight,
+            offerId: variant.offerId,
             config: variant.config as Prisma.InputJsonValue,
           })),
         },
@@ -335,11 +341,23 @@ export async function saveChain(input: unknown, actor: string) {
                 where: { chainId: id },
                 orderBy: { position: "asc" },
               })
-            ).map(({ delayHours, subject, body }) => ({
-              delayHours,
-              subject,
-              body,
-            })),
+            ).map(
+              ({
+                delayHours,
+                subject,
+                body,
+                offerId,
+                emailTemplateId,
+                mediaAssetId,
+              }) => ({
+                delayHours,
+                subject,
+                body,
+                offerId,
+                emailTemplateId,
+                mediaAssetId,
+              }),
+            ),
           ) !== JSON.stringify(steps))
       )
         throw new Error(
@@ -443,6 +461,7 @@ export async function dashboard() {
     experiments,
     chains,
     events,
+    offers,
     integrations,
     config,
     spend,
@@ -482,6 +501,10 @@ export async function dashboard() {
       orderBy: { createdAt: "desc" },
     }),
     db.auditLog.findMany({ take: 8, orderBy: { createdAt: "desc" } }),
+    db.offer.findMany({
+      where: { status: { not: "PAUSED" } },
+      orderBy: [{ isDefault: "desc" }, { updatedAt: "desc" }],
+    }),
     integrationStatus(),
     settings(),
     db.visit.aggregate({ _sum: { cost: true } }),
@@ -515,6 +538,7 @@ export async function dashboard() {
     experiments,
     chains,
     events,
+    offers,
     integrations,
     settings: config,
     liveDelivery: env.LIVE_DELIVERY === "true",

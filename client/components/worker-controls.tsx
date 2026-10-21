@@ -23,7 +23,7 @@ const label = (state: string) =>
 
 function queueSummary(worker: any) {
   if (worker.id === "automation")
-    return `${worker.queue.active ?? 0} active · ${worker.queue.due ?? 0} due`;
+    return `${worker.queue.active ?? 0} active · ${worker.queue.due ?? 0} due · ${worker.queue.held ?? 0} held`;
   return `${worker.queue.pending ?? 0} pending · ${worker.queue.failed ?? 0} failed · ${worker.queue.uncertain ?? 0} uncertain`;
 }
 

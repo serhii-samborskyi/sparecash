@@ -458,6 +458,12 @@ export async function followupReport(
           step: true,
           status: true,
           sentAt: true,
+          deliveredAt: true,
+          openedAt: true,
+          openCount: true,
+          providerClickCount: true,
+          readAt: true,
+          repliedAt: true,
           clickedAt: true,
           clickCount: true,
           enrollment: {
@@ -505,6 +511,13 @@ export async function followupReport(
         : {}),
       attempts: 0,
       sent: 0,
+      delivered: 0,
+      opened: 0,
+      openCount: 0,
+      providerClicked: 0,
+      providerClickCount: 0,
+      read: 0,
+      replied: 0,
       clickedMessages: 0,
       sentAndClicked: 0,
       clickCount: 0,
@@ -531,6 +544,18 @@ export async function followupReport(
     deliveryGroups.set(delivery.id, group);
     group.attempts++;
     if (delivery.sentAt || delivery.status === "SENT") group.sent++;
+    if (delivery.deliveredAt && delivery.deliveredAt <= observedAt)
+      group.delivered++;
+    if (delivery.openedAt && delivery.openedAt <= observedAt) {
+      group.opened++;
+      group.openCount += delivery.openCount;
+    }
+    if (delivery.providerClickCount > 0) {
+      group.providerClicked++;
+      group.providerClickCount += delivery.providerClickCount;
+    }
+    if (delivery.readAt && delivery.readAt <= observedAt) group.read++;
+    if (delivery.repliedAt && delivery.repliedAt <= observedAt) group.replied++;
     if (delivery.clickedAt && delivery.clickedAt <= observedAt) {
       group.clickedMessages++;
       group.clickCount += delivery.clickCount;
@@ -563,6 +588,14 @@ export async function followupReport(
         ...counts,
         ...outcomeTotals(group),
         convertedMessages: convertedMessages.size,
+        deliveryRate: ratio(group.delivered, group.sent),
+        openRate: ratio(group.opened, group.delivered || group.sent),
+        providerClickThroughRate: ratio(
+          group.providerClicked,
+          group.delivered || group.sent,
+        ),
+        readRate: ratio(group.read, group.delivered || group.sent),
+        replyRate: ratio(group.replied, group.delivered || group.sent),
         clickThroughRate: ratio(group.sentAndClicked, group.sent),
         revenuePerSent: ratio(group.revenue, group.sent),
         saleRatePerApplication: ratio(group.sold.size, group.applications.size),
@@ -581,7 +614,8 @@ export async function followupReport(
     attribution:
       "Delivery-created cohort, with subsequent applications linked by deliveryId and postbacks through observedAt. Each application belongs to one follow-up message.",
     notes: [
-      "Sent means provider acceptance, not delivery or a read. Clicks require the explicit follow-up continuation button; opens are not tracked.",
+      "Sent means provider acceptance. Delivered, email opens and provider clicks require Brevo events; iMessage delivery, reads and replies require BlueBubbles message events.",
+      "Email opens can be inflated by privacy proxies. Provider clicks count tracked email links; clickedMessages counts the explicit SpareCash continuation link.",
       "Step numbers are one-based; step is the stored zero-based index. Compare mature cohorts, channel, trigger and audience before declaring a winner.",
       "No chain A/B randomization: active chains are selected by channel and trigger across the workspace.",
     ],

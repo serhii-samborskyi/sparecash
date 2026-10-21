@@ -44,6 +44,7 @@ enum Objective {
 
 enum EnrollmentStatus {
   ACTIVE
+  HELD
   COMPLETED
   STOPPED
 }
@@ -109,6 +110,8 @@ model Experiment {
   objective Objective @default(SUBSCRIPTIONS)
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
+  offerId   String?
+  offer     Offer?    @relation("ExperimentOffer", fields: [offerId], references: [id], onDelete: SetNull)
   variants  Variant[]
   visits    Visit[]
 }
@@ -121,6 +124,8 @@ model Variant {
   weight       Int        @default(50)
   config       Json
   archivedAt   DateTime?
+  offerId      String?
+  offer        Offer?     @relation("VariantOffer", fields: [offerId], references: [id], onDelete: SetNull)
   visits       Visit[]
 
   @@index([experimentId, archivedAt])
@@ -436,13 +441,19 @@ model Chain {
 }
 
 model ChainStep {
-  id         String @id @default(cuid())
-  chainId    String
-  chain      Chain  @relation(fields: [chainId], references: [id])
-  position   Int
-  delayHours Int    @default(24)
-  subject    String
-  body       String
+  id              String         @id @default(cuid())
+  chainId         String
+  chain           Chain          @relation(fields: [chainId], references: [id])
+  position        Int
+  delayHours      Int            @default(24)
+  subject         String
+  body            String
+  offerId         String?
+  offer           Offer?         @relation(fields: [offerId], references: [id], onDelete: SetNull)
+  emailTemplateId String?
+  emailTemplate   EmailTemplate? @relation(fields: [emailTemplateId], references: [id], onDelete: SetNull)
+  mediaAssetId    String?
+  mediaAsset      MessageAsset?  @relation(fields: [mediaAssetId], references: [id], onDelete: SetNull)
 
   @@unique([chainId, position])
 }
@@ -458,6 +469,7 @@ model Enrollment {
   startedAt      DateTime         @default(now())
   nextAt         DateTime         @default(now())
   deferredUntil  DateTime?
+  holdReason     String?
   deliveries     Delivery[]
 
   @@unique([subscriptionId, chainId])
@@ -465,21 +477,36 @@ model Enrollment {
 }
 
 model Delivery {
-  id             String         @id @default(uuid())
-  subscriptionId String
-  subscription   Subscription   @relation(fields: [subscriptionId], references: [id])
-  enrollmentId   String
-  enrollment     Enrollment     @relation(fields: [enrollmentId], references: [id])
-  step           Int
-  status         DeliveryStatus @default(PENDING)
-  subject        String
-  body           String
-  providerId     String?
-  error          String?
-  createdAt      DateTime       @default(now())
-  sentAt         DateTime?
-  clickedAt      DateTime?
-  clickCount     Int            @default(0)
+  id                 String             @id @default(uuid())
+  subscriptionId     String
+  subscription       Subscription       @relation(fields: [subscriptionId], references: [id])
+  enrollmentId       String
+  enrollment         Enrollment         @relation(fields: [enrollmentId], references: [id])
+  step               Int
+  status             DeliveryStatus     @default(PENDING)
+  subject            String
+  body               String
+  htmlBody           String?
+  providerId         String?
+  error              String?
+  offerId            String?
+  offer              Offer?             @relation(fields: [offerId], references: [id], onDelete: SetNull)
+  emailTemplateId    String?
+  emailTemplate      EmailTemplate?     @relation(fields: [emailTemplateId], references: [id], onDelete: SetNull)
+  mediaAssetId       String?
+  mediaAsset         MessageAsset?      @relation(fields: [mediaAssetId], references: [id], onDelete: SetNull)
+  createdAt          DateTime           @default(now())
+  sentAt             DateTime?
+  deliveredAt        DateTime?
+  openedAt           DateTime?
+  openCount          Int                @default(0)
+  clickedAt          DateTime?
+  clickCount         Int                @default(0)
+  providerClickCount Int                @default(0)
+  readAt             DateTime?
+  repliedAt          DateTime?
+  events             MessageEvent[]
+  applications       ApplicationClick[]
 
   @@unique([enrollmentId, step])
   @@index([status, createdAt])
@@ -492,6 +519,10 @@ model ApplicationClick {
   visitId               String
   visit                 Visit                  @relation(fields: [visitId], references: [id])
   deliveryId            String?
+  delivery              Delivery?              @relation(fields: [deliveryId], references: [id], onDelete: SetNull)
+  offerId               String?
+  offer                 Offer?                 @relation(fields: [offerId], references: [id], onDelete: SetNull)
+  destinationUrl        String?
   createdAt             DateTime               @default(now())
   postbacks             Postback[]
   advertiserConversions AdvertiserConversion[]
@@ -542,11 +573,84 @@ model Postback {
   eventId       String           @unique
   applicationId String
   application   ApplicationClick @relation(fields: [applicationId], references: [id])
+  offerId       String?
+  offer         Offer?           @relation(fields: [offerId], references: [id], onDelete: SetNull)
   event         String
   revenue       Decimal          @default(0) @db.Decimal(12, 4)
   createdAt     DateTime         @default(now())
 
   @@index([applicationId])
+}
+
+model Offer {
+  id                String             @id @default(cuid())
+  name              String
+  status            RunStatus          @default(DRAFT)
+  provider          String             @default("CUSTOM")
+  destinationUrl    String
+  trackingParameter String             @default("subId3")
+  postbackKey       String             @unique
+  postbackSecret    String
+  isDefault         Boolean            @default(false)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  experiments       Experiment[]       @relation("ExperimentOffer")
+  variants          Variant[]          @relation("VariantOffer")
+  chainSteps        ChainStep[]
+  deliveries        Delivery[]
+  applications      ApplicationClick[]
+  postbacks         Postback[]
+
+  @@index([status, isDefault])
+}
+
+model EmailTemplate {
+  id          String      @id @default(cuid())
+  name        String
+  status      RunStatus   @default(DRAFT)
+  subject     String
+  preheader   String      @default("")
+  eyebrow     String      @default("SPARECASH")
+  headline    String
+  body        String
+  ctaLabel    String      @default("Explore loan options")
+  accentColor String      @default("#1f5b4d")
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  chainSteps  ChainStep[]
+  deliveries  Delivery[]
+
+  @@index([status, updatedAt])
+}
+
+model MessageAsset {
+  id         String      @id @default(cuid())
+  name       String
+  fileName   String
+  mimeType   String
+  byteSize   Int
+  data       Bytes
+  createdAt  DateTime    @default(now())
+  chainSteps ChainStep[]
+  deliveries Delivery[]
+
+  @@index([createdAt])
+}
+
+model MessageEvent {
+  id              String   @id @default(cuid())
+  deliveryId      String
+  delivery        Delivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+  type            String
+  providerEventId String?
+  url             String?
+  detail          Json     @default("{}")
+  occurredAt      DateTime @default(now())
+  createdAt       DateTime @default(now())
+
+  @@unique([deliveryId, providerEventId, type])
+  @@index([deliveryId, occurredAt])
+  @@index([type, occurredAt])
 }
 
 model LeadEvent {

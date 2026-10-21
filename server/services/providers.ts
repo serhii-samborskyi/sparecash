@@ -4,7 +4,7 @@ import { env } from "../config.js";
 import { token } from "../security.js";
 import { escapeHtml } from "../domain.js";
 import { settings } from "./control.js";
-import { canReceiveFollowups } from "../subscription-policy.js";
+import { renderEmailTemplate } from "./email-templates.js";
 
 export class ProviderError extends Error {
   constructor(
@@ -37,6 +37,29 @@ async function request(
   } catch {
     throw new Error(
       `${provider} did not confirm the request; delivery outcome is unknown`,
+    );
+  }
+  if (!response.ok) throw new ProviderError(provider, response.status);
+  const content = await response.text();
+  return content ? JSON.parse(content) : {};
+}
+async function requestMultipart(
+  provider: string,
+  url: string,
+  body: FormData,
+): Promise<any> {
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: "POST",
+      headers: { Accept: "application/json" },
+      body,
+      signal: AbortSignal.timeout(120000),
+      redirect: "error",
+    });
+  } catch {
+    throw new Error(
+      `${provider} did not confirm the attachment; delivery outcome is unknown`,
     );
   }
   if (!response.ok) throw new ProviderError(provider, response.status);
@@ -85,6 +108,33 @@ export async function sendText(phone: string, message: string, id: string) {
       "BlueBubbles did not confirm a message ID; check Messages on the Mac before retrying",
     );
   return result.data.guid as string;
+}
+export async function sendAttachment(
+  phone: string,
+  asset: { data: Uint8Array; mimeType: string; fileName: string },
+) {
+  if (!env.BLUEBUBBLES_URL || !env.BLUEBUBBLES_PASSWORD)
+    throw new Error("BlueBubbles is not configured");
+  const chatGuid = `${env.BLUEBUBBLES_SERVICE};-;${phone}`;
+  const url = new URL("/api/v1/message/attachment", env.BLUEBUBBLES_URL);
+  url.searchParams.set("password", env.BLUEBUBBLES_PASSWORD);
+  // Keep the GUID in the query because some BlueBubbles multipart parsers
+  // truncate semicolon-delimited chat GUIDs in form fields.
+  url.searchParams.set("chatGuid", chatGuid);
+  url.searchParams.set("method", "apple-script");
+  const form = new FormData();
+  form.append(
+    "attachment",
+    new Blob([Buffer.from(asset.data)], { type: asset.mimeType }),
+    asset.fileName,
+  );
+  const result = await requestMultipart("BlueBubbles", url.toString(), form);
+  const guid = result.data?.guid ?? result.data?.messageGuid;
+  if (result.status !== 200 || typeof guid !== "string" || !guid)
+    throw new Error(
+      "BlueBubbles did not confirm an attachment message ID; check the Mac before retrying",
+    );
+  return guid as string;
 }
 export async function sendVerification(sub: Subscription, code: string) {
   if (env.LIVE_DELIVERY !== "true") return { paused: true };
@@ -154,60 +204,69 @@ export async function deliver(
     if (!r.id) throw new Error("OneSignal returned no message ID");
     return String(r.id);
   }
-  if (sub.channel === "SMS")
+  if (sub.channel === "SMS") {
+    if (message.mediaAssetId) {
+      const asset = await db.messageAsset.findUniqueOrThrow({
+        where: { id: message.mediaAssetId },
+      });
+      await sendAttachment(sub.address, asset);
+    }
     return sendText(
       sub.address,
       `${message.body}\n${message.body.includes(link) ? "" : link + "\n"}Reply STOP to opt out.`,
       message.id,
     );
-  if (!env.BREVO_API_KEY || !env.BREVO_FOLDER_ID || !env.BREVO_SENDER_EMAIL)
-    throw new Error("Brevo campaign delivery is not configured");
+  }
+  if (!env.BREVO_API_KEY || !env.BREVO_SENDER_EMAIL)
+    throw new Error("Brevo email delivery is not configured");
   const config = await settings();
   if (!config.businessAddress)
     throw new Error(
       "Set the business mailing address before sending email campaigns",
     );
-  // Separate lists allow the local sequence engine to select precisely one consented recipient.
-  let listId = sub.providerListId;
-  if (!listId) {
-    const list = await brevo("/contacts/lists", {
-      name: `SpareCash ${sub.id}`,
-      folderId: env.BREVO_FOLDER_ID,
-    });
-    listId = Number(list.id);
-    if (!listId) throw new Error("Brevo returned no list ID");
-    await db.subscription.update({
+  const [template, subscription] = await Promise.all([
+    message.emailTemplateId
+      ? db.emailTemplate.findUnique({ where: { id: message.emailTemplateId } })
+      : null,
+    db.subscription.findUniqueOrThrow({
       where: { id: sub.id },
-      data: { providerListId: listId },
-    });
-  }
-  await brevo("/contacts", {
-    email: sub.address,
-    listIds: [listId],
-    updateEnabled: true,
-  });
-  const html = `<html><body><p>${escapeHtml(message.body).replaceAll("\n", "<br>")}</p><p><a href="${escapeHtml(link)}">Explore loan options</a></p><hr><p>${escapeHtml(config.businessName)} · ${escapeHtml(config.businessAddress)}</p><p><a href="${escapeHtml(unsubscribe)}">Manage your preferences</a> · <a href="{{ unsubscribe }}">Unsubscribe</a></p></body></html>`;
-  const campaign = await brevo("/emailCampaigns", {
-    name: `SpareCash ${message.id}`,
-    type: "classic",
-    sender: { name: env.BREVO_SENDER_NAME, email: env.BREVO_SENDER_EMAIL },
-    subject: message.subject,
-    htmlContent: html,
-    recipients: { listIds: [listId] },
-    tag: "sparecash",
-  });
+      include: { lead: true },
+    }),
+  ]);
+  const rendered = template
+    ? renderEmailTemplate({
+        template,
+        name: subscription.lead.name,
+        link,
+        unsubscribe,
+        businessName: config.businessName,
+        businessAddress: config.businessAddress,
+      })
+    : {
+        subject: message.subject,
+        body: message.body,
+        html: `<html><body><p>${escapeHtml(message.body).replaceAll("\n", "<br>")}</p><p><a href="${escapeHtml(link)}">Explore loan options</a></p><hr><p>${escapeHtml(config.businessName)} · ${escapeHtml(config.businessAddress)}</p><p><a href="${escapeHtml(unsubscribe)}">Manage your preferences</a></p></body></html>`,
+      };
   await db.delivery.update({
     where: { id: message.id },
-    data: { providerId: String(campaign.id) },
+    data: {
+      subject: rendered.subject,
+      body: rendered.body,
+      htmlBody: rendered.html,
+    },
   });
-  // Recheck local suppression immediately before the provider's send operation.
-  const current = await db.subscription.findUniqueOrThrow({
-    where: { id: sub.id },
+  const result = await brevo("/smtp/email", {
+    sender: { name: env.BREVO_SENDER_NAME, email: env.BREVO_SENDER_EMAIL },
+    to: [{ email: sub.address }],
+    subject: rendered.subject,
+    htmlContent: rendered.html,
+    textContent: `${rendered.body}\n\n${link}\n\nManage preferences: ${unsubscribe}`,
+    tags: ["sparecash-followup"],
+    headers: { "X-Mailin-custom": `delivery:${message.id}` },
   });
-  if (!canReceiveFollowups(current))
-    throw new Error("Recipient unsubscribed before sending");
-  await brevo(`/emailCampaigns/${campaign.id}/sendNow`, {});
-  return String(campaign.id);
+  if (typeof result.messageId !== "string" || !result.messageId)
+    throw new Error("Brevo returned no message ID");
+  return result.messageId;
 }
 export async function excludeZone(campaignId: string, zoneId: string) {
   if (!/^\d+$/.test(campaignId) || !/^\d+$/.test(zoneId))

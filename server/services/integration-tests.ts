@@ -57,7 +57,29 @@ async function getJson<T>(
 export function blueBubblesReplySetup() {
   const url = new URL("/api/webhooks/bluebubbles", env.APP_URL);
   url.searchParams.set("token", env.WEBHOOK_TOKEN);
-  return { webhookUrl: url.toString(), event: "new-message" };
+  return {
+    webhookUrl: url.toString(),
+    event: "new-message",
+    events: ["new-message", "updated-message"],
+  };
+}
+
+export function brevoEventSetup() {
+  const url = new URL("/api/webhooks/brevo", env.APP_URL);
+  url.searchParams.set("token", env.WEBHOOK_TOKEN);
+  return {
+    webhookUrl: url.toString(),
+    events: [
+      "delivered",
+      "opened",
+      "click",
+      "soft_bounce",
+      "hard_bounce",
+      "blocked",
+      "spam",
+      "unsubscribe",
+    ],
+  };
 }
 
 export async function testProviderConnection(provider: Provider) {
@@ -241,9 +263,9 @@ export async function testProviderConnection(provider: Provider) {
         });
         requireValue(
           registered,
-          "Add the reply URL below to BlueBubbles and enable the new-message event.",
+          "Add the webhook URL below to BlueBubbles and enable new-message and updated-message.",
         );
-        return "The reply URL is registered for new-message. Send a real reply to verify incoming delivery.";
+        return "The webhook URL is registered for replies and delivery/read updates. Send a real reply to verify incoming delivery.";
       });
   } else if (provider === "propellerads") {
     await check("Account access", async () => {

@@ -159,15 +159,26 @@ export async function managedWorkerStatuses() {
     definitions[id].controlKey,
     definitions[id].heartbeatKey,
   ]);
-  const [settings, conversionGroups, activeEnrollments, dueEnrollments] =
-    await Promise.all([
-      db.setting.findMany({ where: { key: { in: keys } } }),
-      db.advertiserConversion.groupBy({ by: ["status"], _count: true }),
-      db.enrollment.count({ where: { status: "ACTIVE" } }),
-      db.enrollment.count({
-        where: { status: "ACTIVE", nextAt: { lte: new Date() } },
-      }),
-    ]);
+  const [
+    settings,
+    conversionGroups,
+    activeEnrollments,
+    dueEnrollments,
+    heldEnrollments,
+  ] = await Promise.all([
+    db.setting.findMany({ where: { key: { in: keys } } }),
+    db.advertiserConversion.groupBy({ by: ["status"], _count: true }),
+    db.enrollment.count({ where: { status: "ACTIVE" } }),
+    db.enrollment.count({
+      where: {
+        status: "ACTIVE",
+        nextAt: { lte: new Date() },
+        OR: [{ deferredUntil: null }, { deferredUntil: { lte: new Date() } }],
+        chain: { status: "ACTIVE" },
+      },
+    }),
+    db.enrollment.count({ where: { status: "HELD" } }),
+  ]);
   const byKey = new Map(settings.map((item) => [item.key, item.value]));
   const conversions = Object.fromEntries(
     conversionGroups.map((item) => [item.status.toLowerCase(), item._count]),
@@ -207,7 +218,11 @@ export async function managedWorkerStatuses() {
         lastError: typeof heartbeat.error === "string" ? heartbeat.error : null,
         queue:
           id === "automation"
-            ? { active: activeEnrollments, due: dueEnrollments }
+            ? {
+                active: activeEnrollments,
+                due: dueEnrollments,
+                held: heldEnrollments,
+              }
             : conversions,
       };
     }),

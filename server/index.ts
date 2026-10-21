@@ -84,7 +84,7 @@ app.use(
   (req, res, next) => {
     // Upload parsers run only after their owner/MCP or one-use authentication.
     if (
-      /^\/(?:mcp\/?|api\/admin\/landing-assets\/?|api\/media\/landing-upload\/[^/]+)$/i.test(
+      /^\/(?:mcp\/?|api\/admin\/(?:landing-assets|message-assets)\/?|api\/media\/landing-upload\/[^/]+)$/i.test(
         req.path,
       )
     )
@@ -192,9 +192,7 @@ app.use(
     _next: express.NextFunction,
   ) => {
     if ((error as { type?: string })?.type === "entity.too.large") {
-      res
-        .status(413)
-        .json({ error: "Request too large. Image uploads allow up to 4 MiB." });
+      res.status(413).json({ error: "Request too large for this upload." });
       return;
     }
     if (error instanceof z.ZodError) {

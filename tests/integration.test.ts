@@ -256,6 +256,19 @@ it("preserves credentials and owner sessions during simultaneous process startup
     (await request("/api/admin/configuration", "GET", undefined, true)).status,
   ).toBe(200);
 });
+it("loads the attributed follow-up funnel and message library", async () => {
+  const result = await request("/api/admin/followups", "GET", undefined, true);
+  expect(result.status).toBe(200);
+  expect(result.data.summary).toMatchObject({
+    applications: 0,
+    sold: 0,
+    approved: 0,
+    funded: 0,
+    held: 0,
+  });
+  expect(result.data.emailTemplates).toHaveLength(3);
+  expect(Array.isArray(result.data.chainMetrics)).toBe(true);
+});
 it("keeps paused experiments out of the owner workspace without deleting them", async () => {
   const paused = await saveExperiment(
     {
@@ -379,6 +392,12 @@ it("removes a landing from an experiment while preserving its traffic history", 
       experiment.variants[0].id,
     ]);
   } finally {
+    await db.subscription.deleteMany({
+      where: { lead: { visit: { experimentId: experiment.id } } },
+    });
+    await db.lead.deleteMany({
+      where: { visit: { experimentId: experiment.id } },
+    });
     await db.visit.deleteMany({ where: { experimentId: experiment.id } });
     await db.variant.deleteMany({ where: { experimentId: experiment.id } });
     await db.experiment.delete({ where: { id: experiment.id } });
@@ -447,6 +466,12 @@ it("shows pending opt-ins separately in experiment results", async () => {
       score: 1,
     });
   } finally {
+    await db.subscription.deleteMany({
+      where: { lead: { visit: { experimentId: experiment.id } } },
+    });
+    await db.lead.deleteMany({
+      where: { visit: { experimentId: experiment.id } },
+    });
     await db.visit.deleteMany({ where: { experimentId: experiment.id } });
     await db.variant.deleteMany({ where: { experimentId: experiment.id } });
     await db.experiment.delete({ where: { id: experiment.id } });
@@ -924,9 +949,9 @@ it("sends a due email once and enforces the next-day cap", async () => {
       where: { subscriptionId: emailId, status: "SENT" },
     }),
   ).toBe(1);
-  expect(providerCalls.filter((c) => c.url.endsWith("/sendNow"))).toHaveLength(
-    1,
-  );
+  expect(
+    providerCalls.filter((c) => c.url.includes("/smtp/email")),
+  ).toHaveLength(2);
   const sent = await db.delivery.findFirstOrThrow({
     where: { subscriptionId: emailId },
   });
@@ -4727,7 +4752,10 @@ it("compares zones and locations with honest traffic quality, weighted CTR and d
   const source = await db.trafficSource.create({
     data: { campaignId, zoneId: "111" },
   });
-  const arrived = new Date(Date.now() - 2 * 86400000);
+  const now = new Date();
+  const arrived = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 2, 12),
+  );
   const day = arrived.toISOString().slice(0, 10);
   const create = (data: object = {}) =>
     db.visit.create({

@@ -469,6 +469,9 @@ p {
 .stats-grid.three {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
+.stats-grid.followup-stats {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
 .metric {
   background: #fff;
   border: 1px solid var(--line);
@@ -825,6 +828,78 @@ p {
 .experiment-card,
 .chain-card {
   margin: 0 0 2px;
+}
+.followup-library {
+  margin-bottom: 22px;
+}
+.followup-library-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 24px;
+}
+.library-heading,
+.library-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.library-heading {
+  margin-bottom: 10px;
+  font-size: 12px;
+}
+.library-row {
+  width: 100%;
+  border-top: 1px solid var(--line);
+  padding: 11px 2px;
+  text-align: left;
+  color: inherit;
+}
+.library-row:not(.static):hover {
+  color: var(--green);
+}
+.library-row span,
+.library-row small {
+  display: block;
+  min-width: 0;
+}
+.library-row b,
+.library-row small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.library-row b {
+  font-size: 11px;
+}
+.library-row small {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 9px;
+}
+.template-swatch {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+.chain-performance {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 12px 0 16px;
+}
+.chain-performance span {
+  border-radius: 7px;
+  background: #f4f7f0;
+  padding: 8px;
+  color: var(--muted);
+  font-size: 9px;
+}
+.chain-performance b {
+  display: block;
+  color: var(--green);
+  font-size: 13px;
 }
 .card-top {
   display: flex;
@@ -1703,6 +1778,32 @@ summary {
 }
 .step-editor .field:last-child {
   margin-bottom: 0;
+}
+.email-template-preview {
+  margin-top: 18px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 28px;
+  background: #f8faf6;
+}
+.email-template-preview small {
+  letter-spacing: 1.7px;
+  font-weight: 700;
+}
+.email-template-preview h2 {
+  margin: 10px 0;
+  font-size: 25px;
+}
+.email-template-preview p {
+  margin-bottom: 18px;
+  color: var(--muted);
+  white-space: pre-line;
+}
+.email-template-preview button {
+  border-radius: 999px;
+  padding: 11px 17px;
+  color: #fff;
+  font-weight: 700;
 }
 .lead-summary {
   display: flex;
@@ -2820,6 +2921,10 @@ summary {
 }
 @media (max-width: 980px) {
   .stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .stats-grid.followup-stats,
+  .followup-library-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .overview-columns,

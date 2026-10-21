@@ -4,6 +4,7 @@ import { retargetingReport } from "../services/retargeting-report.js";
 import { testDelivery } from "../services/delivery-tests.js";
 import { roundSkyPixelSetup } from "../services/roundsky.js";
 import {
+  brevoEventSetup,
   blueBubblesReplySetup,
   testProviderConnection,
   testProviderSchema,
@@ -58,7 +59,18 @@ import {
   unsubscribe,
   transitionLead,
   enrollExisting,
+  resumeEligibleEnrollments,
 } from "../services/journeys.js";
+import { listOffers, offerPostbackUrl, saveOffer } from "../services/offers.js";
+import {
+  ensureEmailTemplates,
+  listEmailTemplates,
+  saveEmailTemplate,
+} from "../services/email-templates.js";
+import {
+  listMessageAssets,
+  uploadMessageAsset,
+} from "../services/message-assets.js";
 export const adminRouter = Router();
 adminRouter.use(requireAdmin, checkOrigin);
 adminRouter.get("/retargeting/status", async (_req, res) => {
@@ -111,6 +123,9 @@ adminRouter.get("/integrations/roundsky/pixel", async (_req, res) => {
 });
 adminRouter.get("/integrations/bluebubbles/webhook", async (_req, res) => {
   res.set("Cache-Control", "no-store").json(blueBubblesReplySetup());
+});
+adminRouter.get("/integrations/brevo/webhook", async (_req, res) => {
+  res.set("Cache-Control", "no-store").json(brevoEventSetup());
 });
 adminRouter.post("/integrations/:provider/test", async (req, res) => {
   const provider = testProviderSchema.parse(req.params.provider);
@@ -198,6 +213,28 @@ adminRouter.delete("/experiments/:id", async (req, res) => {
 adminRouter.post("/chains", async (req, res) => {
   res.json(await saveChain(req.body, "owner"));
 });
+adminRouter.get("/offers", async (_req, res) => {
+  res.set("Cache-Control", "no-store").json(await listOffers());
+});
+adminRouter.post("/offers", async (req, res) => {
+  res.json(await saveOffer(req.body, "owner"));
+});
+adminRouter.get("/email-templates", async (_req, res) => {
+  res.set("Cache-Control", "no-store").json(await listEmailTemplates());
+});
+adminRouter.post("/email-templates", async (req, res) => {
+  res.json(await saveEmailTemplate(req.body, "owner"));
+});
+adminRouter.get("/message-assets", async (_req, res) => {
+  res.set("Cache-Control", "no-store").json(await listMessageAssets());
+});
+adminRouter.post(
+  "/message-assets",
+  json({ limit: "28mb" }),
+  async (req, res) => {
+    res.status(201).json(await uploadMessageAsset(req.body, "owner"));
+  },
+);
 adminRouter.post("/chains/:id/enroll", async (req, res) => {
   const chain = await db.chain.findUniqueOrThrow({
     where: { id: String(req.params.id) },
@@ -205,6 +242,9 @@ adminRouter.post("/chains/:id/enroll", async (req, res) => {
   if (chain.trigger !== "SUBSCRIBED" || chain.status !== "ACTIVE")
     throw new Error("Activate a subscription chain first");
   res.json(await enrollExisting(chain.channel, chain.trigger));
+});
+adminRouter.post("/enrollments/resume", async (_req, res) => {
+  res.json(await resumeEligibleEnrollments());
 });
 adminRouter.get("/leads", async (req, res) => {
   const query = z
@@ -335,11 +375,13 @@ adminRouter.post("/subscriptions/:id/verify-email", async (req, res) => {
       if (state !== "VERIFIED") {
         await tx.enrollment.updateMany({
           where: { subscriptionId: id, status: "ACTIVE" },
-          data: { status: "STOPPED" },
-        });
-        await tx.delivery.updateMany({
-          where: { subscriptionId: id, status: "PENDING" },
-          data: { status: "CANCELLED" },
+          data: {
+            status: "HELD",
+            holdReason:
+              state === "INVALID"
+                ? "Email mailbox is invalid"
+                : "Email verification is inconclusive; retry verification",
+          },
         });
       }
       return updated;
@@ -358,6 +400,7 @@ adminRouter.post("/subscriptions/:id/verify-email", async (req, res) => {
     const result = await verifyEmailAddress(subscription.address);
     const state = emailVerificationState(result);
     const updated = await saveResult(state, result.diagnosis || result.status);
+    if (state === "VERIFIED") await resumeEligibleEnrollments(id);
     await audit("owner", "subscription.email_checked", id, {
       state: updated.emailVerificationState,
     });
@@ -422,6 +465,7 @@ adminRouter.get("/deliveries", async (_req, res) => {
   );
 });
 adminRouter.get("/followups", async (_req, res) => {
+  await ensureEmailTemplates();
   const [
     queue,
     enrollmentFacts,
@@ -429,6 +473,12 @@ adminRouter.get("/followups", async (_req, res) => {
     deliveryStatuses,
     deliveryClicks,
     applications,
+    followupOutcomes,
+    messageEvents,
+    chainMetrics,
+    offers,
+    emailTemplates,
+    messageAssets,
   ] = await db.$transaction([
     db.enrollment.findMany({
       take: 100,
@@ -452,6 +502,12 @@ adminRouter.get("/followups", async (_req, res) => {
       include: {
         subscription: { include: { lead: true } },
         enrollment: { include: { chain: true } },
+        offer: { select: { name: true } },
+        emailTemplate: { select: { name: true } },
+        mediaAsset: { select: { name: true } },
+        applications: {
+          select: { postbacks: { select: { event: true } } },
+        },
       },
     }),
     db.delivery.groupBy({
@@ -461,6 +517,87 @@ adminRouter.get("/followups", async (_req, res) => {
     }),
     db.delivery.aggregate({ _sum: { clickCount: true } }),
     db.applicationClick.count({ where: { deliveryId: { not: null } } }),
+    db.$queryRaw<{ sold: number; approved: number; funded: number }[]>`SELECT
+        COUNT(DISTINCT a.id) FILTER (WHERE p.event = 'SOLD')::int AS sold,
+        COUNT(DISTINCT a.id) FILTER (WHERE p.event = 'APPROVED')::int AS approved,
+        COUNT(DISTINCT a.id) FILTER (WHERE p.event = 'FUNDED')::int AS funded
+      FROM "ApplicationClick" a
+      LEFT JOIN "Postback" p ON p."applicationId" = a.id
+      WHERE a."deliveryId" IS NOT NULL`,
+    db.messageEvent.groupBy({
+      by: ["type"],
+      _count: { _all: true },
+      orderBy: { type: "asc" },
+    }),
+    db.$queryRaw<
+      {
+        chainId: string;
+        step: number;
+        sent: number;
+        delivered: number;
+        opened: number;
+        clicked: number;
+        applications: number;
+        sold: number;
+        approved: number;
+        funded: number;
+      }[]
+    >`WITH delivery_metrics AS (
+        SELECT e."chainId",
+          d.step,
+          COUNT(*) FILTER (WHERE d.status = 'SENT')::int AS sent,
+          COUNT(d."deliveredAt")::int AS delivered,
+          COUNT(d."openedAt")::int AS opened,
+          COALESCE(SUM(d."clickCount"), 0)::int AS clicked
+        FROM "Delivery" d
+        JOIN "Enrollment" e ON e.id = d."enrollmentId"
+        GROUP BY e."chainId", d.step
+      ), application_metrics AS (
+        SELECT e."chainId", d.step,
+          COUNT(DISTINCT a.id)::int AS applications,
+          COUNT(DISTINCT a.id) FILTER (WHERE p.event = 'SOLD')::int AS sold,
+          COUNT(DISTINCT a.id) FILTER (WHERE p.event = 'APPROVED')::int AS approved,
+          COUNT(DISTINCT a.id) FILTER (WHERE p.event = 'FUNDED')::int AS funded
+        FROM "ApplicationClick" a
+        JOIN "Delivery" d ON d.id = a."deliveryId"
+        JOIN "Enrollment" e ON e.id = d."enrollmentId"
+        LEFT JOIN "Postback" p ON p."applicationId" = a.id
+        GROUP BY e."chainId", d.step
+      )
+      SELECT m."chainId", m.step, m.sent, m.delivered, m.opened, m.clicked,
+        COALESCE(a.applications, 0)::int AS applications,
+        COALESCE(a.sold, 0)::int AS sold,
+        COALESCE(a.approved, 0)::int AS approved,
+        COALESCE(a.funded, 0)::int AS funded
+      FROM delivery_metrics m
+      LEFT JOIN application_metrics a
+        ON a."chainId" = m."chainId" AND a.step = m.step
+      ORDER BY m."chainId", m.step`,
+    db.offer.findMany({
+      orderBy: [{ isDefault: "desc" }, { updatedAt: "desc" }],
+      include: {
+        _count: {
+          select: {
+            experiments: true,
+            variants: true,
+            chainSteps: true,
+            applications: true,
+          },
+        },
+      },
+    }),
+    db.emailTemplate.findMany({ orderBy: { updatedAt: "desc" } }),
+    db.messageAsset.findMany({
+      select: {
+        id: true,
+        name: true,
+        fileName: true,
+        mimeType: true,
+        byteSize: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: "desc" },
+    }),
   ]);
   const now = Date.now();
   const active = enrollmentFacts.filter((item) => item.status === "ACTIVE");
@@ -471,6 +608,11 @@ adminRouter.get("/followups", async (_req, res) => {
   );
   const deliveryCount = (status: string) =>
     deliveryStatuses.find((item) => item.status === status)?._count ?? 0;
+  const eventCount = (type: string) => {
+    const row = messageEvents.find((item) => item.type === type) as
+      { _count?: { _all?: number } } | undefined;
+    return row?._count?._all ?? 0;
+  };
   res.json({
     summary: {
       people: new Set(enrollmentFacts.map((item) => item.subscription.leadId))
@@ -481,6 +623,7 @@ adminRouter.get("/followups", async (_req, res) => {
       active: active.length,
       due: due.length,
       scheduled: active.length - due.length,
+      held: enrollmentFacts.filter((item) => item.status === "HELD").length,
       stopped: enrollmentFacts.filter((item) => item.status === "STOPPED")
         .length,
       completed: enrollmentFacts.filter((item) => item.status === "COMPLETED")
@@ -490,9 +633,39 @@ adminRouter.get("/followups", async (_req, res) => {
       uncertain: deliveryCount("UNCERTAIN"),
       linkClicks: deliveryClicks._sum.clickCount ?? 0,
       applications,
+      delivered: eventCount("DELIVERED"),
+      opened: eventCount("OPENED") + eventCount("PROXY_OPENED"),
+      providerClicks: eventCount("PROVIDER_CLICKED"),
+      read: eventCount("READ"),
+      replied: eventCount("REPLIED"),
+      sold: followupOutcomes[0]?.sold ?? 0,
+      approved: followupOutcomes[0]?.approved ?? 0,
+      funded: followupOutcomes[0]?.funded ?? 0,
     },
-    queue,
+    queue: queue.map((item) => ({
+      ...item,
+      displayState:
+        item.status === "ACTIVE" &&
+        item.deferredUntil &&
+        item.deferredUntil > new Date()
+          ? "SCHEDULED"
+          : item.status,
+      stateReason:
+        item.holdReason ??
+        (item.status === "ACTIVE" &&
+        item.deferredUntil &&
+        item.deferredUntil > new Date()
+          ? "Waiting for the recipient sending window"
+          : null),
+    })),
     deliveries,
+    chainMetrics,
+    offers: offers.map((offer) => ({
+      ...offer,
+      postbackUrl: offerPostbackUrl(offer),
+    })),
+    emailTemplates,
+    messageAssets,
   });
 });
 adminRouter.post("/deliveries/:id/resolve", async (req, res) => {

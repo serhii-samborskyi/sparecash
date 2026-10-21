@@ -273,7 +273,7 @@ function makeServer() {
   );
   register(
     "followup_report",
-    "Measure chains or individual message steps: accepted sends, failures, uncertainty, actual click-throughs, attributed applications and postback revenue. Cohorts deliveries by creation date; includes later results through now. No email-open or confirmed-delivery metrics. Use get_chain for message content.",
+    "Measure chains or individual message steps: accepted sends, provider delivery, email opens and clicks, iMessage reads and replies, explicit continuation clicks, attributed applications and postback revenue. Cohorts deliveries by creation date and includes later results through now. Use get_chain for message content.",
     {
       ...reportSchema.shape,
       groupBy: z.enum(["chain", "step"]).default("step"),
